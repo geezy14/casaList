@@ -5,7 +5,7 @@ import SwiftData
 struct CasalistApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CasalistCottage.Home()
         }
         // This initializes your database based on the TaskItem schema
         .modelContainer(for: TaskItem.self)
