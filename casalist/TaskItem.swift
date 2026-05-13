@@ -3,13 +3,14 @@ import SwiftData
 
 @Model
 final class TaskItem {
-    // 📋 These properties match your Notion columns exactly
-    var task: String        // Notion: "Task"
-    var assignee: String?   // Notion: "Assignee"
-    var dueDate: Date?      // Notion: "Due Date"
-    var category: String    // Notion: "Multi-select"
-    var isCompleted: Bool   // Notion: "Checkbox"
-    var points: Int         // Notion: "points" (Formula)
+    var task: String = ""
+    var assignee: String? = nil
+    var dueDate: Date? = nil
+    var category: String = ""
+    var isCompleted: Bool = false
+    var points: Int = 0
+    var createdAt: Date = Date()
+    var createdBy: String = ""
 
     init(
         task: String,
@@ -17,7 +18,8 @@ final class TaskItem {
         dueDate: Date? = nil,
         category: String = "",
         isCompleted: Bool = false,
-        points: Int = 0
+        points: Int = 0,
+        createdBy: String = ""
     ) {
         self.task = task
         self.assignee = assignee
@@ -25,5 +27,7 @@ final class TaskItem {
         self.category = category
         self.isCompleted = isCompleted
         self.points = points
+        self.createdAt = Date()
+        self.createdBy = createdBy
     }
 }

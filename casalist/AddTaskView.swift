@@ -4,12 +4,17 @@ import SwiftData
 struct AddTaskView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+    @AppStorage("userName") private var userName: String = ""
+
     // State variables to hold form input
     @State private var taskName = ""
     @State private var assigneeName = ""
-    @State private var category = "Chores"
+    @State private var category: String
     @State private var dueDate = Date()
+
+    init(defaultCategory: String = "Chores") {
+        _category = State(initialValue: defaultCategory)
+    }
     
     var body: some View {
         NavigationStack {
@@ -56,7 +61,8 @@ struct AddTaskView: View {
             dueDate: dueDate,
             category: category,
             isCompleted: false,
-            points: calculatedPoints
+            points: calculatedPoints,
+            createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
         
         modelContext.insert(newTask) // Saves to CloudKit/SwiftData [cite: 601, 611]
