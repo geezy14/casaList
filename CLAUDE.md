@@ -1,13 +1,44 @@
 # Casalist
 
+## Progress Log
+
+> Newest entries on top. Keep this section terse — one paragraph per session
+> covering what shipped and what to know going in next time.
+
+### 2026-05-14 — Multi-user family sharing actually works (Option A complete)
+Two-account share is verified working end-to-end on iPhone Air ↔ iPhone 15
+(different Apple IDs). The data layer was rewritten from SwiftData to Core
+Data + `NSPersistentCloudKitContainer` with a private store and a shared
+store. Sharing routes through Apple's `container.share(_:to:)` + a custom
+`CasalistSceneDelegate` that catches CKShare accept callbacks (SwiftUI's
+default scene delegate drops them — this was the main misconception).
+On accept, a `FamilyMember` is auto-created in the shared household using
+the joiner's `userName` AppStorage, so the inviter sees them immediately
+with no manual add step. Recipient-side writes now use
+`moc.assign(_, toStoreOf: household)` so they land in the shared store
+instead of silently falling into the joiner's private store. CloudKit
+Production schema was redeployed (added `CD_Household` + `CD_household`
+relationship + share-related system fields like `CD_moveReceipt`) via the
+Dashboard. App is on dev build with `MARKETING_VERSION=1`,
+`CURRENT_PROJECT_VERSION=3.8`. Pushed directly to both phones via
+`devicectl` — no TestFlight in the iteration loop per Geezy's preference.
+Tag `broken-arrow` (commit `95ed13e`) preserves the pre-rewrite state if
+rollback is ever needed. See "CRITICAL: multi-user family sharing" below
+for the architecture rules.
+
 ## Overview
 Casalist is a private family household management app for iOS.
 
-The app is being built in SwiftUI and uses:
-- SwiftData
-- CloudKit
+The app is built in SwiftUI and uses:
+- Core Data via NSPersistentCloudKitContainer (private + shared stores)
+- CloudKit (private + shared database scopes, CKShare-based sharing)
 - SF Symbols
 - Apple-native UI patterns
+
+Earlier iterations used SwiftData @Model; that approach was abandoned because
+SwiftData's `.private` scope is per-Apple-ID and could not deliver the
+headline family-sharing feature. See the "Progress Log" entry for 2026-05-14
+and the "CRITICAL: multi-user family sharing" section.
 
 ## Goals
 - Keep the app simple and fast
