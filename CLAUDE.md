@@ -124,14 +124,17 @@ The cost of a 5-minute check is far smaller than the cost of stacking 4+ hours o
 - Scheme: `casalist`
 - Project: `casalist.xcodeproj`
 - Bundle ID: `com.gbrown10.casalist`
-- Physical device: `geezy` (iPhone Air), UDID `9A471194-E5FA-5B11-82F9-178E5612C19C`, paired wirelessly
+- Physical devices (both paired wirelessly):
+  - **iPhone Air** (primary dev / inviter test device): UDID `9A471194-E5FA-5B11-82F9-178E5612C19C`, device name `geezy`
+  - **iPhone 15** (second account / share recipient test device): UDID `62C1F8BD-F78E-523B-929A-CC780C68595B`, device name `iPhone`
+- Geezy gets builds on the iPhone 15 via direct Xcode/devicectl push (NOT TestFlight) for the two-account sharing test loop. TestFlight uploads only when explicitly requested.
 - Working directory: `/Users/geezy/Documents/casaList`
 
 ## Deploy Workflows
 
 ### "push it" — wireless deploy to Geezy's iPhone
 
-When Geezy says "push it" (or similar), run these from `/Users/geezy/Documents/casaList`:
+When Geezy says "push it" (or similar), push to the iPhone Air (primary dev device) from `/Users/geezy/Documents/casaList`:
 
 ```bash
 xcodebuild -project casalist.xcodeproj -scheme casalist -configuration Debug \
@@ -145,7 +148,23 @@ xcrun devicectl device process launch --device 9A471194-E5FA-5B11-82F9-178E5612C
   com.gbrown10.casalist
 ```
 
-If the install/launch fails with "unavailable" or a network timeout, the phone went to sleep or wifi dropped. Retry after a few seconds.
+### "push both" / "push to 15 too" — also deploy to iPhone 15
+
+When Geezy needs both devices on the same build (always for the two-account sharing test), also push to the iPhone 15 (separate `-derivedDataPath build-iphone15` so the build artifacts don't collide with the iPhone Air ones):
+
+```bash
+xcodebuild -project casalist.xcodeproj -scheme casalist -configuration Debug \
+  -destination 'id=62C1F8BD-F78E-523B-929A-CC780C68595B' \
+  -derivedDataPath build-iphone15 -allowProvisioningUpdates
+
+xcrun devicectl device install app --device 62C1F8BD-F78E-523B-929A-CC780C68595B \
+  build-iphone15/Build/Products/Debug-iphoneos/casalist.app
+
+xcrun devicectl device process launch --device 62C1F8BD-F78E-523B-929A-CC780C68595B \
+  com.gbrown10.casalist
+```
+
+If install/launch fails with "unavailable" or a network timeout, the phone went to sleep or wifi dropped. Retry after a few seconds.
 
 ### "testflight it" — archive + upload to TestFlight
 
