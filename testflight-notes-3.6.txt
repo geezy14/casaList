@@ -1,0 +1,7 @@
+Casalist 1 (3.6)
+
+What's Fixed
+- "Belongs to 2 households" after accepting a share invite. The recipient was auto-provisioning a local empty household on first launch, then ended up with that PLUS the shared household. Now reconciles automatically: any empty local household is deleted once a shared one is present.
+
+What to Test
+- Same two-account test as 3.5, but the recipient should land in exactly ONE household after accepting the share — the shared one from the inviter.

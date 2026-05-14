@@ -57,11 +57,14 @@ struct CasalistApp: App {
             CasalistCottage.Root()
                 .environment(\.managedObjectContext, stack.context)
                 .task {
-                    HouseholdProvisioner.ensureHouseholdExists(in: stack.context)
+                    HouseholdProvisioner.reconcile(in: stack.context)
                     if notificationsEnabled {
                         _ = await NotificationsManager.requestAuth()
                         await NotificationsManager.syncFromContext(stack.context)
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+                    HouseholdProvisioner.reconcile(in: stack.context)
                 }
         }
         .onChange(of: scenePhase) { _, new in
@@ -72,22 +75,67 @@ struct CasalistApp: App {
     }
 }
 
-/// On first launch, ensures the current user has a Household record in their
-/// private store. Future family members the user adds become children of this
-/// household.
+/// On first launch (or after a share is accepted), reconciles the household
+/// situation:
+///
+/// - If the user already has a household (private or shared), do nothing.
+/// - If only one auto-created empty local household exists AND a shared
+///   household has since arrived, delete the empty local one so the user
+///   doesn't see "2 households" in the UI.
+/// - If no household exists at all and the user is going to need one
+///   (they've already set a userName), create one.
 enum HouseholdProvisioner {
-    static func ensureHouseholdExists(in context: NSManagedObjectContext) {
+    static func reconcile(in context: NSManagedObjectContext) {
         let req = Household.fetchRequest()
-        req.fetchLimit = 1
-        if let _ = try? context.fetch(req).first { return }
+        let households = (try? context.fetch(req)) ?? []
+
+        // Delete any local empty households once a shared one is present.
+        if households.count > 1 {
+            let empties = households.filter { isEmpty($0) && isOwnedByMe($0, in: context) }
+            // Keep at most one of these (in case both are empty and one is shared).
+            let toDelete = empties.dropLast(max(0, households.count - empties.count))
+            for h in toDelete {
+                context.delete(h)
+            }
+            try? context.save()
+        }
+    }
+
+    /// True if this household has no members, tasks, goals, chores, or events.
+    private static func isEmpty(_ h: Household) -> Bool {
+        (h.members?.count ?? 0) == 0 &&
+        (h.tasks?.count ?? 0) == 0 &&
+        (h.goals?.count ?? 0) == 0 &&
+        (h.chores?.count ?? 0) == 0 &&
+        (h.events?.count ?? 0) == 0
+    }
+
+    /// True if this household lives in the user's private store (i.e. they own
+    /// it). Households arriving via CKShare live in the shared store.
+    private static func isOwnedByMe(_ h: Household, in context: NSManagedObjectContext) -> Bool {
+        let stack = CasaCoreDataStack.shared
+        if let sharedStore = stack.sharedStore, h.objectID.persistentStore == sharedStore {
+            return false
+        }
+        return true
+    }
+
+    /// Creates a household if the user has none. Call this when the user is
+    /// about to need one (e.g. adding their first family member).
+    @discardableResult
+    static func ensureHouseholdExists(in context: NSManagedObjectContext) -> Household? {
+        let req = Household.fetchRequest()
+        if let existing = try? context.fetch(req).first { return existing }
         guard let entity = NSEntityDescription.entity(forEntityName: "Household", in: context) else {
             NSLog("Casa: Household entity not found in model — Core Data probably failed to load")
-            return
+            return nil
         }
         let household = Household(entity: entity, insertInto: context)
         household.uid = UUID()
         household.name = UserDefaults.standard.string(forKey: "householdName") ?? "My Household"
         household.createdAt = Date()
         try? context.save()
+        return household
     }
 }
+
