@@ -1,0 +1,15 @@
+Casalist 1 (3.5)
+
+What's New
+- True multi-user family sharing. Migrated the entire data layer from SwiftData (per-user-private) to Core Data + NSPersistentCloudKitContainer with Apple's share(_:to:) API.
+- "Invite family" now creates a real CKShare on the Household record so accepted members see (and can edit) the same family, tasks, goals, chores, events, and reminders.
+
+What's Fixed
+- Recipients who accept a share invite now actually see the household's data, not just an empty record.
+- "Newer version of Casalist" share errors should be gone — CloudKit Production schema fully redeployed to match the new Core Data model (CD_Household entity added, CD_household relationship on every child).
+
+What to Test
+- Install 3.5 on two phones logged into two different iCloud accounts.
+- On phone A: Settings (the cog icon) to add a family member or two, then Add tile to put one chore on the leaderboard, then top-right person-plus icon to send invite via Messages or Copy Link.
+- On phone B: tap the share link. Casalist should open and accept it.
+- Within ~30s, the family members and chore from A should show up in B's app, and vice versa. (This is the actual proof of the rewrite.)
