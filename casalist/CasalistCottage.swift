@@ -919,11 +919,73 @@ public enum CasalistCottage {
                     .frame(maxWidth: .infinity).padding(20)
                     .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                     .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+                } else if myMember?.canManageFamily == true {
+                    // Owner/admin sees the family's earning pipeline grouped
+                    // by assignee, so they can see who has work outstanding.
+                    VStack(spacing: 14) {
+                        ForEach(earningGroups, id: \.assigneeKey) { group in
+                            earningGroupCard(group)
+                        }
+                    }
                 } else {
                     VStack(spacing: 8) {
                         ForEach(earningTasks, id: \.uid) { t in
                             earningRow(t)
                         }
+                    }
+                }
+            }
+        }
+
+        private struct EarningGroup {
+            let assigneeKey: String       // lowercased name or "" for unassigned
+            let displayName: String
+            let member: FamilyMember?
+            let tasks: [TaskItem]
+            var totalPoints: Int { tasks.reduce(0) { $0 + Int($1.points) } }
+        }
+
+        private var earningGroups: [EarningGroup] {
+            // Group earning tasks by assignee. Order: members in fetch order,
+            // then any unassigned tasks last.
+            var grouped: [String: [TaskItem]] = [:]
+            for t in earningTasks {
+                let key = (t.assignee ?? "").lowercased()
+                grouped[key, default: []].append(t)
+            }
+            var groups: [EarningGroup] = []
+            for m in members {
+                let key = m.name.lowercased()
+                if let tasks = grouped[key], !tasks.isEmpty {
+                    groups.append(EarningGroup(assigneeKey: key, displayName: m.name, member: m, tasks: tasks))
+                }
+            }
+            if let unassigned = grouped[""], !unassigned.isEmpty {
+                groups.append(EarningGroup(assigneeKey: "", displayName: "Unassigned", member: nil, tasks: unassigned))
+            }
+            return groups
+        }
+
+        private func earningGroupCard(_ group: EarningGroup) -> some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    if let m = group.member {
+                        CLAvatar(m.asCLMember, size: 28)
+                    } else {
+                        ZStack {
+                            Circle().fill(P.surfaceAlt).frame(width: 28, height: 28)
+                            Image(systemName: "person.fill").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                        }
+                    }
+                    Text(group.displayName).font(.system(size: 13, weight: .heavy))
+                    Spacer()
+                    Text("\(group.tasks.count) open · \(group.totalPoints) pts")
+                        .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
+                }
+                .padding(.horizontal, 4)
+                VStack(spacing: 6) {
+                    ForEach(group.tasks, id: \.uid) { t in
+                        earningRow(t)
                     }
                 }
             }
