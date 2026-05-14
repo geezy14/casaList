@@ -1,0 +1,8 @@
+Casalist 1 (3.4)
+
+What's Fixed
+- Share invites: CKSharingSupported = YES is now actually in the binary. Previous 3.3 build had the project setting but Xcode's INFOPLIST_KEY_* mechanism silently dropped it. Switched to an explicit Info.plist so the key takes effect.
+
+What to Test
+- Send a fresh share invite from one phone to another (both on 3.4)
+- Recipient should now be able to tap the link and join the household instead of seeing "you need a newer version of casalist"
