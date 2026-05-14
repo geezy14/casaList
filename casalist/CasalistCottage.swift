@@ -2467,16 +2467,35 @@ extension CasalistCottage {
             let trimmed = pendingName.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return }
             userName = trimmed
-            // If a FamilyMember was auto-provisioned for this user (e.g. via
-            // share accept) before they typed a name, it'll be sitting at "New
-            // member". Rename it now so the inviter sees the real name.
+
+            // Case A — already auto-provisioned (joined a share before naming
+            // ourselves). Just rename the existing record.
             if !meUid.isEmpty, let uuid = UUID(uuidString: meUid) {
                 let req = FamilyMember.fetchRequest()
                 req.predicate = NSPredicate(format: "uid == %@", uuid as CVarArg)
-                if let mine = (try? moc.fetch(req))?.first, mine.name != trimmed {
-                    mine.name = trimmed
-                    try? moc.save()
+                if let mine = (try? moc.fetch(req))?.first {
+                    if mine.name != trimmed {
+                        mine.name = trimmed
+                        try? moc.save()
+                    }
+                    showNamePrompt = false
+                    return
                 }
+            }
+
+            // Case B — fresh install, no claim yet. Become a FamilyMember in
+            // our own household. Owner if no other members exist, otherwise
+            // standard.
+            HouseholdProvisioner.ensureHouseholdExists(in: moc)
+            let allReq = FamilyMember.fetchRequest()
+            let existing = (try? moc.fetch(allReq)) ?? []
+            let role: FamilyRole = existing.isEmpty ? .owner : .standard
+            if let household = (try? moc.fetch(Household.fetchRequest()))?.preferredTarget {
+                let me = FamilyMember(context: moc, name: trimmed, role: role.label, colorHex: 0xC97357, roleLevel: role)
+                moc.assign(me, toStoreOf: household)
+                me.household = household
+                meUid = me.uid.uuidString
+                try? moc.save()
             }
             showNamePrompt = false
         }
