@@ -26,6 +26,7 @@ struct SettingsView: View {
     @State private var awardTarget: FamilyMember? = nil
     @State private var awardAmount: Int = 5
     @State private var deleteTarget: FamilyMember? = nil
+    @State private var showAddMember: Bool = false
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
     private var members: FetchedResults<FamilyMember>
@@ -45,6 +46,21 @@ struct SettingsView: View {
     private var iAmOwner: Bool { me?.isOwner ?? false }
     private var iAmAdmin: Bool { me?.canManageFamily ?? false }
     private var adminCount: Int { FamilyPermissions.adminCount(in: members) }
+    private var sortedFamilyMembers: [FamilyMember] {
+        members.sorted { a, b in
+            let ra = roleSortKey(a.level), rb = roleSortKey(b.level)
+            if ra != rb { return ra < rb }
+            return a.createdAt < b.createdAt
+        }
+    }
+    private func roleSortKey(_ r: FamilyRole) -> Int {
+        switch r {
+        case .owner: return 0
+        case .admin: return 1
+        case .standard: return 2
+        case .kid: return 3
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -57,7 +73,7 @@ struct SettingsView: View {
         .foregroundStyle(P.text)
         .task {
             removeSchemaSeedMembers()
-            FamilyPermissions.ensureOwner(members: members, context: moc)
+            FamilyPermissions.ensureOwner(members: members, context: moc, userName: userName, meUid: meUid)
             adoptMeIfNeeded()
             await refreshNotifStatus()
             await refreshPending()
@@ -203,10 +219,22 @@ struct SettingsView: View {
                         .foregroundStyle(P.textMuted)
                         .frame(maxWidth: .infinity).padding(.vertical, 22)
                 } else {
-                    ForEach(Array(members.enumerated()), id: \.element.uid) { idx, m in
+                    ForEach(Array(sortedFamilyMembers.enumerated()), id: \.element.uid) { idx, m in
                         memberRow(m)
-                        if idx < members.count - 1 { divider }
+                        if idx < sortedFamilyMembers.count - 1 { divider }
                     }
+                }
+                if iAmAdmin || members.isEmpty || me == nil {
+                    if !members.isEmpty { divider }
+                    Button { showAddMember = true } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill").font(.system(size: 14, weight: .bold))
+                            Text("Add family member").font(.system(size: 14, weight: .heavy))
+                            Spacer()
+                        }
+                        .foregroundStyle(P.peach)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                    }.buttonStyle(.plain)
                 }
             }
             .cardBg(P)
@@ -217,6 +245,7 @@ struct SettingsView: View {
                     .padding(.horizontal, 4).padding(.top, 4)
             }
         }
+        .sheet(isPresented: $showAddMember) { AddFamilyMemberView() }
     }
 
     private func memberRow(_ m: FamilyMember) -> some View {
