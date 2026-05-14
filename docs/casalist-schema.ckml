@@ -1,0 +1,124 @@
+DEFINE SCHEMA
+
+    RECORD TYPE CD_TaskItem (
+        CD_assignee        STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_category        STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_completionCount INT64 QUERYABLE SORTABLE,
+        CD_createdAt       TIMESTAMP QUERYABLE SORTABLE,
+        CD_createdBy       STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_dueDate         TIMESTAMP QUERYABLE SORTABLE,
+        CD_entityName      STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_isCompleted     INT64 QUERYABLE SORTABLE,
+        CD_parentUid       STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_points          INT64 QUERYABLE SORTABLE,
+        CD_repeatHours     INT64 QUERYABLE SORTABLE,
+        CD_repeatKind      STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_task            STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_uid             STRING QUERYABLE SEARCHABLE SORTABLE,
+        "___createTime"    TIMESTAMP,
+        "___createdBy"     REFERENCE,
+        "___etag"          STRING,
+        "___modTime"       TIMESTAMP,
+        "___modifiedBy"    REFERENCE,
+        "___recordID"      REFERENCE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE CD_FamilyMember (
+        CD_colorHex     INT64 QUERYABLE SORTABLE,
+        CD_createdAt    TIMESTAMP QUERYABLE SORTABLE,
+        CD_entityName   STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_name         STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_photoData    ASSET,
+        CD_points       INT64 QUERYABLE SORTABLE,
+        CD_role         STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_uid          STRING QUERYABLE SEARCHABLE SORTABLE,
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE CD_FamilyGoal (
+        CD_createdAt    TIMESTAMP QUERYABLE SORTABLE,
+        CD_entityName   STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_label        STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_ownerName    STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_targetPoints INT64 QUERYABLE SORTABLE,
+        CD_uid          STRING QUERYABLE SEARCHABLE SORTABLE,
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE CD_ChoreTemplate (
+        CD_createdAt    TIMESTAMP QUERYABLE SORTABLE,
+        CD_entityName   STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_label        STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_points       INT64 QUERYABLE SORTABLE,
+        CD_symbol       STRING QUERYABLE SEARCHABLE SORTABLE,
+        CD_uid          STRING QUERYABLE SEARCHABLE SORTABLE,
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Household (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        createdAt       TIMESTAMP QUERYABLE SORTABLE,
+        name            STRING QUERYABLE SEARCHABLE SORTABLE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Users (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        roles           LIST<INT64>,
+        GRANT WRITE TO "_creator",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE "cloudkit.share" (
+        "___createTime"               TIMESTAMP,
+        "___createdBy"                REFERENCE,
+        "___etag"                     STRING,
+        "___modTime"                  TIMESTAMP,
+        "___modifiedBy"               REFERENCE,
+        "___recordID"                 REFERENCE,
+        "cloudkit.thumbnailImageData" BYTES,
+        "cloudkit.title"              STRING,
+        "cloudkit.type"               STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );

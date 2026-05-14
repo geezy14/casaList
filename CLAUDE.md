@@ -141,6 +141,34 @@ Should live at the project root. Required contents:
 
 Team ID `57Z9HL3SZJ` is the team that owns the store provisioning profile for `com.gbrown10.*` apps. If a different team owns this app, replace it.
 
+### CloudKit schema deploys (when you change a @Model)
+
+When you add a new `@Model`, add a stored property to one, or rename/remove
+fields, the Production CloudKit schema must be updated or sync will silently
+fail across devices.
+
+**Full playbook**: `docs/cloudkit-schema-workflow.md`
+
+**Quick check** — does Production match Dev?
+```bash
+scripts/cloudkit-schema-diff.sh
+```
+
+**Quick deploy** (only when the script reports differences):
+1. Remove the `com.apple.developer.icloud-container-environment` key from
+   `casalist/casalist.entitlements` so Debug builds hit Dev CloudKit.
+2. Build/install and exercise each new model on the phone so SwiftData
+   writes a record (Dev auto-registers schema from writes).
+3. Verify with `scripts/cloudkit-schema-diff.sh` — Dev should now have the
+   new types.
+4. Open https://icloud.developer.apple.com/dashboard → switch env to
+   **Development** → sidebar "Deploy Schema Changes…" → **Deploy**.
+5. Restore the entitlement (`Production`) and rebuild.
+
+`cktool import-schema --environment PRODUCTION` does NOT work — only the
+Console's "Deploy Schema Changes…" promotes Dev → Prod. The management
+token is saved in the keychain via `xcrun cktool save-token --type management`.
+
 ### App Store Connect API credentials (shared across all of Geezy's apps)
 
 - **Issuer ID**: `69a6de73-6a85-47e3-e053-5b8c7c11a4d1`

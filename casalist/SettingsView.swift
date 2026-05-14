@@ -103,6 +103,9 @@ struct SettingsView: View {
                         Text("Households"); Spacer()
                         Text("\(households.count)").foregroundStyle(.secondary)
                     }
+                    Button { seedSchemaRecords() } label: {
+                        Label("Seed schema records", systemImage: "square.and.arrow.down")
+                    }
                     Button(role: .destructive) { confirmWipe = true } label: {
                         Label("Clear all data", systemImage: "trash")
                     }
@@ -147,6 +150,18 @@ struct SettingsView: View {
                 Text("Deletes all tasks, family members, and household data on this device. Resets your name and household name. Cannot be undone.")
             }
         }
+    }
+
+    private func seedSchemaRecords() {
+        let name = userName.trimmingCharacters(in: .whitespaces)
+        let ownerName = name.isEmpty ? "Test" : name
+        if members.first(where: { $0.name == ownerName }) == nil {
+            modelContext.insert(FamilyMember(name: ownerName, role: "You", colorHex: 0xC97357))
+        }
+        modelContext.insert(FamilyGoal(ownerName: ownerName, label: "Schema test", targetPoints: 100))
+        modelContext.insert(ChoreTemplate(label: "Schema test", points: 10, symbol: "checkmark.circle"))
+        try? modelContext.save()
+        wipeMessage = "Seeded one of each model — wait ~10s then deploy via Dashboard."
     }
 
     private func wipeAll() {

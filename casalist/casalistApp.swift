@@ -50,7 +50,7 @@ struct CasalistApp: App {
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
 
     var sharedContainer: ModelContainer = {
-        let schema = Schema([TaskItem.self, FamilyMember.self, Household.self])
+        let schema = Schema([TaskItem.self, FamilyMember.self, Household.self, FamilyGoal.self, ChoreTemplate.self, FamilyEvent.self])
         let config = ModelConfiguration(
             schema: schema,
             cloudKitDatabase: .private("iCloud.com.gbrown10.casalist")
