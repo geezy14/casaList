@@ -1,10 +1,12 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddGroceryTripView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     @State private var name: String = ""
     @State private var hasDate: Bool = true
@@ -42,14 +44,15 @@ struct AddGroceryTripView: View {
 
     private func save() {
         let trip = TaskItem(
+            context: moc,
             task: name.trimmingCharacters(in: .whitespaces),
             dueDate: hasDate ? tripDate : nil,
             category: "groceries",
             points: 0,
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
-        modelContext.insert(trip)
-        try? modelContext.save()
+        trip.household = households.first
+        try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: trip) }
         dismiss()
     }

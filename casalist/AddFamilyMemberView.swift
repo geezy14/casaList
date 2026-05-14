@@ -1,9 +1,11 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddFamilyMemberView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     @State private var name = ""
     @State private var role = ""
@@ -41,8 +43,9 @@ struct AddFamilyMemberView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let m = FamilyMember(name: name.trimmingCharacters(in: .whitespaces), role: role, colorHex: colorHex)
-                        modelContext.insert(m)
+                        let m = FamilyMember(context: moc, name: name.trimmingCharacters(in: .whitespaces), role: role, colorHex: colorHex)
+                        m.household = households.first
+                        try? moc.save()
                         dismiss()
                     }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }

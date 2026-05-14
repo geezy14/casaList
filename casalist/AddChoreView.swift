@@ -1,9 +1,11 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddChoreView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     @State private var label: String = ""
     @State private var points: Int = 10
@@ -54,12 +56,14 @@ struct AddChoreView: View {
     }
 
     private func save() {
-        modelContext.insert(ChoreTemplate(
+        let c = ChoreTemplate(
+            context: moc,
             label: label.trimmingCharacters(in: .whitespaces),
             points: points,
             symbol: symbol
-        ))
-        try? modelContext.save()
+        )
+        c.household = households.first
+        try? moc.save()
         dismiss()
     }
 }

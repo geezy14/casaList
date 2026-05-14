@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftData
+import CoreData
 import CloudKit
 import UIKit
 
@@ -13,19 +13,20 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Belt-and-suspenders: also set on foreground.
         UNUserNotificationCenter.current().delegate = self
     }
 
     func application(_ application: UIApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
-        let container = CKContainer(identifier: metadata.containerIdentifier)
-        Task {
-            do { _ = try await container.accept(metadata) }
-            catch { print("Accept share failed: \(error)") }
+        let stack = CasaCoreDataStack.shared
+        guard let sharedStore = stack.sharedStore else {
+            NSLog("Casalist share accept: shared store not loaded yet")
+            return
+        }
+        stack.container.acceptShareInvitations(from: [metadata], into: sharedStore) { _, error in
+            if let error { NSLog("Accept share failed: \(error)") }
         }
     }
 
-    /// Lets banners + sound show even when Casalist is in the foreground.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -49,35 +50,40 @@ struct CasalistApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
 
-    var sharedContainer: ModelContainer = {
-        let schema = Schema([TaskItem.self, FamilyMember.self, Household.self, FamilyGoal.self, ChoreTemplate.self, FamilyEvent.self])
-        let config = ModelConfiguration(
-            schema: schema,
-            cloudKitDatabase: .private("iCloud.com.gbrown10.casalist")
-        )
-        do {
-            return try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            let local = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
-            return try! ModelContainer(for: schema, configurations: [local])
-        }
-    }()
+    private let stack = CasaCoreDataStack.shared
 
     var body: some Scene {
         WindowGroup {
             CasalistCottage.Root()
+                .environment(\.managedObjectContext, stack.context)
                 .task {
+                    HouseholdProvisioner.ensureHouseholdExists(in: stack.context)
                     if notificationsEnabled {
                         _ = await NotificationsManager.requestAuth()
-                        await NotificationsManager.syncFromContext(sharedContainer.mainContext)
+                        await NotificationsManager.syncFromContext(stack.context)
                     }
                 }
         }
-        .modelContainer(sharedContainer)
         .onChange(of: scenePhase) { _, new in
             if new == .active && notificationsEnabled {
-                Task { await NotificationsManager.syncFromContext(sharedContainer.mainContext) }
+                Task { await NotificationsManager.syncFromContext(stack.context) }
             }
         }
+    }
+}
+
+/// On first launch, ensures the current user has a Household record in their
+/// private store. Future family members the user adds become children of this
+/// household.
+enum HouseholdProvisioner {
+    static func ensureHouseholdExists(in context: NSManagedObjectContext) {
+        let req = Household.fetchRequest()
+        req.fetchLimit = 1
+        if let _ = try? context.fetch(req).first { return }
+        let household = Household(entity: NSEntityDescription.entity(forEntityName: "Household", in: context)!, insertInto: context)
+        household.uid = UUID()
+        household.name = UserDefaults.standard.string(forKey: "householdName") ?? "My Household"
+        household.createdAt = Date()
+        try? context.save()
     }
 }

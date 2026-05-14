@@ -1,20 +1,38 @@
 import Foundation
-import SwiftData
+import CoreData
 
-/// A points-savings goal owned by a single family member.
-@Model
-final class FamilyGoal {
-    var ownerName: String = ""
-    var label: String = ""
-    var targetPoints: Int = 100
-    var createdAt: Date = Date()
-    var uid: UUID = UUID()
+@objc(FamilyGoal)
+public final class FamilyGoal: NSManagedObject {
+    @NSManaged public var uid: UUID
+    @NSManaged public var ownerName: String
+    @NSManaged public var label: String
+    @NSManaged public var targetPoints: Int64
+    @NSManaged public var createdAt: Date
+    @NSManaged public var household: Household?
 
-    init(ownerName: String = "", label: String = "", targetPoints: Int = 100) {
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        setPrimitiveValue(UUID(), forKey: "uid")
+        setPrimitiveValue(Date(), forKey: "createdAt")
+        setPrimitiveValue(Int64(100), forKey: "targetPoints")
+    }
+
+    @nonobjc
+    public class func fetchRequest() -> NSFetchRequest<FamilyGoal> {
+        NSFetchRequest<FamilyGoal>(entityName: "FamilyGoal")
+    }
+
+    @discardableResult
+    convenience init(
+        context: NSManagedObjectContext,
+        ownerName: String = "",
+        label: String = "",
+        targetPoints: Int = 100
+    ) {
+        let entity = NSEntityDescription.entity(forEntityName: "FamilyGoal", in: context)!
+        self.init(entity: entity, insertInto: context)
         self.ownerName = ownerName
         self.label = label
-        self.targetPoints = targetPoints
-        self.createdAt = Date()
-        self.uid = UUID()
+        self.targetPoints = Int64(targetPoints)
     }
 }

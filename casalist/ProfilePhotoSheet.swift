@@ -1,13 +1,16 @@
 import SwiftUI
-import SwiftData
+import CoreData
 import PhotosUI
 import UIKit
 
 struct ProfilePhotoSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @AppStorage("userName") private var userName: String = ""
-    @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    private var members: FetchedResults<FamilyMember>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     @State private var pickerItem: PhotosPickerItem? = nil
     @State private var pickedImage: UIImage? = nil
@@ -130,12 +133,14 @@ struct ProfilePhotoSheet: View {
         } else {
             let name = userName.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
-            let m = FamilyMember(name: name, role: "You", photoData: data)
-            modelContext.insert(m)
+            let m = FamilyMember(context: moc, name: name, role: "You", photoData: data)
+            m.household = households.first
         }
+        try? moc.save()
     }
 
     private func removePhoto() {
         matchingMember?.photoData = nil
+        try? moc.save()
     }
 }

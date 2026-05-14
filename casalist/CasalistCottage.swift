@@ -7,7 +7,7 @@
 //
 
 import SwiftUI
-import SwiftData
+import CoreData
 
 public enum CasalistCottage {
 
@@ -45,9 +45,9 @@ public enum CasalistCottage {
         @State private var showSchedule = false
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
-        @Query private var allTodos: [TaskItem]
-        @Query(sort: \FamilyEvent.startDate) private var allEvents: [FamilyEvent]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
@@ -569,17 +569,17 @@ public enum CasalistCottage {
         @State private var showAddGoal: Bool = false
         @State private var showAddChore: Bool = false
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
-        @Query(sort: \FamilyGoal.createdAt) private var goalsQuery: [FamilyGoal]
-        @Query(sort: \ChoreTemplate.createdAt) private var choresQuery: [ChoreTemplate]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goalsQuery: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ChoreTemplate.createdAt, ascending: true)]) private var choresQuery: FetchedResults<ChoreTemplate>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         private var sorted: [FamilyMember] { members.sorted { $0.points > $1.points } }
-        private var topScore: Int { sorted.first?.points ?? 0 }
+        private var topScore: Int { Int(sorted.first?.points ?? 0) }
         private var canManagePoints: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
@@ -840,21 +840,22 @@ public enum CasalistCottage {
         }
 
         private func adjustPoints(_ m: FamilyMember, by delta: Int) {
-            m.points = max(0, m.points + delta)
+            m.points = max(0, m.points + Int64(delta))
             try? modelContext.save()
         }
 
         private func claim(_ c: ChoreTemplate) {
             let me = userName.trimmingCharacters(in: .whitespaces)
             let item = TaskItem(
+                context: modelContext,
                 task: c.label,
                 assignee: me.isEmpty ? nil : me,
                 category: "Chores",
                 isCompleted: false,
-                points: c.points,
+                points: Int(c.points),
                 createdBy: me
             )
-            modelContext.insert(item)
+            item.household = c.household
             try? modelContext.save()
         }
     }
@@ -865,12 +866,12 @@ extension CasalistCottage {
     public struct MyToDo: View {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var filter: String = "Today"
         @State private var showAddTodo = false
-        @Query(sort: \TaskItem.dueDate) private var todos: [TaskItem]
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var todos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
@@ -1187,14 +1188,14 @@ extension CasalistCottage {
     public struct Grocery: View {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var newItem: String = ""
         @State private var showAdd = false
         @State private var newItemByTrip: [String: String] = [:]
         @AppStorage("userName") private var userName: String = ""
-        @Query(sort: \TaskItem.createdAt, order: .reverse) private var allTasks: [TaskItem]
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)]) private var allTasks: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -1306,12 +1307,14 @@ extension CasalistCottage {
         private func addInlineItem() {
             let name = newItem.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
-            modelContext.insert(TaskItem(
+            let it = TaskItem(
+                context: modelContext,
                 task: name,
                 category: "groceries",
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
-            ))
+            )
+            it.household = allTasks.first?.household
             try? modelContext.save()
             newItem = ""
         }
@@ -1426,13 +1429,14 @@ extension CasalistCottage {
             let name = (newItemByTrip[key] ?? "").trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
             let item = TaskItem(
+                context: modelContext,
                 task: name,
                 category: "groceries",
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces),
                 parentUid: trip.uid
             )
-            modelContext.insert(item)
+            item.household = trip.household
             try? modelContext.save()
             newItemByTrip[key] = ""
         }
@@ -1525,11 +1529,11 @@ extension CasalistCottage {
     public struct Maintenance: View {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var showAdd = false
-        @Query(sort: \TaskItem.dueDate) private var allTasks: [TaskItem]
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTasks: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -1696,14 +1700,14 @@ extension CasalistCottage {
     public struct Reminders: View {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var newItem: String = ""
         @State private var showAddReminder: Bool = false
         @State private var editingReminder: TaskItem? = nil
-        @State private var expandedHourlyIds: Set<PersistentIdentifier> = []
+        @State private var expandedHourlyIds: Set<NSManagedObjectID> = []
         @AppStorage("userName") private var userName: String = ""
-        @Query(sort: \TaskItem.createdAt, order: .reverse) private var allTasks: [TaskItem]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)]) private var allTasks: FetchedResults<TaskItem>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -1845,12 +1849,15 @@ extension CasalistCottage {
         private func addInlineItem() {
             let name = newItem.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
-            modelContext.insert(TaskItem(
+            let it = TaskItem(
+                context: modelContext,
                 task: name,
                 category: "reminders",
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
-            ))
+            )
+            it.household = allTasks.first?.household
+            try? modelContext.save()
             newItem = ""
         }
 
@@ -1883,7 +1890,7 @@ extension CasalistCottage {
         /// One unchecked card on top, up to 3 dimmed/struck history cards behind.
         /// Tap the count footer to expand into a full vertical list.
         private func hourlyStack(_ t: TaskItem) -> some View {
-            let isExpanded = expandedHourlyIds.contains(t.persistentModelID)
+            let isExpanded = expandedHourlyIds.contains(t.objectID)
             return VStack(spacing: 8) {
                 if isExpanded {
                     hourlyCard(t, struckOut: false)
@@ -1912,9 +1919,9 @@ extension CasalistCottage {
                     Button {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                             if isExpanded {
-                                expandedHourlyIds.remove(t.persistentModelID)
+                                expandedHourlyIds.remove(t.objectID)
                             } else {
-                                expandedHourlyIds.insert(t.persistentModelID)
+                                expandedHourlyIds.insert(t.objectID)
                             }
                         }
                     } label: {
@@ -2050,12 +2057,12 @@ extension CasalistCottage {
     public struct Schedule: View {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
+        @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var showAdd: Bool = false
         @State private var editingEvent: FamilyEvent? = nil
-        @Query(sort: \FamilyEvent.startDate) private var allEvents: [FamilyEvent]
-        @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}

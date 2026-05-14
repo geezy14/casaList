@@ -1,6 +1,12 @@
 import Foundation
 import UserNotifications
-import SwiftData
+import CoreData
+
+private struct NotificationPlan {
+    let id: String
+    let content: UNMutableNotificationContent
+    let trigger: UNNotificationTrigger
+}
 
 enum NotificationsManager {
     @discardableResult
@@ -23,7 +29,7 @@ enum NotificationsManager {
 
     /// Cancels notifications for tasks that no longer exist or aren't due,
     /// and schedules any newly-due ones. Called on app launch + after mutations.
-    static func sync(tasks: [TaskItem]) async {
+    static func sync<S: Sequence>(tasks: S) async where S.Element == TaskItem {
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else {
             await cancelAll()
@@ -35,8 +41,7 @@ enum NotificationsManager {
         let existingIds = Set(pending.map(\.identifier).filter { $0.hasPrefix("task-") })
 
         let now = Date()
-        struct Plan { let id: String; let content: UNMutableNotificationContent; let trigger: UNNotificationTrigger }
-        var plans: [Plan] = []
+        var plans: [NotificationPlan] = []
         for t in tasks {
             // Recurring reminders keep firing even when checked off; one-shot
             // tasks stop once completed.
@@ -48,7 +53,7 @@ enum NotificationsManager {
             content.sound = .default
             for (suffix, trigger) in triggers(for: t, now: now) {
                 let id = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))-\(suffix)"
-                plans.append(Plan(id: id, content: content, trigger: trigger))
+                plans.append(NotificationPlan(id: id, content: content, trigger: trigger))
             }
         }
 
@@ -70,11 +75,11 @@ enum NotificationsManager {
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
-    /// Convenience that pulls tasks from a model context and calls sync.
+    /// Convenience that pulls tasks from a managed object context and calls sync.
     @MainActor
-    static func syncFromContext(_ context: ModelContext) async {
-        let descriptor = FetchDescriptor<TaskItem>()
-        let tasks = (try? context.fetch(descriptor)) ?? []
+    static func syncFromContext(_ context: NSManagedObjectContext) async {
+        let request = TaskItem.fetchRequest()
+        let tasks = (try? context.fetch(request)) ?? []
         await sync(tasks: tasks)
     }
 

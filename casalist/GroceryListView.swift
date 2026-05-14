@@ -1,14 +1,14 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct GroceryListView: View {
-    // Filters tasks specifically for kitchen or groceries
-    @Query(filter: #Predicate<TaskItem> { task in
-        task.category == "kitchen" || task.category == "groceries"
-    }) private var groceryItems: [TaskItem]
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)],
+        predicate: NSPredicate(format: "category IN %@", ["kitchen", "groceries"])
+    ) private var groceryItems: FetchedResults<TaskItem>
 
     var body: some View {
-        List(groceryItems) { item in
+        List(groceryItems, id: \.uid) { item in
             Text(item.task)
         }
         .navigationTitle("Grocery List")

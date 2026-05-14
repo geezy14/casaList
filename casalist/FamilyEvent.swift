@@ -1,21 +1,35 @@
 import Foundation
-import SwiftData
+import CoreData
 
-/// A scheduled family event — appointments, birthdays, school stuff, etc.
-@Model
-final class FamilyEvent {
-    var title: String = ""
-    var startDate: Date = Date()
-    var isAllDay: Bool = false
-    var location: String = ""
-    var attendees: String = ""
-    var notes: String = ""
-    var repeatKind: String = ""
-    var createdAt: Date = Date()
-    var createdBy: String = ""
-    var uid: UUID = UUID()
+@objc(FamilyEvent)
+public final class FamilyEvent: NSManagedObject {
+    @NSManaged public var uid: UUID
+    @NSManaged public var title: String
+    @NSManaged public var startDate: Date
+    @NSManaged public var isAllDay: Bool
+    @NSManaged public var location: String
+    @NSManaged public var attendees: String
+    @NSManaged public var notes: String
+    @NSManaged public var repeatKind: String
+    @NSManaged public var createdAt: Date
+    @NSManaged public var createdBy: String
+    @NSManaged public var household: Household?
 
-    init(
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        setPrimitiveValue(UUID(), forKey: "uid")
+        setPrimitiveValue(Date(), forKey: "createdAt")
+        setPrimitiveValue(Date(), forKey: "startDate")
+    }
+
+    @nonobjc
+    public class func fetchRequest() -> NSFetchRequest<FamilyEvent> {
+        NSFetchRequest<FamilyEvent>(entityName: "FamilyEvent")
+    }
+
+    @discardableResult
+    convenience init(
+        context: NSManagedObjectContext,
         title: String = "",
         startDate: Date = Date(),
         isAllDay: Bool = false,
@@ -25,6 +39,8 @@ final class FamilyEvent {
         repeatKind: String = "",
         createdBy: String = ""
     ) {
+        let entity = NSEntityDescription.entity(forEntityName: "FamilyEvent", in: context)!
+        self.init(entity: entity, insertInto: context)
         self.title = title
         self.startDate = startDate
         self.isAllDay = isAllDay
@@ -32,8 +48,6 @@ final class FamilyEvent {
         self.attendees = attendees
         self.notes = notes
         self.repeatKind = repeatKind
-        self.createdAt = Date()
         self.createdBy = createdBy
-        self.uid = UUID()
     }
 }

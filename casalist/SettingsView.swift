@@ -1,12 +1,12 @@
 import SwiftUI
-import SwiftData
+import CoreData
 import UIKit
 import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.colorScheme) private var sys
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("householdName") private var householdName: String = "My Household"
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
@@ -23,12 +23,18 @@ struct SettingsView: View {
     @State private var transferTarget: FamilyMember? = nil
     @State private var showTransfer: Bool = false
 
-    @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
-    @Query private var tasks: [TaskItem]
-    @Query private var households: [Household]
-    @Query private var goals: [FamilyGoal]
-    @Query private var chores: [ChoreTemplate]
-    @Query private var events: [FamilyEvent]
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    private var members: FetchedResults<FamilyMember>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)])
+    private var tasks: FetchedResults<TaskItem>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)])
+    private var goals: FetchedResults<FamilyGoal>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ChoreTemplate.createdAt, ascending: true)])
+    private var chores: FetchedResults<ChoreTemplate>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.createdAt, ascending: true)])
+    private var events: FetchedResults<FamilyEvent>
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
     private var me: FamilyMember? {
@@ -49,7 +55,7 @@ struct SettingsView: View {
         .foregroundStyle(P.text)
         .task {
             removeSchemaSeedMembers()
-            FamilyPermissions.ensureOwner(members: members, context: modelContext)
+            FamilyPermissions.ensureOwner(members: members, context: moc)
             adoptMeIfNeeded()
             await refreshNotifStatus()
             await refreshPending()
@@ -58,7 +64,7 @@ struct SettingsView: View {
             Task {
                 if on {
                     _ = await NotificationsManager.requestAuth()
-                    await NotificationsManager.syncFromContext(modelContext)
+                    await NotificationsManager.syncFromContext(moc)
                 } else {
                     await NotificationsManager.cancelAll()
                 }
@@ -219,8 +225,8 @@ struct SettingsView: View {
     }
 
     private func deleteMember(_ m: FamilyMember) {
-        modelContext.delete(m)
-        try? modelContext.save()
+        moc.delete(m)
+        try? moc.save()
     }
 
     @ViewBuilder
@@ -259,7 +265,7 @@ struct SettingsView: View {
             return
         }
         m.roleLevel = next.rawValue
-        try? modelContext.save()
+        try? moc.save()
     }
 
     private func transferOwnerSheet(target: FamilyMember) -> some View {
@@ -302,7 +308,7 @@ struct SettingsView: View {
     private func transferOwnership(to newOwner: FamilyMember) {
         for m in members where m.isOwner { m.roleLevel = FamilyRole.admin.rawValue }
         newOwner.roleLevel = FamilyRole.owner.rawValue
-        try? modelContext.save()
+        try? moc.save()
     }
 
     private func removeSchemaSeedMembers() {
@@ -311,8 +317,8 @@ struct SettingsView: View {
             || $0.role == "Schema seed"
             || ($0.name == "Test" && $0.role == "You")
         }
-        for m in stale { modelContext.delete(m) }
-        if !stale.isEmpty { try? modelContext.save() }
+        for m in stale { moc.delete(m) }
+        if !stale.isEmpty { try? moc.save() }
     }
 
     private func adoptMeIfNeeded() {
@@ -466,24 +472,26 @@ struct SettingsView: View {
 
     private func seedSchemaRecords() {
         let tempName = "Schema-\(UUID().uuidString.prefix(6))"
-        let temp = FamilyMember(name: tempName, role: "Schema seed", colorHex: 0xC97357, roleLevel: .admin)
-        modelContext.insert(temp)
+        let temp = FamilyMember(context: moc, name: tempName, role: "Schema seed", colorHex: 0xC97357, roleLevel: .admin)
+        temp.household = households.first
         let name = userName.trimmingCharacters(in: .whitespaces)
         let ownerName = name.isEmpty ? "Test" : name
-        modelContext.insert(FamilyGoal(ownerName: ownerName, label: "Schema test", targetPoints: 100))
-        modelContext.insert(ChoreTemplate(label: "Schema test", points: 10, symbol: "checkmark.circle"))
-        try? modelContext.save()
+        let goal = FamilyGoal(context: moc, ownerName: ownerName, label: "Schema test", targetPoints: 100)
+        goal.household = households.first
+        let chore = ChoreTemplate(context: moc, label: "Schema test", points: 10, symbol: "checkmark.circle")
+        chore.household = households.first
+        try? moc.save()
         wipeMessage = "Seeded — wait ~10s then deploy via Dashboard. Temp member: \(tempName)"
     }
 
     private func wipeAll() {
         let totalBefore = tasks.count + goals.count + chores.count + events.count
-        for t in tasks { modelContext.delete(t) }
-        for g in goals { modelContext.delete(g) }
-        for c in chores { modelContext.delete(c) }
-        for e in events { modelContext.delete(e) }
+        for t in tasks { moc.delete(t) }
+        for g in goals { moc.delete(g) }
+        for c in chores { moc.delete(c) }
+        for e in events { moc.delete(e) }
         for m in members { m.points = 0 }
-        try? modelContext.save()
+        try? moc.save()
         wipeMessage = "Cleared \(totalBefore) records. Family and household preserved."
     }
 

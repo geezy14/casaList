@@ -1,11 +1,12 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct RewardsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<TaskItem> { task in
-        task.isCompleted == true
-    }) private var completedTasks: [TaskItem]
+    @Environment(\.managedObjectContext) private var moc
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)],
+        predicate: NSPredicate(format: "isCompleted == YES")
+    ) private var completedTasks: FetchedResults<TaskItem>
 
     var body: some View {
         NavigationStack {
@@ -15,9 +16,7 @@ struct RewardsView: View {
                         HStack {
                             Text(assignee.isEmpty ? "Unassigned" : assignee)
                                 .font(.headline)
-                            
                             Spacer()
-                            
                             Text("\(points) pts")
                                 .font(.subheadline)
                                 .bold()
@@ -30,16 +29,13 @@ struct RewardsView: View {
             .navigationTitle("Chore Rewards")
         }
     }
-    
-    // Helper function to sum points by person
+
     private func groupedPoints() -> [String: Int] {
         var totals: [String: Int] = [:]
-        
         for task in completedTasks {
             let name = task.assignee ?? "Unassigned"
-            totals[name, default: 0] += task.points
+            totals[name, default: 0] += Int(task.points)
         }
-        
         return totals
     }
 }

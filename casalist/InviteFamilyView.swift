@@ -1,18 +1,22 @@
 import SwiftUI
+import CoreData
 import CloudKit
 import UIKit
 
 struct InviteFamilyView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var moc
+    @AppStorage("householdName") private var householdName: String = "My Household"
+
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
+
     @State private var accountStatus: CKAccountStatus = .couldNotDetermine
     @State private var statusMessage: String = "Checking iCloud…"
     @State private var preparingShare: Bool = false
     @State private var errorMessage: String? = nil
-    @AppStorage("householdName") private var householdName: String = "My Household"
 
-    private let containerID = "iCloud.com.gbrown10.casalist"
-    private let zoneName = "Casalist"
-    private let householdRecordName = "household-main"
+    private let stack = CasaCoreDataStack.shared
 
     var body: some View {
         NavigationStack {
@@ -118,7 +122,7 @@ struct InviteFamilyView: View {
     }
 
     private func refreshStatus() async {
-        let container = CKContainer(identifier: containerID)
+        let container = CKContainer(identifier: casalistCloudKitContainerID)
         do {
             let status = try await container.accountStatus()
             await MainActor.run {
@@ -144,64 +148,35 @@ struct InviteFamilyView: View {
         }
     }
 
+    @MainActor
     private func prepareAndShare() async {
-        await MainActor.run {
-            preparingShare = true
-            errorMessage = nil
-        }
+        preparingShare = true
+        errorMessage = nil
         let trimmedName = householdName.trimmingCharacters(in: .whitespaces)
-        let container = CKContainer(identifier: containerID)
-        let database = container.privateCloudDatabase
-        let zoneID = CKRecordZone.ID(zoneName: zoneName)
+
+        guard let household = households.first else {
+            preparingShare = false
+            errorMessage = "No household to share yet. Add a family member first so the household record is created."
+            return
+        }
+        household.name = trimmedName
+        try? moc.save()
 
         do {
-            do { _ = try await database.recordZone(for: zoneID) }
-            catch {
-                let zone = CKRecordZone(zoneID: zoneID)
-                _ = try await database.save(zone)
-            }
-
-            let recordID = CKRecord.ID(recordName: householdRecordName, zoneID: zoneID)
-            let record: CKRecord
-            do {
-                let fetched = try await database.record(for: recordID)
-                fetched["name"] = trimmedName as CKRecordValue
-                record = try await database.save(fetched)
-            } catch {
-                let new = CKRecord(recordType: "Household", recordID: recordID)
-                new["name"] = trimmedName as CKRecordValue
-                new["createdAt"] = Date() as CKRecordValue
-                record = try await database.save(new)
-            }
-
-            await MainActor.run {
-                preparingShare = false
-                presentCloudSharingController(rootRecord: record, container: container, title: trimmedName)
-            }
+            let (_, share, ckContainer) = try await stack.container.share([household], to: nil)
+            share[CKShare.SystemFieldKey.title] = trimmedName as CKRecordValue
+            share.publicPermission = .none
+            preparingShare = false
+            presentCloudSharingController(share: share, container: ckContainer)
         } catch {
-            await MainActor.run {
-                preparingShare = false
-                errorMessage = "Could not prepare share: \(error.localizedDescription)"
-            }
+            preparingShare = false
+            errorMessage = "Could not prepare share: \(error.localizedDescription)"
         }
     }
 
-    private func presentCloudSharingController(rootRecord: CKRecord, container: CKContainer, title: String) {
-        let controller = UICloudSharingController { (_, completion) in
-            let share = CKShare(rootRecord: rootRecord)
-            share[CKShare.SystemFieldKey.title] = title as CKRecordValue
-            share.publicPermission = .none
-
-            let op = CKModifyRecordsOperation(recordsToSave: [rootRecord, share], recordIDsToDelete: nil)
-            op.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success: completion(share, container, nil)
-                case .failure(let error): completion(nil, nil, error)
-                }
-            }
-            op.qualityOfService = .userInteractive
-            container.privateCloudDatabase.add(op)
-        }
+    @MainActor
+    private func presentCloudSharingController(share: CKShare, container: CKContainer) {
+        let controller = UICloudSharingController(share: share, container: container)
         controller.availablePermissions = [.allowReadWrite, .allowPrivate]
 
         guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,

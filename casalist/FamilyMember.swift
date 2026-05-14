@@ -1,27 +1,30 @@
 import Foundation
-import SwiftData
+import CoreData
 import SwiftUI
 
-@Model
-final class FamilyMember {
-    var name: String = ""
-    var role: String = ""
-    var colorHex: Int = 0xC97357
-    var points: Int = 0
-    var createdAt: Date = Date()
-    var uid: UUID = UUID()
-    var roleLevel: String = FamilyRole.standard.rawValue
-    @Attribute(.externalStorage) var photoData: Data? = nil
+@objc(FamilyMember)
+public final class FamilyMember: NSManagedObject {
+    @NSManaged public var uid: UUID
+    @NSManaged public var name: String
+    @NSManaged public var role: String
+    @NSManaged public var colorHex: Int64
+    @NSManaged public var points: Int64
+    @NSManaged public var createdAt: Date
+    @NSManaged public var roleLevel: String
+    @NSManaged public var photoData: Data?
+    @NSManaged public var household: Household?
 
-    init(name: String, role: String = "", colorHex: Int = 0xC97357, points: Int = 0, photoData: Data? = nil, roleLevel: FamilyRole = .standard) {
-        self.name = name
-        self.role = role
-        self.colorHex = colorHex
-        self.points = points
-        self.createdAt = Date()
-        self.uid = UUID()
-        self.photoData = photoData
-        self.roleLevel = roleLevel.rawValue
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        setPrimitiveValue(UUID(), forKey: "uid")
+        setPrimitiveValue(Date(), forKey: "createdAt")
+        setPrimitiveValue(Int64(0xC97357), forKey: "colorHex")
+        setPrimitiveValue(FamilyRole.standard.rawValue, forKey: "roleLevel")
+    }
+
+    @nonobjc
+    public class func fetchRequest() -> NSFetchRequest<FamilyMember> {
+        NSFetchRequest<FamilyMember>(entityName: "FamilyMember")
     }
 
     var color: Color { Color(rgb: UInt32(colorHex)) }
@@ -32,7 +35,29 @@ final class FamilyMember {
     var canManageFamily: Bool { level == .owner || level == .admin }
 
     var asCLMember: CLFamilyMember {
-        CLFamilyMember(id: uid.uuidString, label: name, role: role, color: color, points: points, photoData: photoData)
+        CLFamilyMember(id: uid.uuidString, label: name, role: role, color: color, points: Int(points), photoData: photoData)
+    }
+
+    /// Convenience initializer that inserts into the given context and applies
+    /// the same defaults the SwiftData version had.
+    @discardableResult
+    convenience init(
+        context: NSManagedObjectContext,
+        name: String,
+        role: String = "",
+        colorHex: Int = 0xC97357,
+        points: Int = 0,
+        photoData: Data? = nil,
+        roleLevel: FamilyRole = .standard
+    ) {
+        let entity = NSEntityDescription.entity(forEntityName: "FamilyMember", in: context)!
+        self.init(entity: entity, insertInto: context)
+        self.name = name
+        self.role = role
+        self.colorHex = Int64(colorHex)
+        self.points = Int64(points)
+        self.photoData = photoData
+        self.roleLevel = roleLevel.rawValue
     }
 }
 

@@ -1,32 +1,28 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct MaintenanceView: View {
-    @Environment(\.modelContext) private var modelContext
-    
-    // Filters items whose category is "Maintenance"
-    @Query(filter: #Predicate<TaskItem> { task in
-        task.category == "Maintenance"
-    }, sort: \TaskItem.task, order: .forward) private var maintenanceTasks: [TaskItem]
+    @Environment(\.managedObjectContext) private var moc
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.task, ascending: true)],
+        predicate: NSPredicate(format: "category == %@", "Maintenance")
+    ) private var maintenanceTasks: FetchedResults<TaskItem>
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(maintenanceTasks) { task in
+                ForEach(maintenanceTasks, id: \.uid) { task in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(task.task)
                                 .font(.headline)
-                            
                             if let assignee = task.assignee, !assignee.isEmpty {
                                 Text("Assignee: \(assignee)")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
                         }
-                        
                         Spacer()
-                        
                         Text(task.category)
                             .font(.caption2)
                             .padding(.horizontal, 8)
@@ -41,12 +37,13 @@ struct MaintenanceView: View {
             .navigationTitle("Maintenance Tracker")
         }
     }
-    
+
     private func deleteItems(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
-                modelContext.delete(maintenanceTasks[index])
+                moc.delete(maintenanceTasks[index])
             }
+            try? moc.save()
         }
     }
 }

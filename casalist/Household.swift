@@ -1,15 +1,27 @@
 import Foundation
-import SwiftData
+import CoreData
 
-@Model
-final class Household {
-    var name: String = "My Household"
-    var createdAt: Date = Date()
-    var uid: UUID = UUID()
+@objc(Household)
+public final class Household: NSManagedObject {
+    @NSManaged public var uid: UUID
+    @NSManaged public var name: String
+    @NSManaged public var createdAt: Date
+    @NSManaged public var members: NSSet?
+    @NSManaged public var tasks: NSSet?
+    @NSManaged public var goals: NSSet?
+    @NSManaged public var chores: NSSet?
+    @NSManaged public var events: NSSet?
 
-    init(name: String = "My Household") {
-        self.name = name
-        self.createdAt = Date()
-        self.uid = UUID()
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        let zero = UUID(uuidString: "00000000-0000-0000-0000-000000000000")
+        setPrimitiveValue(uid == zero ? UUID() : uid, forKey: "uid")
+        setPrimitiveValue(Date(), forKey: "createdAt")
+        setPrimitiveValue("My Household", forKey: "name")
+    }
+
+    @nonobjc
+    public class func fetchRequest() -> NSFetchRequest<Household> {
+        NSFetchRequest<Household>(entityName: "Household")
     }
 }

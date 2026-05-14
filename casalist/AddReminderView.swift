@@ -1,10 +1,12 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddReminderView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     private let editing: TaskItem?
 
@@ -165,6 +167,7 @@ struct AddReminderView: View {
             target = editing
         } else {
             let item = TaskItem(
+                context: moc,
                 task: trimmedTitle,
                 dueDate: storeDate,
                 category: "reminders",
@@ -173,18 +176,18 @@ struct AddReminderView: View {
                 repeatHours: 0,
                 repeatKind: repeatKind
             )
-            modelContext.insert(item)
+            item.household = households.first
             target = item
         }
-        try? modelContext.save()
+        try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: target) }
         dismiss()
     }
 
     private func deleteReminder() {
         if let editing {
-            modelContext.delete(editing)
-            let ctx = modelContext
+            moc.delete(editing)
+            let ctx = moc
             Task { await NotificationsManager.syncFromContext(ctx) }
             dismiss()
         }

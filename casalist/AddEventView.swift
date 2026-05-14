@@ -1,11 +1,14 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddEventView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
-    @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    private var members: FetchedResults<FamilyMember>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     private let editing: FamilyEvent?
 
@@ -69,7 +72,7 @@ struct AddEventView: View {
                     } else {
                         Picker("Attendees", selection: $attendees) {
                             Text("Everyone").tag("")
-                            ForEach(members) { m in
+                            ForEach(members, id: \.uid) { m in
                                 Text(m.name).tag(m.name)
                             }
                         }
@@ -115,6 +118,7 @@ struct AddEventView: View {
             editing.repeatKind = repeatKind
         } else {
             let event = FamilyEvent(
+                context: moc,
                 title: trimmedTitle,
                 startDate: startDate,
                 isAllDay: isAllDay,
@@ -124,16 +128,16 @@ struct AddEventView: View {
                 repeatKind: repeatKind,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
-            modelContext.insert(event)
+            event.household = households.first
         }
-        try? modelContext.save()
+        try? moc.save()
         dismiss()
     }
 
     private func delete() {
         if let editing {
-            modelContext.delete(editing)
-            try? modelContext.save()
+            moc.delete(editing)
+            try? moc.save()
             dismiss()
         }
     }

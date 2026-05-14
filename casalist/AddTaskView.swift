@@ -1,11 +1,14 @@
 import SwiftUI
-import SwiftData
+import CoreData
 
 struct AddTaskView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
-    @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    private var members: FetchedResults<FamilyMember>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    private var households: FetchedResults<Household>
 
     @State private var taskName = ""
     @State private var assigneeName: String = ""
@@ -46,7 +49,7 @@ struct AddTaskView: View {
                     } else {
                         Picker("Family member", selection: $assigneeName) {
                             Text("No one").tag("")
-                            ForEach(members) { m in
+                            ForEach(members, id: \.uid) { m in
                                 Text(m.name).tag(m.name)
                             }
                         }
@@ -123,6 +126,7 @@ struct AddTaskView: View {
 
     private func saveTask() {
         let newTask = TaskItem(
+            context: moc,
             task: taskName.trimmingCharacters(in: .whitespaces),
             assignee: assigneeName.isEmpty ? nil : assigneeName,
             dueDate: hasDueDate ? dueDate : nil,
@@ -133,8 +137,8 @@ struct AddTaskView: View {
             repeatHours: 0,
             repeatKind: repeatKind
         )
-        modelContext.insert(newTask)
-        try? modelContext.save()
+        newTask.household = households.first
+        try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: newTask) }
         dismiss()
     }

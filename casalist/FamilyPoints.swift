@@ -1,13 +1,10 @@
 import Foundation
+import CoreData
 
 /// Helpers for awarding/revoking task points and progressing recurring tasks
 /// when their circle is tapped.
 enum FamilyPoints {
-    /// Called when the user taps the check circle on any task row.
-    /// For one-shot tasks: flips `isCompleted` and awards/revokes points.
-    /// For recurring tasks: awards points, bumps `dueDate` to the next
-    /// occurrence, increments `completionCount`, keeps `isCompleted = false`.
-    static func toggle(_ t: TaskItem, in members: [FamilyMember]) {
+    static func toggle<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         let isRecurring = !t.effectiveRepeatKind.isEmpty
         if isRecurring {
             advanceRecurring(t, in: members)
@@ -21,7 +18,7 @@ enum FamilyPoints {
         }
     }
 
-    private static func advanceRecurring(_ t: TaskItem, in members: [FamilyMember]) {
+    private static func advanceRecurring<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         award(t, in: members)
         t.completionCount += 1
         if let due = t.dueDate {
@@ -45,19 +42,19 @@ enum FamilyPoints {
         }
     }
 
-    static func award(_ t: TaskItem, in members: [FamilyMember]) {
+    static func award<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         member.points += t.points
     }
 
-    static func revoke(_ t: TaskItem, in members: [FamilyMember]) {
+    static func revoke<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         member.points = max(0, member.points - t.points)
     }
 
-    static func match(name: String, in members: [FamilyMember]) -> FamilyMember? {
+    static func match<S: Sequence>(name: String, in members: S) -> FamilyMember? where S.Element == FamilyMember {
         let trimmed = name.trimmingCharacters(in: .whitespaces).lowercased()
         return members.first { $0.name.lowercased() == trimmed }
     }
