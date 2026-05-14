@@ -598,11 +598,11 @@ public enum CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { if let onHome { onHome() } else { dismiss() } } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }.foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
@@ -930,12 +930,11 @@ extension CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { if let onHome { onHome() } else { dismiss() } } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }
-                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
@@ -1214,12 +1213,11 @@ extension CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { dismiss() } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }
-                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
@@ -1543,12 +1541,11 @@ extension CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { dismiss() } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }
-                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
@@ -1757,12 +1754,11 @@ extension CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { dismiss() } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }
-                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
@@ -2080,12 +2076,11 @@ extension CasalistCottage {
         private var topBar: some View {
             HStack {
                 Button { dismiss() } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text("Home").font(.system(size: 13, weight: .heavy))
-                    }
-                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(P.surfaceAlt))
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
                 Button { darkOverride = !dark } label: {
