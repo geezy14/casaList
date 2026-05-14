@@ -66,6 +66,8 @@ struct AddTaskView: View {
         )
         
         modelContext.insert(newTask) // Saves to CloudKit/SwiftData [cite: 601, 611]
+        try? modelContext.save()
+        Task { await NotificationsManager.scheduleNow(for: newTask) }
         dismiss()
     }
 }

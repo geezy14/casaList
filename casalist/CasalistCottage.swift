@@ -40,6 +40,8 @@ public enum CasalistCottage {
         @State private var showAddTodo = false
         @State private var showGrocery = false
         @State private var showMaintenance = false
+        @State private var showReminders = false
+        @State private var showMyToDo = false
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
         @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
@@ -65,6 +67,8 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
+            .fullScreenCover(isPresented: $showReminders) { Reminders() }
+            .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
         }
 
@@ -92,12 +96,6 @@ public enum CasalistCottage {
                     Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
-                }
-                Button { showAddMember = true } label: {
-                    Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.peach))
-                        .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
                 }
             }.padding(.horizontal, 20).padding(.bottom, 12)
         }
@@ -197,8 +195,7 @@ public enum CasalistCottage {
 
         private struct AgendaTile: Identifiable {
             let id = UUID()
-            let time: String
-            let ampm: String
+            let timeText: String
             let label: String
             let sub: String
             let symbol: String
@@ -228,24 +225,58 @@ public enum CasalistCottage {
         private var todayAgenda: [AgendaTile] {
             let cal = Calendar.current
             let dueToday = allTodos.filter { t in
-                guard !t.isCompleted, let due = t.dueDate else { return false }
+                guard !t.isCompleted, t.category.lowercased() != "reminders", let due = t.dueDate else { return false }
                 return cal.isDateInToday(due)
             }.sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
-            let hourFmt = DateFormatter()
-            hourFmt.dateFormat = "h:mm"
-            let ampmFmt = DateFormatter()
-            ampmFmt.dateFormat = "a"
-            return dueToday.map { task in
-                let due = task.dueDate ?? Date()
-                return AgendaTile(
-                    time: hourFmt.string(from: due),
-                    ampm: ampmFmt.string(from: due),
+            let pinned = allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "reminders" }
+            let timeFmt = DateFormatter()
+            timeFmt.dateFormat = "h:mm a"
+            let timedTiles = dueToday.map { task in
+                AgendaTile(
+                    timeText: timeFmt.string(from: task.dueDate ?? Date()),
                     label: task.task,
                     sub: task.assignee ?? "",
                     symbol: tileSymbol(task.category),
                     color: tileColor(task.category)
                 )
             }
+            let pinnedTiles = pinned.map { task -> AgendaTile in
+                let kind = task.effectiveRepeatKind
+                let timeText: String
+                let symbol: String
+                let f = DateFormatter()
+                switch kind {
+                case "hourly":   timeText = "Hourly";        symbol = "arrow.triangle.2.circlepath"
+                case "every2h":  timeText = "Every 2h";      symbol = "arrow.triangle.2.circlepath"
+                case "every4h":  timeText = "Every 4h";      symbol = "arrow.triangle.2.circlepath"
+                case "every8h":  timeText = "Every 8h";      symbol = "arrow.triangle.2.circlepath"
+                case "every12h": timeText = "Every 12h";     symbol = "arrow.triangle.2.circlepath"
+                case "daily":
+                    if let due = task.dueDate { f.dateFormat = "'Daily' h:mm a"; timeText = f.string(from: due) }
+                    else { timeText = "Daily" }
+                    symbol = "arrow.triangle.2.circlepath"
+                case "weekly":
+                    if let due = task.dueDate { f.dateFormat = "EEE h:mm a"; timeText = f.string(from: due) }
+                    else { timeText = "Weekly" }
+                    symbol = "arrow.triangle.2.circlepath"
+                case "monthly":  timeText = "Monthly";       symbol = "arrow.triangle.2.circlepath"
+                case "yearly":   timeText = "Yearly";        symbol = "arrow.triangle.2.circlepath"
+                default:
+                    if let due = task.dueDate {
+                        timeText = timeFmt.string(from: due); symbol = "clock.fill"
+                    } else {
+                        timeText = "Pinned"; symbol = "pin.fill"
+                    }
+                }
+                return AgendaTile(
+                    timeText: timeText,
+                    label: task.task,
+                    sub: "",
+                    symbol: symbol,
+                    color: P.coral
+                )
+            }
+            return timedTiles + pinnedTiles
         }
 
         @ViewBuilder
@@ -259,7 +290,7 @@ public enum CasalistCottage {
                                     .frame(width: 30, height: 30)
                                     .background(Circle().fill(a.color.opacity(0.2)))
                                 Text(a.label).font(.system(size: 13, weight: .heavy)).lineLimit(2)
-                                Text(a.sub.isEmpty ? "\(a.time) \(a.ampm)" : "\(a.time) \(a.ampm) · \(a.sub)")
+                                Text(a.sub.isEmpty ? a.timeText : "\(a.timeText) · \(a.sub)")
                                     .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(2)
                             }
                             .padding(14).frame(width: 130, alignment: .leading)
@@ -277,10 +308,8 @@ public enum CasalistCottage {
                     Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
                     Text("What needs doing?").font(.system(size: 14, weight: .semibold)).foregroundStyle(P.textDim)
                     Spacer()
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
                 }
-                .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+                .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(Capsule().fill(P.surface))
                 .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
             }.buttonStyle(.plain)
@@ -300,11 +329,11 @@ public enum CasalistCottage {
         }
 
         private var emptyFamilyCard: some View {
-            Button { showAddMember = true } label: {
+            Button { showInvite = true } label: {
                 VStack(spacing: 10) {
                     Text("👨‍👩‍👧‍👦").font(.system(size: 44))
-                    Text("Add your family").font(.system(size: 18, weight: .heavy))
-                    Text("Tap + or this card to add members").font(.system(size: 12, weight: .semibold)).opacity(0.75)
+                    Text("Invite your family").font(.system(size: 18, weight: .heavy))
+                    Text("Tap to invite").font(.system(size: 12, weight: .semibold)).opacity(0.75)
                 }
                 .foregroundStyle(Color(rgb: 0x3B2A22))
                 .frame(maxWidth: .infinity).padding(24)
@@ -346,10 +375,10 @@ public enum CasalistCottage {
         }
 
         private var openTodoCount: Int {
-            allTodos.filter { !$0.isCompleted && !["groceries", "maintenance"].contains($0.category.lowercased()) }.count
+            allTodos.filter { !$0.isCompleted && !["groceries", "maintenance", "reminders"].contains($0.category.lowercased()) }.count
         }
         private var nextTodoTitle: String {
-            allTodos.first(where: { !$0.isCompleted && !["groceries", "maintenance"].contains($0.category.lowercased()) })?.task ?? ""
+            allTodos.first(where: { !$0.isCompleted && !["groceries", "maintenance", "reminders"].contains($0.category.lowercased()) })?.task ?? ""
         }
         private var groceryItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "groceries" } }
         private var groceryActiveCount: Int { groceryItems.count }
@@ -358,6 +387,9 @@ public enum CasalistCottage {
         private var maintenanceActiveCount: Int { maintenanceItems.count }
         private var maintenanceOverdueCount: Int { maintenanceItems.filter { ($0.dueDate ?? .distantFuture) < Date() }.count }
         private var maintenanceNextItem: String { maintenanceItems.first?.task ?? "" }
+        private var reminderItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "reminders" } }
+        private var reminderCount: Int { reminderItems.count }
+        private var reminderPreview: String { reminderItems.prefix(3).map { $0.task }.joined(separator: ", ") }
 
         private var tiles: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -369,8 +401,12 @@ public enum CasalistCottage {
                     Button { showMaintenance = true } label: {
                         tile(bg: P.lavender, emoji: "🔧", label: "Maintenance", big: "\(maintenanceActiveCount)", suffix: "open", sub: maintenanceNextItem, badge: maintenanceOverdueCount > 0 ? "\(maintenanceOverdueCount) DUE" : nil)
                     }.buttonStyle(.plain)
-                    tile(bg: P.sky,   emoji: "✏️", label: "My To-Do",  big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
-                    tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "0", suffix: "pinned", sub: "")
+                    Button { showMyToDo = true } label: {
+                        tile(bg: P.sky, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
+                    }.buttonStyle(.plain)
+                    Button { showReminders = true } label: {
+                        tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
+                    }.buttonStyle(.plain)
                 }
             }
         }
@@ -692,7 +728,7 @@ extension CasalistCottage {
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
         private func isModuleCategory(_ cat: String) -> Bool {
-            ["groceries", "maintenance"].contains(cat.lowercased())
+            ["groceries", "maintenance", "reminders"].contains(cat.lowercased())
         }
         private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) } }
         private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) } }
@@ -1364,6 +1400,358 @@ extension CasalistCottage {
             let f = DateFormatter()
             f.dateFormat = "MMM d"
             return f.string(from: d)
+        }
+    }
+
+    public struct Reminders: View {
+        @Environment(\.colorScheme) private var sys
+        @Environment(\.dismiss) private var dismiss
+        @Environment(\.modelContext) private var modelContext
+        @State private var darkOverride: Bool? = nil
+        @State private var newItem: String = ""
+        @State private var showAddReminder: Bool = false
+        @State private var editingReminder: TaskItem? = nil
+        @State private var expandedHourlyIds: Set<PersistentIdentifier> = []
+        @AppStorage("userName") private var userName: String = ""
+        @Query(sort: \TaskItem.createdAt, order: .reverse) private var allTasks: [TaskItem]
+        private var dark: Bool { darkOverride ?? (sys == .dark) }
+        private var P: Palette { Palette.resolve(dark) }
+        public init() {}
+
+        private var allReminders: [TaskItem] { allTasks.filter { $0.category.lowercased() == "reminders" } }
+        private var hourlyReminders: [TaskItem] {
+            allReminders.filter { $0.effectiveRepeatKind == "hourly" }
+        }
+        private var otherReminders: [TaskItem] {
+            allReminders.filter { !$0.isCompleted && $0.effectiveRepeatKind != "hourly" }
+        }
+        private var pinned: [TaskItem] { otherReminders }
+
+        private func iconFor(_ t: TaskItem) -> String {
+            if !t.effectiveRepeatKind.isEmpty { return "arrow.triangle.2.circlepath" }
+            if t.dueDate != nil { return "clock.fill" }
+            return "pin.fill"
+        }
+
+        private func scheduleDetail(_ t: TaskItem) -> String? {
+            let kind = t.effectiveRepeatKind
+            let f = DateFormatter()
+            switch kind {
+            case "hourly":   return "Every hour"
+            case "every2h":  return "Every 2h"
+            case "every4h":  return "Every 4h"
+            case "every8h":  return "Every 8h"
+            case "every12h": return "Every 12h"
+            case "daily":
+                guard let due = t.dueDate else { return "Daily" }
+                f.dateFormat = "'Daily at' h:mm a"
+                return f.string(from: due)
+            case "weekly":
+                guard let due = t.dueDate else { return "Weekly" }
+                f.dateFormat = "'Weekly' EEE h:mm a"
+                return f.string(from: due)
+            case "monthly":
+                guard let due = t.dueDate else { return "Monthly" }
+                let day = Calendar.current.component(.day, from: due)
+                f.dateFormat = "h:mm a"
+                return "Monthly day \(day) · \(f.string(from: due))"
+            case "yearly":
+                guard let due = t.dueDate else { return "Yearly" }
+                f.dateFormat = "'Yearly' MMM d · h:mm a"
+                return f.string(from: due)
+            default:
+                guard let due = t.dueDate else { return nil }
+                if Calendar.current.isDateInToday(due) {
+                    f.dateFormat = "'Today' h:mm a"
+                } else if Calendar.current.isDateInTomorrow(due) {
+                    f.dateFormat = "'Tmrw' h:mm a"
+                } else {
+                    f.dateFormat = "MMM d · h:mm a"
+                }
+                return f.string(from: due)
+            }
+        }
+
+        public var body: some View {
+            ZStack {
+                P.bg.ignoresSafeArea()
+                VStack(spacing: 0) {
+                    topBar
+                    ScrollView { content }.scrollIndicators(.hidden)
+                }
+            }
+            .foregroundStyle(P.text)
+            .preferredColorScheme(dark ? .dark : .light)
+            .sheet(isPresented: $showAddReminder) { AddReminderView() }
+            .sheet(item: $editingReminder) { reminder in AddReminderView(editing: reminder) }
+        }
+
+        private var topBar: some View {
+            HStack {
+                Button { dismiss() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
+                        Text("Home").font(.system(size: 13, weight: .heavy))
+                    }
+                    .foregroundStyle(P.text).padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(P.surfaceAlt))
+                }
+                Spacer()
+                Button { darkOverride = !dark } label: {
+                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                }
+                Button { showAddReminder = true } label: {
+                    Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.peach))
+                        .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
+                }
+            }.padding(.horizontal, 16).padding(.bottom, 12)
+        }
+
+        private var content: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                hero
+                quickAddRow
+                listSection
+            }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var hero: some View {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.2)).frame(width: 76, height: 76)
+                    Text("📌").font(.system(size: 36))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMINDERS").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    Text("\(pinned.count) pinned").font(.system(size: 22, weight: .heavy))
+                    Text(pinned.isEmpty ? "Pin info you reference often" : "Tap an item to remove it").font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.white).padding(20)
+            .background(P.coral)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+
+        private var quickAddRow: some View {
+            HStack(spacing: 10) {
+                Image(systemName: "pin.fill").font(.system(size: 16)).foregroundStyle(P.textDim)
+                TextField("Wi-Fi password, vet number…", text: $newItem)
+                    .font(.system(size: 14, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit(addInlineItem)
+                Button { addInlineItem() } label: {
+                    Image(systemName: "plus").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func addInlineItem() {
+            let name = newItem.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            modelContext.insert(TaskItem(
+                task: name,
+                category: "reminders",
+                points: 0,
+                createdBy: userName.trimmingCharacters(in: .whitespaces)
+            ))
+            newItem = ""
+        }
+
+        @ViewBuilder
+        private var listSection: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                if !hourlyReminders.isEmpty {
+                    hourlySection
+                }
+                pinnedSection
+            }
+        }
+
+        private var hourlySection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("HOURLY ⟳").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(hourlyReminders.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                VStack(spacing: 18) {
+                    ForEach(hourlyReminders) { t in
+                        hourlyStack(t)
+                    }
+                }
+            }
+        }
+
+        /// The stack-of-completions view for one hourly reminder.
+        /// One unchecked card on top, up to 3 dimmed/struck history cards behind.
+        /// Tap the count footer to expand into a full vertical list.
+        private func hourlyStack(_ t: TaskItem) -> some View {
+            let isExpanded = expandedHourlyIds.contains(t.persistentModelID)
+            return VStack(spacing: 8) {
+                if isExpanded {
+                    hourlyCard(t, struckOut: false)
+                    ForEach(0..<t.completionCount, id: \.self) { _ in
+                        hourlyCard(t, struckOut: true)
+                    }
+                } else {
+                    let stackedBehind = min(t.completionCount, 3)
+                    ZStack(alignment: .top) {
+                        ForEach((1...max(stackedBehind, 1)).reversed(), id: \.self) { layer in
+                            if layer <= stackedBehind {
+                                hourlyCard(t, struckOut: true)
+                                    .scaleEffect(1 - CGFloat(layer) * 0.035, anchor: .top)
+                                    .opacity(0.55 - Double(layer - 1) * 0.13)
+                                    .offset(y: CGFloat(layer) * 12)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        hourlyCard(t, struckOut: false)
+                            .zIndex(100)
+                    }
+                    .padding(.bottom, CGFloat(stackedBehind) * 12)
+                }
+
+                if t.completionCount > 0 {
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            if isExpanded {
+                                expandedHourlyIds.remove(t.persistentModelID)
+                            } else {
+                                expandedHourlyIds.insert(t.persistentModelID)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .heavy))
+                            Text(isExpanded
+                                 ? "Hide history"
+                                 : "Show all \(t.completionCount) completed")
+                                .font(.system(size: 11, weight: .heavy))
+                        }
+                        .foregroundStyle(P.textDim)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Capsule().fill(P.surfaceAlt))
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+
+        private func hourlyCard(_ t: TaskItem, struckOut: Bool) -> some View {
+            Button { editingReminder = t } label: {
+                HStack(spacing: 14) {
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                            t.completionCount += 1
+                        }
+                        try? modelContext.save()
+                    } label: {
+                        if struckOut {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(P.coral)
+                        } else {
+                            Circle()
+                                .stroke(P.coral, lineWidth: 2)
+                                .frame(width: 24, height: 24)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(struckOut)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t.task)
+                            .font(.system(size: 16, weight: .heavy))
+                            .strikethrough(struckOut)
+                            .foregroundStyle(struckOut ? P.textDim : P.text)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10))
+                                .foregroundStyle(P.coral)
+                            Text(scheduleDetail(t) ?? "Every hour")
+                                .font(.system(size: 11, weight: .heavy))
+                                .foregroundStyle(P.textDim)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if !struckOut {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(P.textMuted)
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity)
+                .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(struckOut)
+        }
+
+        @ViewBuilder
+        private var pinnedSection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("PINNED 📌").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(pinned.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                if pinned.isEmpty && hourlyReminders.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("📋").font(.system(size: 36))
+                        Text("Nothing pinned").font(.system(size: 14, weight: .heavy))
+                        Text("Add quick-reference info above").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                    }
+                    .foregroundStyle(P.text)
+                    .frame(maxWidth: .infinity).padding(24)
+                    .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+                } else if !pinned.isEmpty {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        ForEach(pinned) { t in
+                            Button { editingReminder = t } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: iconFor(t))
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(P.coral)
+                                        if let detail = scheduleDetail(t) {
+                                            Text(detail)
+                                                .font(.system(size: 10, weight: .heavy))
+                                                .foregroundStyle(P.textDim)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer(minLength: 0)
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 10, weight: .heavy))
+                                            .foregroundStyle(P.textMuted)
+                                    }
+                                    Text(t.task)
+                                        .font(.system(size: 14, weight: .heavy))
+                                        .multilineTextAlignment(.leading)
+                                        .lineLimit(4)
+                                        .foregroundStyle(P.text)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(14)
+                                .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                                .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
         }
     }
 }
