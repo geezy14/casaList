@@ -80,7 +80,11 @@ enum HouseholdProvisioner {
         let req = Household.fetchRequest()
         req.fetchLimit = 1
         if let _ = try? context.fetch(req).first { return }
-        let household = Household(entity: NSEntityDescription.entity(forEntityName: "Household", in: context)!, insertInto: context)
+        guard let entity = NSEntityDescription.entity(forEntityName: "Household", in: context) else {
+            NSLog("Casa: Household entity not found in model — Core Data probably failed to load")
+            return
+        }
+        let household = Household(entity: entity, insertInto: context)
         household.uid = UUID()
         household.name = UserDefaults.standard.string(forKey: "householdName") ?? "My Household"
         household.createdAt = Date()

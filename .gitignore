@@ -21,3 +21,4 @@ Pods/
 
 # Claude Code working files
 .claude/
+build-sim/

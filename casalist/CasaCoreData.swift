@@ -31,7 +31,6 @@ final class CasaCoreDataStack {
 
         let privateURL = base.appendingPathComponent("Casalist-Private.sqlite")
         let privateDesc = NSPersistentStoreDescription(url: privateURL)
-        privateDesc.configuration = "Private"
         privateDesc.shouldMigrateStoreAutomatically = true
         privateDesc.shouldInferMappingModelAutomatically = true
         let privateOpts = NSPersistentCloudKitContainerOptions(containerIdentifier: casalistCloudKitContainerID)
@@ -42,7 +41,6 @@ final class CasaCoreDataStack {
 
         let sharedURL = base.appendingPathComponent("Casalist-Shared.sqlite")
         let sharedDesc = NSPersistentStoreDescription(url: sharedURL)
-        sharedDesc.configuration = "Shared"
         sharedDesc.shouldMigrateStoreAutomatically = true
         sharedDesc.shouldInferMappingModelAutomatically = true
         let sharedOpts = NSPersistentCloudKitContainerOptions(containerIdentifier: casalistCloudKitContainerID)
@@ -53,16 +51,37 @@ final class CasaCoreDataStack {
 
         container.persistentStoreDescriptions = [privateDesc, sharedDesc]
 
+        var loadFailed = false
+        let group = DispatchGroup()
+        for _ in 0..<2 { group.enter() }
         container.loadPersistentStores { [weak self] desc, error in
+            defer { group.leave() }
             if let error {
-                NSLog("Casa Core Data load error: \(error)")
+                NSLog("Casa Core Data load error (\(desc.cloudKitContainerOptions?.databaseScope.rawValue ?? -1)): \(error)")
+                loadFailed = true
                 return
             }
+            NSLog("Casa Core Data store loaded: \(desc.url?.lastPathComponent ?? "?")")
             guard let store = self?.container.persistentStoreCoordinator.persistentStore(for: desc.url!) else { return }
             if desc.cloudKitContainerOptions?.databaseScope == .private {
                 self?.privateStore = store
             } else if desc.cloudKitContainerOptions?.databaseScope == .shared {
                 self?.sharedStore = store
+            }
+        }
+        group.wait()
+        if loadFailed {
+            NSLog("Casa: CloudKit-backed stores failed; falling back to local-only store")
+            // Remove any partially-loaded CloudKit stores and reload with a local-only store.
+            for s in container.persistentStoreCoordinator.persistentStores {
+                try? container.persistentStoreCoordinator.remove(s)
+            }
+            let localURL = base.appendingPathComponent("Casalist-Local.sqlite")
+            let local = NSPersistentStoreDescription(url: localURL)
+            container.persistentStoreDescriptions = [local]
+            container.loadPersistentStores { desc, error in
+                if let error { NSLog("Casa Core Data local fallback also failed: \(error)") }
+                else { NSLog("Casa Core Data local fallback loaded") }
             }
         }
 
@@ -124,14 +143,14 @@ final class CasaCoreDataStack {
 
         // ------- Household attributes -------
         household.properties = [
-            attr("uid", .UUIDAttributeType, optional: false),
+            attr("uid", .UUIDAttributeType),
             attr("name", .stringAttributeType, def: "My Household"),
             attr("createdAt", .dateAttributeType, def: Date()),
         ]
 
         // ------- FamilyMember attributes -------
         familyMember.properties = [
-            attr("uid", .UUIDAttributeType, optional: false),
+            attr("uid", .UUIDAttributeType),
             attr("name", .stringAttributeType, def: ""),
             attr("role", .stringAttributeType, def: ""),
             attr("colorHex", .integer64AttributeType, def: 0xC97357),
@@ -143,7 +162,7 @@ final class CasaCoreDataStack {
 
         // ------- TaskItem attributes -------
         taskItem.properties = [
-            attr("uid", .stringAttributeType, optional: false, def: ""),
+            attr("uid", .stringAttributeType, def: ""),
             attr("task", .stringAttributeType, def: ""),
             attr("assignee", .stringAttributeType),
             attr("dueDate", .dateAttributeType),
@@ -160,7 +179,7 @@ final class CasaCoreDataStack {
 
         // ------- FamilyGoal attributes -------
         familyGoal.properties = [
-            attr("uid", .UUIDAttributeType, optional: false),
+            attr("uid", .UUIDAttributeType),
             attr("ownerName", .stringAttributeType, def: ""),
             attr("label", .stringAttributeType, def: ""),
             attr("targetPoints", .integer64AttributeType, def: 100),
@@ -169,7 +188,7 @@ final class CasaCoreDataStack {
 
         // ------- ChoreTemplate attributes -------
         choreTemplate.properties = [
-            attr("uid", .UUIDAttributeType, optional: false),
+            attr("uid", .UUIDAttributeType),
             attr("label", .stringAttributeType, def: ""),
             attr("points", .integer64AttributeType, def: 10),
             attr("symbol", .stringAttributeType, def: "checkmark.circle"),
@@ -178,7 +197,7 @@ final class CasaCoreDataStack {
 
         // ------- FamilyEvent attributes -------
         familyEvent.properties = [
-            attr("uid", .UUIDAttributeType, optional: false),
+            attr("uid", .UUIDAttributeType),
             attr("title", .stringAttributeType, def: ""),
             attr("startDate", .dateAttributeType, def: Date()),
             attr("isAllDay", .booleanAttributeType, def: false),
@@ -222,11 +241,6 @@ final class CasaCoreDataStack {
         relate(parent: household, parentName: "household", child: familyEvent, childName: "events")
 
         model.entities = [household, familyMember, taskItem, familyGoal, choreTemplate, familyEvent]
-
-        // Each store gets one configuration name; both share the same entities.
-        model.setEntities(model.entities, forConfigurationName: "Private")
-        model.setEntities(model.entities, forConfigurationName: "Shared")
-
         return model
     }
 }
@@ -240,6 +254,9 @@ extension NSManagedObjectContext {
     }
 }
 
-extension NSManagedObject: @retroactive Identifiable {
-    public var id: NSManagedObjectID { objectID }
-}
+extension Household: Identifiable {}
+extension FamilyMember: Identifiable {}
+extension TaskItem: Identifiable {}
+extension FamilyGoal: Identifiable {}
+extension ChoreTemplate: Identifiable {}
+extension FamilyEvent: Identifiable {}

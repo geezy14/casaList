@@ -14,8 +14,7 @@ public final class Household: NSManagedObject {
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()
-        let zero = UUID(uuidString: "00000000-0000-0000-0000-000000000000")
-        setPrimitiveValue(uid == zero ? UUID() : uid, forKey: "uid")
+        setPrimitiveValue(UUID(), forKey: "uid")
         setPrimitiveValue(Date(), forKey: "createdAt")
         setPrimitiveValue("My Household", forKey: "name")
     }
