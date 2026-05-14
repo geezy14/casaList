@@ -1,0 +1,13 @@
+Casalist 1 (3.1)
+
+What's New
+- House icon on all sub-tab back buttons (replaces "Home" text)
+
+What's Fixed
+- "Newer version of Casalist is needed" error on launch — binary now matches deployed CloudKit Production schema
+
+What to Test
+- App launches cleanly with no schema error
+- Swipe between Home, My To-Do, Chore Rewards
+- Tap the house icon top-left on any sub-screen to return Home
+- Family members and household sync from iCloud
