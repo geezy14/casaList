@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF8F0"/>
+      <stop offset="1" stop-color="#FBE9D5"/>
+    </linearGradient>
+    <linearGradient id="house" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF9E7C"/>
+      <stop offset="1" stop-color="#E47A82"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C13E20"/>
+      <stop offset="1" stop-color="#7E3030"/>
+    </linearGradient>
+    <linearGradient id="clip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E8B040"/>
+      <stop offset="1" stop-color="#B8842A"/>
+    </linearGradient>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+
+  <!-- subtle warm glow behind everything -->
+  <ellipse cx="512" cy="640" rx="380" ry="120" fill="#FF9E7C" opacity="0.18" filter="url(#soft)"/>
+
+  <!-- roof -->
+  <path d="M 160 540 L 512 220 L 864 540 Z" fill="url(#roof)"/>
+  <!-- roof shadow stripe -->
+  <path d="M 160 540 L 864 540 L 820 540 L 200 540 Z" fill="#3B2A22" opacity="0.18"/>
+
+  <!-- chimney -->
+  <rect x="680" y="300" width="58" height="120" rx="6" fill="#7E3030"/>
+  <rect x="672" y="296" width="74" height="22" rx="4" fill="#5A2222"/>
+
+  <!-- house body -->
+  <rect x="220" y="540" width="584" height="320" rx="22" fill="url(#house)"/>
+
+  <!-- door (lavender accent) -->
+  <rect x="448" y="680" width="128" height="180" rx="14" fill="#5A3F8A"/>
+  <circle cx="556" cy="772" r="7" fill="#E8B040"/>
+
+  <!-- window (sky) -->
+  <rect x="280" y="600" width="110" height="110" rx="8" fill="#6FA8D0"/>
+  <line x1="335" y1="600" x2="335" y2="710" stroke="#FFF8F0" stroke-width="6" stroke-linecap="round"/>
+  <line x1="280" y1="655" x2="390" y2="655" stroke="#FFF8F0" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- clipboard "held" by the house, tilted slightly right -->
+  <g transform="rotate(-4 660 720)">
+    <!-- shadow -->
+    <rect x="538" y="552" width="244" height="320" rx="22" fill="#3B2A22" opacity="0.18"/>
+    <!-- board -->
+    <rect x="530" y="540" width="244" height="320" rx="20" fill="url(#clip)"/>
+    <!-- paper -->
+    <rect x="554" y="588" width="196" height="252" rx="10" fill="#FFF8F0"/>
+    <!-- clip head -->
+    <rect x="608" y="516" width="88" height="48" rx="8" fill="#527E45"/>
+    <rect x="636" y="528" width="32" height="20" rx="4" fill="#3B2A22"/>
+
+    <!-- list rows: check + line -->
+    <g stroke-linecap="round" stroke-linejoin="round">
+      <!-- row 1 done -->
+      <circle cx="582" cy="630" r="11" fill="none" stroke="#527E45" stroke-width="5"/>
+      <path d="M 575 631 l 6 7 12 -13" fill="none" stroke="#527E45" stroke-width="5"/>
+      <rect x="606" y="623" width="130" height="14" rx="7" fill="#E47A82"/>
+
+      <!-- row 2 done -->
+      <circle cx="582" cy="676" r="11" fill="none" stroke="#527E45" stroke-width="5"/>
+      <path d="M 575 677 l 6 7 12 -13" fill="none" stroke="#527E45" stroke-width="5"/>
+      <rect x="606" y="669" width="120" height="14" rx="7" fill="#3D6480"/>
+
+      <!-- row 3 open -->
+      <circle cx="582" cy="722" r="11" fill="none" stroke="#3B2A22" stroke-width="4" opacity="0.4"/>
+      <rect x="606" y="715" width="100" height="14" rx="7" fill="#3B2A22" opacity="0.55"/>
+
+      <!-- row 4 open -->
+      <circle cx="582" cy="768" r="11" fill="none" stroke="#3B2A22" stroke-width="4" opacity="0.4"/>
+      <rect x="606" y="761" width="130" height="14" rx="7" fill="#3B2A22" opacity="0.55"/>
+
+      <!-- row 5 open -->
+      <circle cx="582" cy="814" r="11" fill="none" stroke="#3B2A22" stroke-width="4" opacity="0.4"/>
+      <rect x="606" y="807" width="80" height="14" rx="7" fill="#3B2A22" opacity="0.55"/>
+    </g>
+  </g>
+
+  <!-- ground line -->
+  <rect x="120" y="860" width="784" height="20" rx="10" fill="#3B2A22" opacity="0.08"/>
+</svg>

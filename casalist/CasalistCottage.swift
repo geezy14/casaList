@@ -380,7 +380,14 @@ public enum CasalistCottage {
         private var nextTodoTitle: String {
             allTodos.first(where: { !$0.isCompleted && !["groceries", "maintenance", "reminders"].contains($0.category.lowercased()) })?.task ?? ""
         }
-        private var groceryItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "groceries" } }
+        private var groceryItems: [TaskItem] {
+            allTodos.filter { t in
+                !t.isCompleted &&
+                t.category.lowercased() == "groceries" &&
+                // Exclude trip headers (top-level grocery tasks with a dueDate).
+                !(t.parentUid.isEmpty && t.dueDate != nil)
+            }
+        }
         private var groceryActiveCount: Int { groceryItems.count }
         private var groceryNextItems: String { groceryItems.prefix(3).map { $0.task }.joined(separator: ", ") }
         private var maintenanceItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "maintenance" } }
@@ -1043,6 +1050,7 @@ extension CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var newItem: String = ""
         @State private var showAdd = false
+        @State private var newItemByTrip: [String: String] = [:]
         @AppStorage("userName") private var userName: String = ""
         @Query(sort: \TaskItem.createdAt, order: .reverse) private var allTasks: [TaskItem]
         private var dark: Bool { darkOverride ?? (sys == .dark) }
@@ -1050,8 +1058,27 @@ extension CasalistCottage {
         public init() {}
 
         private var groceryTasks: [TaskItem] { allTasks.filter { $0.category.lowercased() == "groceries" } }
-        private var active: [TaskItem] { groceryTasks.filter { !$0.isCompleted } }
-        private var bought: [TaskItem] { groceryTasks.filter { $0.isCompleted } }
+        // A "trip" is a top-level grocery task with a dueDate (shows in agenda).
+        private var trips: [TaskItem] {
+            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate != nil }
+                .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+        }
+        // Flat items: top-level grocery tasks without a dueDate (the existing quick-add behavior).
+        private var flatActive: [TaskItem] {
+            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && !$0.isCompleted }
+        }
+        private var flatBought: [TaskItem] {
+            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && $0.isCompleted }
+        }
+        private func items(in trip: TaskItem) -> [TaskItem] {
+            groceryTasks.filter { $0.parentUid == trip.uid }
+        }
+        private var activeCount: Int {
+            flatActive.count + trips.reduce(0) { $0 + items(in: $1).filter { !$0.isCompleted }.count }
+        }
+        private var boughtCount: Int {
+            flatBought.count + trips.reduce(0) { $0 + items(in: $1).filter { $0.isCompleted }.count }
+        }
 
         public var body: some View {
             ZStack {
@@ -1063,7 +1090,7 @@ extension CasalistCottage {
             }
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
-            .sheet(isPresented: $showAdd) { AddTaskView(defaultCategory: "groceries") }
+            .sheet(isPresented: $showAdd) { AddGroceryTripView() }
         }
 
         private var topBar: some View {
@@ -1094,7 +1121,8 @@ extension CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 quickAddRow
-                activeSection
+                if !trips.isEmpty { tripsSection }
+                flatActiveSection
                 boughtSection
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
@@ -1107,8 +1135,8 @@ extension CasalistCottage {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("GROCERY").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
-                    Text("\(active.count) to get").font(.system(size: 22, weight: .heavy))
-                    Text(bought.isEmpty ? "Add what you need" : "\(bought.count) in the cart").font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                    Text("\(activeCount) to get").font(.system(size: 22, weight: .heavy))
+                    Text(boughtCount == 0 ? "Tap + to plan a trip" : "\(boughtCount) in the cart").font(.system(size: 12, weight: .semibold)).opacity(0.85)
                 }
                 Spacer(minLength: 0)
             }
@@ -1143,30 +1171,142 @@ extension CasalistCottage {
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             ))
+            try? modelContext.save()
             newItem = ""
         }
 
+        private func tripDateText(_ d: Date) -> String {
+            let f = DateFormatter()
+            if Calendar.current.isDateInToday(d) { f.dateFormat = "'Today' h:mm a" }
+            else if Calendar.current.isDateInTomorrow(d) { f.dateFormat = "'Tmrw' h:mm a" }
+            else { f.dateFormat = "MMM d · h:mm a" }
+            return f.string(from: d)
+        }
+
         @ViewBuilder
-        private var activeSection: some View {
-            VStack(alignment: .leading, spacing: 8) {
+        private var tripsSection: some View {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("NEED TO GET 🛍️").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("SHOPPING TRIPS 🛍️").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    Text("\(active.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                    Text("\(trips.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
                 }
-                if active.isEmpty {
-                    VStack(spacing: 8) {
-                        Text("🥗").font(.system(size: 36))
-                        Text("Cart is empty").font(.system(size: 14, weight: .heavy))
-                        Text("Add an item above").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                ForEach(trips) { trip in
+                    tripCard(trip)
+                }
+            }
+        }
+
+        private func tripCard(_ trip: TaskItem) -> some View {
+            let tripItems = items(in: trip)
+            let openItems = tripItems.filter { !$0.isCompleted }
+            return VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(trip.task).font(.system(size: 16, weight: .heavy))
+                    Spacer()
+                    if let due = trip.dueDate {
+                        Text(tripDateText(due))
+                            .font(.system(size: 10, weight: .heavy))
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Capsule().fill(P.peach.opacity(0.25)))
+                            .foregroundStyle(P.peach)
                     }
-                    .foregroundStyle(P.text)
-                    .frame(maxWidth: .infinity).padding(24)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+                    Button {
+                        for it in tripItems { modelContext.delete(it) }
+                        modelContext.delete(trip)
+                        try? modelContext.save()
+                    } label: {
+                        Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                    }.buttonStyle(.plain)
+                }
+                if tripItems.isEmpty {
+                    Text("No items yet — add below").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted).padding(.leading, 4)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(active.enumerated()), id: \.element.id) { i, t in
+                        ForEach(Array(tripItems.enumerated()), id: \.element.id) { i, t in
+                            HStack(spacing: 12) {
+                                Button { t.isCompleted.toggle(); try? modelContext.save() } label: {
+                                    if t.isCompleted {
+                                        Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(P.mint)
+                                    } else {
+                                        Circle().stroke(P.mint, lineWidth: 2).frame(width: 20, height: 20)
+                                    }
+                                }.buttonStyle(.plain)
+                                Text(t.task)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .strikethrough(t.isCompleted)
+                                    .foregroundStyle(t.isCompleted ? P.textDim : P.text)
+                                Spacer()
+                                Button { modelContext.delete(t); try? modelContext.save() } label: {
+                                    Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                                }.buttonStyle(.plain)
+                            }.padding(.vertical, 9)
+                            .overlay(alignment: .top) {
+                                if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
+                            }
+                        }
+                    }
+                    .padding(.leading, 16)
+                }
+                tripInlineAdd(trip)
+                if !openItems.isEmpty {
+                    Text("\(openItems.count) to get").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted).padding(.leading, 4)
+                }
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func tripInlineAdd(_ trip: TaskItem) -> some View {
+            let key = trip.uid
+            let binding = Binding<String>(
+                get: { newItemByTrip[key] ?? "" },
+                set: { newItemByTrip[key] = $0 }
+            )
+            return HStack(spacing: 10) {
+                Image(systemName: "plus.circle").font(.system(size: 16)).foregroundStyle(P.textDim)
+                TextField("Add to \(trip.task)…", text: binding)
+                    .font(.system(size: 13, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit { addItem(to: trip) }
+                Button { addItem(to: trip) } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 26, height: 26).background(Circle().fill(P.mint))
+                }.buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surfaceAlt))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func addItem(to trip: TaskItem) {
+            let key = trip.uid
+            let name = (newItemByTrip[key] ?? "").trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            let item = TaskItem(
+                task: name,
+                category: "groceries",
+                points: 0,
+                createdBy: userName.trimmingCharacters(in: .whitespaces),
+                parentUid: trip.uid
+            )
+            modelContext.insert(item)
+            try? modelContext.save()
+            newItemByTrip[key] = ""
+        }
+
+        @ViewBuilder
+        private var flatActiveSection: some View {
+            if !flatActive.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("OTHER ITEMS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                        Spacer()
+                        Text("\(flatActive.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                    }
+                    VStack(spacing: 0) {
+                        ForEach(Array(flatActive.enumerated()), id: \.element.id) { i, t in
                             row(t, isFirst: i == 0)
                         }
                     }
@@ -1174,19 +1314,27 @@ extension CasalistCottage {
                     .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                     .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
                 }
+            } else if trips.isEmpty {
+                VStack(spacing: 8) {
+                    Text("🥗").font(.system(size: 36))
+                    Text("Cart is empty").font(.system(size: 14, weight: .heavy))
+                    Text("Quick-add above, or tap + for a planned trip").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                }
+                .foregroundStyle(P.text)
+                .frame(maxWidth: .infinity).padding(24)
+                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
             }
         }
 
         private func row(_ t: TaskItem, isFirst: Bool) -> some View {
             HStack(spacing: 12) {
-                Button { t.isCompleted.toggle() } label: {
+                Button { t.isCompleted.toggle(); try? modelContext.save() } label: {
                     Circle().stroke(P.mint, lineWidth: 2).frame(width: 22, height: 22)
                 }.buttonStyle(.plain)
                 Text(t.task).font(.system(size: 14, weight: .heavy))
                 Spacer()
-                Button {
-                    modelContext.delete(t)
-                } label: {
+                Button { modelContext.delete(t); try? modelContext.save() } label: {
                     Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
                 }.buttonStyle(.plain)
             }.padding(.vertical, 12)
@@ -1197,7 +1345,7 @@ extension CasalistCottage {
 
         @ViewBuilder
         private var boughtSection: some View {
-            if !bought.isEmpty {
+            if !flatBought.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("IN THE CART ✓").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
@@ -1207,9 +1355,9 @@ extension CasalistCottage {
                         }
                     }
                     VStack(spacing: 0) {
-                        ForEach(Array(bought.prefix(10).enumerated()), id: \.element.id) { i, t in
+                        ForEach(Array(flatBought.prefix(10).enumerated()), id: \.element.id) { i, t in
                             HStack(spacing: 12) {
-                                Button { t.isCompleted.toggle() } label: {
+                                Button { t.isCompleted.toggle(); try? modelContext.save() } label: {
                                     Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(P.mint)
                                 }.buttonStyle(.plain)
                                 Text(t.task).font(.system(size: 13, weight: .semibold)).strikethrough().foregroundStyle(P.textDim)
@@ -1228,7 +1376,8 @@ extension CasalistCottage {
         }
 
         private func clearBought() {
-            for t in bought { modelContext.delete(t) }
+            for t in flatBought { modelContext.delete(t) }
+            try? modelContext.save()
         }
     }
 
