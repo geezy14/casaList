@@ -8,6 +8,8 @@ public final class FamilyGoal: NSManagedObject {
     @NSManaged public var label: String
     @NSManaged public var targetPoints: Int64
     @NSManaged public var createdAt: Date
+    @NSManaged public var isRedeemed: Bool
+    @NSManaged public var redeemedAt: Date?
     @NSManaged public var household: Household?
 
     public override func awakeFromInsert() {

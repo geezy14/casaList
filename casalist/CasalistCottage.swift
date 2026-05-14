@@ -567,14 +567,14 @@ public enum CasalistCottage {
         @Environment(\.colorScheme) private var sys
         @State private var darkOverride: Bool? = nil
         @State private var showAddGoal: Bool = false
-        @State private var showAddChore: Bool = false
+        @State private var redeemTarget: FamilyGoal? = nil
         @Environment(\.dismiss) private var dismiss
         @Environment(\.managedObjectContext) private var modelContext
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goalsQuery: FetchedResults<FamilyGoal>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ChoreTemplate.createdAt, ascending: true)]) private var choresQuery: FetchedResults<ChoreTemplate>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
@@ -596,7 +596,7 @@ public enum CasalistCottage {
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAddGoal) { AddGoalView() }
-            .sheet(isPresented: $showAddChore) { AddChoreView() }
+            .sheet(item: $redeemTarget) { g in redeemSheet(g) }
         }
 
         private var topBar: some View {
@@ -625,8 +625,30 @@ public enum CasalistCottage {
                 podium
                 standings
                 goals
+                redeemed
                 available
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var activeGoals: [FamilyGoal] { goalsQuery.filter { !$0.isRedeemed } }
+        private var redeemedGoals: [FamilyGoal] {
+            goalsQuery.filter { $0.isRedeemed }
+                .sorted { ($0.redeemedAt ?? .distantPast) > ($1.redeemedAt ?? .distantPast) }
+        }
+
+        private var myMember: FamilyMember? {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+        }
+
+        /// Open, point-bearing TaskItems that should appear in the EARN POINTS
+        /// section. Owner/admin see everything; standard/kid see only their own.
+        private var earningTasks: [TaskItem] {
+            let pointTasks = allTodos.filter { !$0.isCompleted && $0.points > 0 }
+            if let me = myMember, !me.canManageFamily {
+                let lc = me.name.lowercased()
+                return pointTasks.filter { ($0.assignee ?? "").lowercased() == lc }
+            }
+            return pointTasks
         }
 
         private var podium: some View {
@@ -732,7 +754,7 @@ public enum CasalistCottage {
                         }
                     }
                 }
-                if goalsQuery.isEmpty && canManagePoints {
+                if activeGoals.isEmpty && canManagePoints {
                     Button { showAddGoal = true } label: {
                         VStack(spacing: 6) {
                             Text("🎯").font(.system(size: 30))
@@ -745,7 +767,7 @@ public enum CasalistCottage {
                     }.buttonStyle(.plain)
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        ForEach(goalsQuery) { g in
+                        ForEach(activeGoals) { g in
                             goalCard(g)
                         }
                     }
@@ -758,17 +780,20 @@ public enum CasalistCottage {
             let memberPoints = m?.points ?? 0
             let progress = min(memberPoints, g.targetPoints)
             let color = m?.color ?? P.peach
+            let canRedeem = (memberPoints >= g.targetPoints) && (canManagePoints || isViewerOwnerOfGoal(g))
             return VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if let m { CLAvatar(m.asCLMember, size: 26) }
                     Text(g.ownerName).font(.system(size: 12, weight: .heavy))
                     Spacer()
-                    Button {
-                        modelContext.delete(g)
-                        try? modelContext.save()
-                    } label: {
-                        Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                    }.buttonStyle(.plain)
+                    if canManagePoints {
+                        Button {
+                            modelContext.delete(g)
+                            try? modelContext.save()
+                        } label: {
+                            Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                        }.buttonStyle(.plain)
+                    }
                 }
                 Text(g.label).font(.system(size: 13, weight: .bold)).foregroundStyle(P.text)
                 Text("\(progress) / \(g.targetPoints) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(P.textMuted)
@@ -778,9 +803,104 @@ public enum CasalistCottage {
                             .frame(width: gg.size.width * CGFloat(progress) / CGFloat(g.targetPoints))
                     }
                 }.frame(height: 8)
+                if canRedeem {
+                    Button { redeemTarget = g } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "gift.fill").font(.system(size: 11, weight: .heavy))
+                            Text("Redeem").font(.system(size: 12, weight: .heavy))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .background(Capsule().fill(color))
+                        .foregroundStyle(.white)
+                    }.buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 22).fill(color.opacity(0.15)))
+        }
+
+        private func isViewerOwnerOfGoal(_ g: FamilyGoal) -> Bool {
+            (myMember?.name.lowercased() ?? "") == g.ownerName.lowercased()
+        }
+
+        private func redeemSheet(_ g: FamilyGoal) -> some View {
+            let m = memberFor(g.ownerName)
+            let color = m?.color ?? P.peach
+            return NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    VStack(spacing: 18) {
+                        Spacer().frame(height: 8)
+                        Image(systemName: "gift.fill").font(.system(size: 44)).foregroundStyle(color)
+                        Text("Redeem \(g.label)?").font(.system(size: 20, weight: .heavy)).multilineTextAlignment(.center)
+                        Text("\(g.targetPoints) pts will be spent from \(g.ownerName)'s balance.")
+                            .font(.system(size: 13)).foregroundStyle(P.textMuted)
+                            .multilineTextAlignment(.center).padding(.horizontal, 24)
+                        HStack(spacing: 12) {
+                            Button("Cancel") { redeemTarget = nil }
+                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(Capsule().fill(P.surfaceAlt))
+                                .foregroundStyle(P.text)
+                            Button {
+                                if let m = memberFor(g.ownerName) {
+                                    m.points = max(0, m.points - g.targetPoints)
+                                }
+                                g.isRedeemed = true
+                                g.redeemedAt = Date()
+                                try? modelContext.save()
+                                redeemTarget = nil
+                            } label: {
+                                Text("Redeem").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(color))
+                        }
+                        .padding(.horizontal, 24)
+                        Spacer()
+                    }
+                    .padding(20)
+                }
+                .foregroundStyle(P.text)
+            }
+            .presentationDetents([.medium])
+        }
+
+        private var redeemed: some View {
+            Group {
+                if !redeemedGoals.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("REDEEMED 🏆").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                        VStack(spacing: 8) {
+                            ForEach(redeemedGoals.prefix(6)) { g in
+                                let m = memberFor(g.ownerName)
+                                let color = m?.color ?? P.peach
+                                HStack(spacing: 10) {
+                                    if let m { CLAvatar(m.asCLMember, size: 28) }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(g.label).font(.system(size: 13, weight: .heavy))
+                                        Text("\(g.ownerName) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                                    }
+                                    Spacer()
+                                    if let d = g.redeemedAt {
+                                        Text(d, style: .date).font(.system(size: 10)).foregroundStyle(P.textMuted)
+                                    }
+                                    if canManagePoints {
+                                        Button {
+                                            modelContext.delete(g)
+                                            try? modelContext.save()
+                                        } label: {
+                                            Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(P.textMuted)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(color.opacity(0.12)))
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private var available: some View {
@@ -788,55 +908,75 @@ public enum CasalistCottage {
                 HStack {
                     Text("EARN POINTS 💪").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    if canManagePoints {
-                        Button { showAddChore = true } label: {
-                            Label("Add", systemImage: "plus")
-                                .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
-                        }
-                    }
+                    Text("\(earningTasks.count) open").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
                 }
-                if choresQuery.isEmpty && canManagePoints {
-                    Button { showAddChore = true } label: {
-                        VStack(spacing: 6) {
-                            Text("💪").font(.system(size: 30))
-                            Text("Add a chore").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text)
-                            Text("Family members tap Claim to earn points for finishing it").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim).multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity).padding(20)
-                        .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                    }.buttonStyle(.plain)
+                if earningTasks.isEmpty {
+                    VStack(spacing: 6) {
+                        Text("💪").font(.system(size: 30))
+                        Text(emptyEarningHeadline).font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text)
+                        Text(emptyEarningSubtitle).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim).multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity).padding(20)
+                    .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(choresQuery) { c in
-                            choreRow(c)
+                        ForEach(earningTasks, id: \.uid) { t in
+                            earningRow(t)
                         }
                     }
                 }
             }
         }
 
-        private func choreRow(_ c: ChoreTemplate) -> some View {
-            HStack(spacing: 12) {
-                Image(systemName: c.symbol).font(.system(size: 14)).foregroundStyle(P.peach)
-                    .frame(width: 36, height: 36).background(Circle().fill(P.peach.opacity(0.2)))
-                Text(c.label).font(.system(size: 14, weight: .heavy))
+        private var emptyEarningHeadline: String {
+            (myMember?.canManageFamily ?? false) ? "No open chores" : "Nothing to earn right now"
+        }
+        private var emptyEarningSubtitle: String {
+            (myMember?.canManageFamily ?? false)
+                ? "Assign tasks with points from the home screen — they'll show up here."
+                : "Your family will assign chores you can earn points for."
+        }
+
+        private func earningRow(_ t: TaskItem) -> some View {
+            let assignee = members.first(where: { $0.name.lowercased() == (t.assignee ?? "").lowercased() })
+            let isMineOrIManage = (myMember?.canManageFamily ?? false) ||
+                ((myMember?.name.lowercased() ?? "") == (t.assignee ?? "").lowercased())
+            return HStack(spacing: 12) {
+                if let a = assignee {
+                    CLAvatar(a.asCLMember, size: 32)
+                } else {
+                    ZStack {
+                        Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)
+                        Image(systemName: "person.fill").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t.task).font(.system(size: 13, weight: .heavy)).lineLimit(2)
+                    HStack(spacing: 6) {
+                        Text(t.assignee ?? "Unassigned").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                        if let due = t.dueDate {
+                            Text("·").foregroundStyle(P.textMuted)
+                            Text(due, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                        }
+                    }
+                }
                 Spacer()
-                Text("⭐ \(c.points)").font(.system(size: 12, weight: .heavy))
+                Text("⭐ \(t.points)").font(.system(size: 12, weight: .heavy))
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Capsule().fill(P.butter))
                     .foregroundStyle(.white)
-                Button { claim(c) } label: {
-                    Text("Claim").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                        .background(Capsule().fill(P.peach))
-                }.buttonStyle(.plain)
-                Button {
-                    modelContext.delete(c)
-                    try? modelContext.save()
-                } label: {
-                    Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                }.buttonStyle(.plain)
+                if isMineOrIManage {
+                    Button {
+                        FamilyPoints.toggle(t, in: members)
+                        try? modelContext.save()
+                    } label: {
+                        Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(P.peach))
+                            .foregroundStyle(.white)
+                    }.buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
@@ -848,23 +988,6 @@ public enum CasalistCottage {
             try? modelContext.save()
         }
 
-        private func claim(_ c: ChoreTemplate) {
-            let me = userName.trimmingCharacters(in: .whitespaces)
-            let item = TaskItem(
-                context: modelContext,
-                task: c.label,
-                assignee: me.isEmpty ? nil : me,
-                category: "Chores",
-                isCompleted: false,
-                points: Int(c.points),
-                createdBy: me
-            )
-            if let h = c.household {
-                modelContext.assign(item, toStoreOf: h)
-                item.household = h
-            }
-            try? modelContext.save()
-        }
     }
 }
 

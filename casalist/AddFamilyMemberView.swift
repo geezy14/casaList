@@ -44,7 +44,7 @@ struct AddFamilyMemberView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         let m = FamilyMember(context: moc, name: name.trimmingCharacters(in: .whitespaces), role: role, colorHex: colorHex)
-                        if let h = households.first {
+                        if let h = households.preferredTarget {
                             moc.assign(m, toStoreOf: h)
                             m.household = h
                         }

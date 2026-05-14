@@ -501,6 +501,113 @@ struct SettingsView: View {
         }
     }
 
+    /// Fetches the share for the user's private household, prints every
+    /// participant's name / acceptance / permission, then upgrades any
+    /// non-owner with read-only permission to read-write so their writes
+    /// actually flow back to the owner. Saves the modified share via
+    /// CKModifyRecordsOperation on the private DB.
+    private func inspectAndFixShare() {
+        let stack = CasaCoreDataStack.shared
+        guard let mine = households.first(where: { $0.objectID.persistentStore == stack.privateStore }) else {
+            wipeMessage = "No private household to inspect."
+            return
+        }
+        let shareMap: [NSManagedObjectID: CKShare]
+        do {
+            shareMap = try stack.container.fetchShares(matching: [mine.objectID])
+        } catch {
+            wipeMessage = "fetchShares failed: \(error.localizedDescription)"
+            return
+        }
+        guard let share = shareMap[mine.objectID] else {
+            wipeMessage = "Household isn't shared yet."
+            return
+        }
+        let fmt = PersonNameComponentsFormatter()
+        var report = "Participants (\(share.participants.count)):\n"
+        var changed = false
+        for p in share.participants {
+            let nameStr: String
+            if let comps = p.userIdentity.nameComponents {
+                nameStr = fmt.string(from: comps)
+            } else if let email = p.userIdentity.lookupInfo?.emailAddress {
+                nameStr = email
+            } else {
+                nameStr = "?"
+            }
+            let accept: String
+            switch p.acceptanceStatus {
+            case .accepted: accept = "accepted"
+            case .pending: accept = "pending"
+            case .removed: accept = "removed"
+            case .unknown: accept = "unknown"
+            @unknown default: accept = "?"
+            }
+            let perm: String
+            switch p.permission {
+            case .readOnly: perm = "readOnly"
+            case .readWrite: perm = "readWrite"
+            case .none: perm = "none"
+            case .unknown: perm = "unknown"
+            @unknown default: perm = "?"
+            }
+            let role: String = p.role == .owner ? "owner" : (p.role == .privateUser ? "private" : "public")
+            report += "• \(nameStr) | \(role) | \(accept) | \(perm)\n"
+            if p.role != .owner && p.permission != .readWrite {
+                p.permission = .readWrite
+                changed = true
+            }
+        }
+        if !changed {
+            wipeMessage = report + "\nAll participants already read-write."
+            return
+        }
+        // Persist the updated share to the private DB.
+        let ck = CKContainer(identifier: casalistCloudKitContainerID)
+        let op = CKModifyRecordsOperation(recordsToSave: [share], recordIDsToDelete: nil)
+        op.qualityOfService = .userInitiated
+        op.savePolicy = .changedKeys
+        op.modifyRecordsResultBlock = { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    wipeMessage = report + "\nFixed: forced read-write on \(share.participants.count - 1) participant(s)."
+                case .failure(let err):
+                    wipeMessage = report + "\nSave share failed: \(err.localizedDescription)"
+                }
+            }
+        }
+        ck.privateCloudDatabase.add(op)
+    }
+
+    /// Reports which store every local record lives in. Useful for confirming
+    /// joiner-side records actually landed in the shared store (not the
+    /// private one) — that's the precondition for them being uploaded to the
+    /// share owner's CloudKit zone.
+    private func inspectStoreAssignments() {
+        let stack = CasaCoreDataStack.shared
+        func storeLabel(for obj: NSManagedObject) -> String {
+            guard let s = obj.objectID.persistentStore else { return "?" }
+            if s == stack.privateStore { return "PRIV" }
+            if s == stack.sharedStore { return "SHARED" }
+            return "other"
+        }
+        var lines: [String] = []
+        lines.append("Households:")
+        for h in households {
+            lines.append("• \(h.name) [\(storeLabel(for: h))] members=\(h.members?.count ?? 0)")
+        }
+        lines.append("\nMembers:")
+        for m in members {
+            lines.append("• \(m.name) (\(m.points)pt) [\(storeLabel(for: m))]")
+        }
+        lines.append("\nTasks (open):")
+        for t in tasks where !t.isCompleted {
+            lines.append("• \(t.task) → \(t.assignee ?? "?") [\(storeLabel(for: t))]")
+        }
+        wipeMessage = lines.joined(separator: "\n")
+    }
+
     private func removeSchemaSeedMembers() {
         let stale = members.filter {
             $0.name.hasPrefix("Schema-")
@@ -608,6 +715,10 @@ struct SettingsView: View {
                     actionButton("Leave shared household") { leaveSharedHouseholds() }
                     divider
                 }
+                actionButton("Inspect & fix share permissions") { inspectAndFixShare() }
+                divider
+                actionButton("Inspect local store assignments") { inspectStoreAssignments() }
+                divider
                 Button(role: .destructive) { confirmWipe = true } label: {
                     HStack {
                         Image(systemName: "trash").font(.system(size: 14, weight: .bold))

@@ -53,7 +53,7 @@ struct AddGoalView: View {
             label: label.trimmingCharacters(in: .whitespaces),
             targetPoints: target
         )
-        if let h = households.first {
+        if let h = households.preferredTarget {
             moc.assign(g, toStoreOf: h)
             g.household = h
         }

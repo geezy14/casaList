@@ -157,7 +157,7 @@ struct AddTaskView: View {
             repeatHours: 0,
             repeatKind: repeatKind
         )
-        if let h = households.first {
+        if let h = households.preferredTarget {
             moc.assign(newTask, toStoreOf: h)
             newTask.household = h
         }

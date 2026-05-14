@@ -51,7 +51,7 @@ struct AddGroceryTripView: View {
             points: 0,
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
-        if let h = households.first {
+        if let h = households.preferredTarget {
             moc.assign(trip, toStoreOf: h)
             trip.household = h
         }

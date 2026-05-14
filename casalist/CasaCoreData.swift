@@ -87,6 +87,73 @@ final class CasaCoreDataStack {
 
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+        // Log every NSPersistentCloudKitContainer sync event so we can see
+        // whether exports are happening (and if they fail). Lands in
+        // share-log.txt alongside CKShare accept events.
+        NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: container,
+            queue: nil
+        ) { note in
+            guard let evt = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event else { return }
+            let type: String
+            switch evt.type {
+            case .setup:  type = "setup"
+            case .import: type = "import"
+            case .export: type = "export"
+            @unknown default: type = "?"
+            }
+            let phase: String
+            if evt.endDate == nil {
+                phase = "started"
+            } else if evt.succeeded {
+                phase = "ok"
+            } else {
+                phase = "FAILED"
+            }
+            let store = String(evt.storeIdentifier.prefix(8))
+            var msg = "CK.\(type) [\(store)] \(phase)"
+            if let err = evt.error as NSError? {
+                func walk(_ e: NSError, depth: Int) -> String {
+                    let indent = String(repeating: "  ", count: depth)
+                    var s = "\(indent)\(e.domain)/\(e.code) \(e.localizedDescription)"
+                    if let perItem = e.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                        for (id, sub) in perItem {
+                            s += "\n\(indent)  · \(id): \(walk(sub as NSError, depth: depth + 2))"
+                        }
+                    }
+                    let keys = e.userInfo.keys.filter { ($0 != CKPartialErrorsByItemIDKey) && ($0 != "NSUnderlyingError") }
+                    for k in keys {
+                        if let v = e.userInfo[k] {
+                            s += "\n\(indent)  \(k): \(v)"
+                        }
+                    }
+                    if let underlying = e.userInfo["NSUnderlyingError"] as? NSError {
+                        s += "\n\(indent)  underlying:\n\(walk(underlying, depth: depth + 2))"
+                    }
+                    return s
+                }
+                msg += "\n" + walk(err, depth: 1)
+            }
+            NSLog("Casa CK: \(msg)")
+            // Mirror to share-log.txt so we can pull it via devicectl.
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            let line = "[\(stamp)] \(msg)\n"
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let url = docs.appendingPathComponent("share-log.txt")
+                if let data = line.data(using: .utf8) {
+                    if FileManager.default.fileExists(atPath: url.path),
+                       let handle = try? FileHandle(forWritingTo: url) {
+                        handle.seekToEndOfFile()
+                        handle.write(data)
+                        try? handle.close()
+                    } else {
+                        try? data.write(to: url)
+                    }
+                }
+            }
+        }
     }
 
     var context: NSManagedObjectContext { container.viewContext }
@@ -196,6 +263,8 @@ final class CasaCoreDataStack {
             attr("label", .stringAttributeType, def: ""),
             attr("targetPoints", .integer64AttributeType, def: 100),
             attr("createdAt", .dateAttributeType, def: Date()),
+            attr("isRedeemed", .booleanAttributeType, optional: false, def: false),
+            attr("redeemedAt", .dateAttributeType),
         ]
 
         // ------- ChoreTemplate attributes -------
@@ -273,6 +342,22 @@ extension NSManagedObjectContext {
     func assign(_ child: NSManagedObject, toStoreOf parent: NSManagedObject) {
         guard let store = parent.objectID.persistentStore else { return }
         assign(child, to: store)
+    }
+}
+
+extension Sequence where Element == Household {
+    /// Household to attach a newly created record to. Joiners must write into
+    /// the *shared* household so the owner sees the record; owners only have a
+    /// private household so the fallback covers them.
+    var preferredTarget: Household? {
+        let stack = CasaCoreDataStack.shared
+        if let shared = first(where: { $0.objectID.persistentStore == stack.sharedStore }) {
+            return shared
+        }
+        if let priv = first(where: { $0.objectID.persistentStore == stack.privateStore }) {
+            return priv
+        }
+        return first(where: { _ in true })
     }
 }
 

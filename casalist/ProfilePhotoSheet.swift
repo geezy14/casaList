@@ -134,7 +134,7 @@ struct ProfilePhotoSheet: View {
             let name = userName.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
             let m = FamilyMember(context: moc, name: name, role: "You", photoData: data)
-            if let h = households.first {
+            if let h = households.preferredTarget {
                 moc.assign(m, toStoreOf: h)
                 m.household = h
             }
