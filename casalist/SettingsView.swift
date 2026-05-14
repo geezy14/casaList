@@ -35,8 +35,6 @@ struct SettingsView: View {
     private var households: FetchedResults<Household>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)])
     private var goals: FetchedResults<FamilyGoal>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ChoreTemplate.createdAt, ascending: true)])
-    private var chores: FetchedResults<ChoreTemplate>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.createdAt, ascending: true)])
     private var events: FetchedResults<FamilyEvent>
 
@@ -808,20 +806,14 @@ struct SettingsView: View {
             moc.assign(goal, toStoreOf: h)
             goal.household = h
         }
-        let chore = ChoreTemplate(context: moc, label: "Schema test", points: 10, symbol: "checkmark.circle")
-        if let h = households.first {
-            moc.assign(chore, toStoreOf: h)
-            chore.household = h
-        }
         try? moc.save()
         wipeMessage = "Seeded — wait ~10s then deploy via Dashboard. Temp member: \(tempName)"
     }
 
     private func wipeAll() {
-        let totalBefore = tasks.count + goals.count + chores.count + events.count
+        let totalBefore = tasks.count + goals.count + events.count
         for t in tasks { moc.delete(t) }
         for g in goals { moc.delete(g) }
-        for c in chores { moc.delete(c) }
         for e in events { moc.delete(e) }
         for m in members { m.points = 0 }
         try? moc.save()

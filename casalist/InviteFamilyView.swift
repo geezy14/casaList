@@ -153,10 +153,6 @@ struct InviteFamilyView: View {
         goalReq.predicate = NSPredicate(format: "household == nil")
         for g in (try? moc.fetch(goalReq)) ?? [] { g.household = household }
 
-        let choreReq: NSFetchRequest<ChoreTemplate> = ChoreTemplate.fetchRequest()
-        choreReq.predicate = NSPredicate(format: "household == nil")
-        for c in (try? moc.fetch(choreReq)) ?? [] { c.household = household }
-
         let eventReq: NSFetchRequest<FamilyEvent> = FamilyEvent.fetchRequest()
         eventReq.predicate = NSPredicate(format: "household == nil")
         for e in (try? moc.fetch(eventReq)) ?? [] { e.household = household }
