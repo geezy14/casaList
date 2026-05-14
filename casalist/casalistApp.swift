@@ -205,10 +205,12 @@ enum HouseholdProvisioner {
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
 
-        // Make sure the user always has a private household to share (so CloudKit
-        // has time to export it before they tap Send Invite).
-        let privateHouseholds = households.filter { isOwnedByMe($0, in: context) }
-        if privateHouseholds.isEmpty {
+        // Only auto-create a private household when the user has none at all
+        // (fresh install, no share joined). A joiner — someone whose only
+        // household is a shared one — shouldn't get a stray empty private
+        // alongside it. If they later try to invite people, InviteFamilyView
+        // calls ensureHouseholdExists explicitly to spin one up at that moment.
+        if households.isEmpty {
             _ = ensureHouseholdExists(in: context)
         }
 
