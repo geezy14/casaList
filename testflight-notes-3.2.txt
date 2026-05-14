@@ -1,0 +1,15 @@
+Casalist 1 (3.2)
+
+What's New
+- Family roles: Owner / Admin (max 2) / Member
+- Cottage-themed Settings tab with role badges, role management, and ownership transfer
+- Admins and Owners can adjust any family member's points (± 5) from the Chore Rewards leaderboard
+
+What's Fixed
+- Schema mismatch causing "newer version of Casalist is needed" — CloudKit Production schema now matches the binary (added CD_roleLevel field on CD_FamilyMember)
+
+What to Test
+- Open the app — no schema error
+- Open Settings: tap a member's role badge to promote/demote them (only owner sees this)
+- Open Chore Rewards as an admin or owner: tap the ± buttons next to each member's points
+- Tap your own crown to transfer ownership to another member

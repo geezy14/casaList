@@ -4,12 +4,24 @@ import UIKit
 import UserNotifications
 
 struct SettingsView: View {
+    @Environment(\.colorScheme) private var sys
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("householdName") private var householdName: String = "My Household"
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
+    @AppStorage("meUid") private var meUid: String = ""
+
     @State private var notifStatus: String = "Checking…"
+    @State private var pendingCount: Int = 0
+    @State private var lastTestResult: String? = nil
+    @State private var pendingList: [String] = []
+    @State private var confirmWipe: Bool = false
+    @State private var wipeMessage: String? = nil
+    @State private var promoteTarget: FamilyMember? = nil
+    @State private var showPromote: Bool = false
+    @State private var transferTarget: FamilyMember? = nil
+    @State private var showTransfer: Bool = false
 
     @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
     @Query private var tasks: [TaskItem]
@@ -18,153 +30,422 @@ struct SettingsView: View {
     @Query private var chores: [ChoreTemplate]
     @Query private var events: [FamilyEvent]
 
-    @State private var confirmWipe: Bool = false
-    @State private var wipeMessage: String? = nil
-    @State private var pendingCount: Int = 0
-    @State private var lastTestResult: String? = nil
-    @State private var pendingList: [String] = []
+    private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
+    private var me: FamilyMember? {
+        FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+    }
+    private var iAmOwner: Bool { me?.isOwner ?? false }
+    private var iAmAdmin: Bool { me?.canManageFamily ?? false }
+    private var adminCount: Int { FamilyPermissions.adminCount(in: members) }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Your profile") {
+        ZStack {
+            P.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                topBar
+                ScrollView { content }.scrollIndicators(.hidden)
+            }
+        }
+        .foregroundStyle(P.text)
+        .task {
+            FamilyPermissions.ensureOwner(members: members, context: modelContext)
+            adoptMeIfNeeded()
+            await refreshNotifStatus()
+            await refreshPending()
+        }
+        .onChange(of: notificationsEnabled) { _, on in
+            Task {
+                if on {
+                    _ = await NotificationsManager.requestAuth()
+                    await NotificationsManager.syncFromContext(modelContext)
+                } else {
+                    await NotificationsManager.cancelAll()
+                }
+                await refreshNotifStatus()
+            }
+        }
+        .confirmationDialog("Clear all data?", isPresented: $confirmWipe, titleVisibility: .visible) {
+            Button("Wipe everything", role: .destructive) { wipeAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Deletes all tasks, goals, chores, and events on this device. Family members, household, and your profile are preserved. Cannot be undone.")
+        }
+        .alert("Change role?", isPresented: $showPromote, presenting: promoteTarget) { m in
+            let next: FamilyRole = m.level == .admin ? .standard : .admin
+            Button(next == .admin ? "Make admin" : "Remove admin") { setRole(m, to: next) }
+            Button("Cancel", role: .cancel) {}
+        } message: { m in
+            let next: FamilyRole = m.level == .admin ? .standard : .admin
+            Text(next == .admin
+                ? "\(m.name) will be able to invite members, manage chores, and adjust points."
+                : "\(m.name) will become a standard member.")
+        }
+        .sheet(isPresented: $showTransfer) {
+            if let t = transferTarget { transferOwnerSheet(target: t) }
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(P.text)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(P.surfaceAlt))
+            }
+            Spacer()
+            Text("Settings").font(.system(size: 16, weight: .heavy))
+            Spacer()
+            Color.clear.frame(width: 38, height: 38)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            profileSection
+            householdSection
+            familySection
+            notificationsSection
+            developerSection
+            Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 32)
+    }
+
+    // MARK: Profile
+
+    private var profileSection: some View {
+        section(title: "PROFILE") {
+            VStack(spacing: 0) {
+                fieldRow(title: "Your name") {
                     TextField("Your name", text: $userName)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(P.text)
                 }
-                Section("Household") {
+                if let me {
+                    divider
+                    HStack {
+                        Text("Your role").font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        roleBadge(me.level)
+                    }.padding(.horizontal, 16).padding(.vertical, 12)
+                }
+            }
+            .cardBg(P)
+        }
+    }
+
+    // MARK: Household
+
+    private var householdSection: some View {
+        section(title: "HOUSEHOLD") {
+            VStack(spacing: 0) {
+                fieldRow(title: "Household name") {
                     TextField("Household name", text: $householdName)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
-                }
-                Section("Notifications") {
-                    Toggle("Due-date reminders", isOn: $notificationsEnabled)
-                    HStack {
-                        Text("System permission").font(.subheadline)
-                        Spacer()
-                        Text(notifStatus).font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Pending notifications").font(.subheadline)
-                        Spacer()
-                        Text("\(pendingCount)").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Button("Send test notification (5s)") { Task { await sendTestNotification(delay: 5) } }
-                    Button("Send test (30s — lock the phone)") { Task { await sendTestNotification(delay: 30) } }
-                    Button("Refresh scheduled list") { Task { await refreshPending() } }
-                    if !pendingList.isEmpty {
-                        DisclosureGroup("Scheduled (\(pendingList.count))") {
-                            ForEach(pendingList, id: \.self) { line in
-                                Text(line).font(.caption.monospaced()).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if notifStatus.contains("Denied") {
-                        Button("Open iOS Settings") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
-                            }
-                        }
-                    }
-                    if let lastTestResult {
-                        Text(lastTestResult).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Section("Family") {
-                    if members.isEmpty {
-                        Text("No family members yet")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(members) { m in
-                            HStack(spacing: 12) {
-                                avatar(for: m)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(m.name).font(.system(size: 15, weight: .semibold))
-                                    if !m.role.isEmpty {
-                                        Text(m.role).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                Text("\(m.points) pts")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .onDelete(perform: removeMember)
-                    }
-                }
-                Section("Developer") {
-                    HStack {
-                        Text("Family members"); Spacer()
-                        Text("\(members.count)").foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Tasks"); Spacer()
-                        Text("\(tasks.count)").foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Households"); Spacer()
-                        Text("\(households.count)").foregroundStyle(.secondary)
-                    }
-                    Button { seedSchemaRecords() } label: {
-                        Label("Seed schema records", systemImage: "square.and.arrow.down")
-                    }
-                    Button(role: .destructive) { confirmWipe = true } label: {
-                        Label("Clear all data", systemImage: "trash")
-                    }
-                    if let wipeMessage {
-                        Text(wipeMessage).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Section {
-                    Text("Casalist")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                        .disabled(!iAmAdmin)
+                        .foregroundStyle(iAmAdmin ? P.text : P.textMuted)
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
-            .task {
-                await refreshNotifStatus()
-                await refreshPending()
-            }
-            .onChange(of: notificationsEnabled) { _, on in
-                Task {
-                    if on {
-                        _ = await NotificationsManager.requestAuth()
-                        await NotificationsManager.syncFromContext(modelContext)
-                    } else {
-                        await NotificationsManager.cancelAll()
+            .cardBg(P)
+        }
+    }
+
+    // MARK: Family / roles
+
+    private var familySection: some View {
+        section(title: "FAMILY") {
+            VStack(spacing: 0) {
+                if members.isEmpty {
+                    Text("No family members yet")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(P.textMuted)
+                        .frame(maxWidth: .infinity).padding(.vertical, 22)
+                } else {
+                    ForEach(Array(members.enumerated()), id: \.element.uid) { idx, m in
+                        memberRow(m)
+                        if idx < members.count - 1 { divider }
                     }
-                    await refreshNotifStatus()
                 }
             }
-            .confirmationDialog(
-                "Clear all data?",
-                isPresented: $confirmWipe,
-                titleVisibility: .visible
-            ) {
-                Button("Wipe everything", role: .destructive) { wipeAll() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Deletes all tasks, goals, chores, and events on this device. Family members, household, and your profile are preserved. Cannot be undone.")
+            .cardBg(P)
+            if iAmOwner && members.count > 1 {
+                Text("Tap a star to promote an admin. Hold the crown to transfer ownership.")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(P.textMuted)
+                    .padding(.horizontal, 4).padding(.top, 4)
             }
         }
     }
 
+    private func memberRow(_ m: FamilyMember) -> some View {
+        let isMe = m.uid.uuidString == meUid || m.name.lowercased() == userName.lowercased()
+        return HStack(spacing: 12) {
+            avatar(for: m)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(m.name).font(.system(size: 14, weight: .heavy))
+                    if isMe {
+                        Text("YOU").font(.system(size: 9, weight: .heavy))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(P.peach.opacity(0.25)))
+                            .foregroundStyle(P.peach)
+                    }
+                }
+                Text("\(m.points) pts").font(.caption).foregroundStyle(P.textMuted)
+            }
+            Spacer()
+            roleControl(for: m)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private func roleControl(for m: FamilyMember) -> some View {
+        if m.isOwner {
+            Button {
+                if iAmOwner && m.uid.uuidString == me?.uid.uuidString {
+                    transferTarget = m; showTransfer = true
+                }
+            } label: {
+                roleBadge(.owner)
+            }.buttonStyle(.plain)
+        } else if iAmOwner {
+            Button { promoteTarget = m; showPromote = true } label: {
+                roleBadge(m.level)
+            }.buttonStyle(.plain)
+        } else {
+            roleBadge(m.level)
+        }
+    }
+
+    private func roleBadge(_ r: FamilyRole) -> some View {
+        let tint: Color = r == .owner ? P.butter : (r == .admin ? P.peach : P.textMuted)
+        return HStack(spacing: 4) {
+            Image(systemName: r.symbol).font(.system(size: 10, weight: .heavy))
+            Text(r.label).font(.system(size: 11, weight: .heavy))
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(Capsule().fill(tint.opacity(0.18)))
+        .foregroundStyle(tint)
+    }
+
+    private func setRole(_ m: FamilyMember, to next: FamilyRole) {
+        if next == .admin && adminCount >= 2 {
+            wipeMessage = "Max 2 admins. Demote one first."
+            return
+        }
+        m.roleLevel = next.rawValue
+        try? modelContext.save()
+    }
+
+    private func transferOwnerSheet(target: FamilyMember) -> some View {
+        NavigationStack {
+            ZStack {
+                P.bg.ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Image(systemName: "crown.fill").font(.system(size: 36)).foregroundStyle(P.butter)
+                    Text("Transfer ownership?").font(.system(size: 20, weight: .heavy))
+                    Text("Pick a family member to make the new household owner. You'll become an admin.")
+                        .font(.system(size: 13)).foregroundStyle(P.textDim)
+                        .multilineTextAlignment(.center).padding(.horizontal, 24)
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(members.filter { !$0.isOwner }) { m in
+                                Button {
+                                    transferOwnership(to: m)
+                                    showTransfer = false
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        avatar(for: m)
+                                        Text(m.name).font(.system(size: 14, weight: .heavy))
+                                        Spacer()
+                                        Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                                    }.padding(.horizontal, 14).padding(.vertical, 10)
+                                }.buttonStyle(.plain)
+                                if m.uid != members.filter({ !$0.isOwner }).last?.uid { divider }
+                            }
+                        }.cardBg(P)
+                    }
+                    Button("Cancel") { showTransfer = false }
+                        .font(.system(size: 14, weight: .heavy)).foregroundStyle(P.textMuted)
+                }
+                .padding(20)
+            }
+            .foregroundStyle(P.text)
+        }
+    }
+
+    private func transferOwnership(to newOwner: FamilyMember) {
+        for m in members where m.isOwner { m.roleLevel = FamilyRole.admin.rawValue }
+        newOwner.roleLevel = FamilyRole.owner.rawValue
+        try? modelContext.save()
+    }
+
+    private func adoptMeIfNeeded() {
+        guard meUid.isEmpty else { return }
+        let trimmed = userName.trimmingCharacters(in: .whitespaces).lowercased()
+        if !trimmed.isEmpty, let m = members.first(where: { $0.name.lowercased() == trimmed }) {
+            meUid = m.uid.uuidString
+        }
+    }
+
+    // MARK: Notifications
+
+    private var notificationsSection: some View {
+        section(title: "NOTIFICATIONS") {
+            VStack(spacing: 0) {
+                Toggle("Due-date reminders", isOn: $notificationsEnabled)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .tint(P.peach)
+                divider
+                infoRow("System permission", value: notifStatus)
+                divider
+                infoRow("Pending notifications", value: "\(pendingCount)")
+                divider
+                actionButton("Send test (5s)") { Task { await sendTestNotification(delay: 5) } }
+                divider
+                actionButton("Send test (30s — lock phone)") { Task { await sendTestNotification(delay: 30) } }
+                divider
+                actionButton("Refresh scheduled list") { Task { await refreshPending() } }
+                if !pendingList.isEmpty {
+                    divider
+                    DisclosureGroup("Scheduled (\(pendingList.count))") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(pendingList, id: \.self) { line in
+                                Text(line).font(.caption.monospaced()).foregroundStyle(P.textMuted)
+                            }
+                        }.padding(.top, 4)
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .accentColor(P.peach)
+                }
+                if notifStatus.contains("Denied") {
+                    divider
+                    actionButton("Open iOS Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+                if let lastTestResult {
+                    divider
+                    Text(lastTestResult).font(.caption).foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                }
+            }.cardBg(P)
+        }
+    }
+
+    // MARK: Developer
+
+    private var developerSection: some View {
+        section(title: "DEVELOPER") {
+            VStack(spacing: 0) {
+                infoRow("Family members", value: "\(members.count)")
+                divider
+                infoRow("Tasks", value: "\(tasks.count)")
+                divider
+                infoRow("Households", value: "\(households.count)")
+                divider
+                actionButton("Seed schema records") { seedSchemaRecords() }
+                divider
+                Button(role: .destructive) { confirmWipe = true } label: {
+                    HStack {
+                        Image(systemName: "trash").font(.system(size: 14, weight: .bold))
+                        Text("Clear all data").font(.system(size: 14, weight: .heavy))
+                        Spacer()
+                    }
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                }
+                if let wipeMessage {
+                    divider
+                    Text(wipeMessage).font(.caption).foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                }
+            }.cardBg(P)
+        }
+    }
+
+    // MARK: Building blocks
+
+    @ViewBuilder
+    private func section<C: View>(title: String, @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                .foregroundStyle(P.textDim).padding(.leading, 4)
+            content()
+        }
+    }
+
+    private func fieldRow<C: View>(title: String, @ViewBuilder field: () -> C) -> some View {
+        HStack {
+            Text(title).font(.system(size: 14, weight: .semibold))
+            Spacer()
+            field()
+        }.padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private func infoRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title).font(.system(size: 14, weight: .semibold))
+            Spacer()
+            Text(value).font(.system(size: 14, weight: .heavy)).foregroundStyle(P.textMuted)
+        }.padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(P.textMuted)
+            }
+            .foregroundStyle(P.text)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }.buttonStyle(.plain)
+    }
+
+    private var divider: some View {
+        Rectangle().fill(P.border).frame(height: 1).padding(.leading, 16)
+    }
+
+    @ViewBuilder
+    private func avatar(for m: FamilyMember) -> some View {
+        if let data = m.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui).resizable().scaledToFill()
+                .frame(width: 36, height: 36).clipShape(Circle())
+        } else {
+            Text(String(m.name.prefix(1)).uppercased())
+                .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                .frame(width: 36, height: 36).background(Circle().fill(m.color))
+        }
+    }
+
+    // MARK: Actions
+
     private func seedSchemaRecords() {
+        let tempName = "Schema-\(UUID().uuidString.prefix(6))"
+        let temp = FamilyMember(name: tempName, role: "Schema seed", colorHex: 0xC97357, roleLevel: .admin)
+        modelContext.insert(temp)
         let name = userName.trimmingCharacters(in: .whitespaces)
         let ownerName = name.isEmpty ? "Test" : name
-        if members.first(where: { $0.name == ownerName }) == nil {
-            modelContext.insert(FamilyMember(name: ownerName, role: "You", colorHex: 0xC97357))
-        }
         modelContext.insert(FamilyGoal(ownerName: ownerName, label: "Schema test", targetPoints: 100))
         modelContext.insert(ChoreTemplate(label: "Schema test", points: 10, symbol: "checkmark.circle"))
         try? modelContext.save()
-        wipeMessage = "Seeded one of each model — wait ~10s then deploy via Dashboard."
+        wipeMessage = "Seeded — wait ~10s then deploy via Dashboard. Temp member: \(tempName)"
     }
 
     private func wipeAll() {
@@ -173,17 +454,9 @@ struct SettingsView: View {
         for g in goals { modelContext.delete(g) }
         for c in chores { modelContext.delete(c) }
         for e in events { modelContext.delete(e) }
-        // Reset point balances on members but keep the members themselves.
         for m in members { m.points = 0 }
         try? modelContext.save()
         wipeMessage = "Cleared \(totalBefore) records. Family and household preserved."
-    }
-
-    private func removeMember(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(members[index])
-        }
-        try? modelContext.save()
     }
 
     private func refreshPending() async {
@@ -230,13 +503,9 @@ struct SettingsView: View {
         let request = UNNotificationRequest(identifier: "test-\(UUID().uuidString)", content: content, trigger: trigger)
         do {
             try await UNUserNotificationCenter.current().add(request)
-            await MainActor.run {
-                lastTestResult = "Test scheduled \(Int(delay))s from now."
-            }
+            await MainActor.run { lastTestResult = "Test scheduled \(Int(delay))s from now." }
         } catch {
-            await MainActor.run {
-                lastTestResult = "Failed to schedule: \(error.localizedDescription)"
-            }
+            await MainActor.run { lastTestResult = "Failed to schedule: \(error.localizedDescription)" }
         }
         await refreshPending()
     }
@@ -254,20 +523,12 @@ struct SettingsView: View {
         }
         await MainActor.run { notifStatus = label }
     }
+}
 
-    @ViewBuilder
-    private func avatar(for m: FamilyMember) -> some View {
-        if let data = m.photoData, let ui = UIImage(data: data) {
-            Image(uiImage: ui)
-                .resizable().scaledToFill()
-                .frame(width: 32, height: 32)
-                .clipShape(Circle())
-        } else {
-            Text(String(m.name.prefix(1)).uppercased())
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(m.color))
-        }
+private extension View {
+    func cardBg(_ P: CasalistCottage.Palette) -> some View {
+        self
+            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
     }
 }

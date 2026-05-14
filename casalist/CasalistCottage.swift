@@ -571,6 +571,7 @@ public enum CasalistCottage {
         @Environment(\.dismiss) private var dismiss
         @Environment(\.modelContext) private var modelContext
         @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
         @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
         @Query(sort: \FamilyGoal.createdAt) private var goalsQuery: [FamilyGoal]
         @Query(sort: \ChoreTemplate.createdAt) private var choresQuery: [ChoreTemplate]
@@ -579,6 +580,9 @@ public enum CasalistCottage {
         private var P: Palette { Palette.resolve(dark) }
         private var sorted: [FamilyMember] { members.sorted { $0.points > $1.points } }
         private var topScore: Int { sorted.first?.points ?? 0 }
+        private var canManagePoints: Bool {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+        }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
         public var body: some View {
@@ -667,10 +671,26 @@ public enum CasalistCottage {
                             Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 20))
                             CLAvatar(m.asCLMember, size: 36)
                             VStack(spacing: 5) {
-                                HStack {
+                                HStack(spacing: 8) {
                                     Text(m.name).font(.system(size: 14, weight: .heavy))
                                     Spacer()
+                                    if canManagePoints {
+                                        Button { adjustPoints(m, by: -5) } label: {
+                                            Image(systemName: "minus").font(.system(size: 11, weight: .heavy))
+                                                .frame(width: 22, height: 22)
+                                                .background(Circle().fill(P.surfaceAlt))
+                                                .foregroundStyle(P.text)
+                                        }.buttonStyle(.plain)
+                                    }
                                     Text("\(m.points) pts").font(.system(size: 14, weight: .heavy)).foregroundStyle(m.color).monospacedDigit()
+                                    if canManagePoints {
+                                        Button { adjustPoints(m, by: 5) } label: {
+                                            Image(systemName: "plus").font(.system(size: 11, weight: .heavy))
+                                                .frame(width: 22, height: 22)
+                                                .background(Circle().fill(P.peach.opacity(0.2)))
+                                                .foregroundStyle(P.peach)
+                                        }.buttonStyle(.plain)
+                                    }
                                 }
                                 GeometryReader { g in
                                     RoundedRectangle(cornerRadius: 3).fill(P.surfaceAlt).overlay(alignment: .leading) {
@@ -817,6 +837,11 @@ public enum CasalistCottage {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func adjustPoints(_ m: FamilyMember, by delta: Int) {
+            m.points = max(0, m.points + delta)
+            try? modelContext.save()
         }
 
         private func claim(_ c: ChoreTemplate) {
