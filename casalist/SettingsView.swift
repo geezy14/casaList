@@ -606,6 +606,24 @@ struct SettingsView: View {
         wipeMessage = lines.joined(separator: "\n")
     }
 
+    /// Reads the tail of share-log.txt (where CasaCoreDataStack writes every
+    /// CK setup/import/export event) and shows the last ~30 lines so we can
+    /// triage sync issues without devicectl.
+    private func loadRecentSyncLog() {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            wipeMessage = "Documents dir not found."
+            return
+        }
+        let url = docs.appendingPathComponent("share-log.txt")
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            wipeMessage = "No sync log yet — relaunch the app to start recording events."
+            return
+        }
+        let lines = text.split(separator: "\n").suffix(30)
+        wipeMessage = lines.joined(separator: "\n")
+    }
+
     private func removeSchemaSeedMembers() {
         let stale = members.filter {
             $0.name.hasPrefix("Schema-")
@@ -716,6 +734,8 @@ struct SettingsView: View {
                 actionButton("Inspect & fix share permissions") { inspectAndFixShare() }
                 divider
                 actionButton("Inspect local store assignments") { inspectStoreAssignments() }
+                divider
+                actionButton("View sync log (last 30)") { loadRecentSyncLog() }
                 divider
                 Button(role: .destructive) { confirmWipe = true } label: {
                     HStack {
