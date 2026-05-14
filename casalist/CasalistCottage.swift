@@ -121,7 +121,7 @@ public enum CasalistCottage {
 
         private var greetingText: String {
             let trimmed = userName.trimmingCharacters(in: .whitespaces)
-            return trimmed.isEmpty ? "Hi there ✨" : "Hi \(trimmed) ✨"
+            return trimmed.isEmpty ? "hi there ✨" : "hi \(trimmed) ✨"
         }
 
         private var thingsTodayCount: Int {

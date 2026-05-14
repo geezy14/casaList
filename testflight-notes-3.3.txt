@@ -1,0 +1,9 @@
+Casalist 1 (3.3)
+
+What's Fixed
+- iCloud share invites: added CKSharingSupported = YES to Info.plist. Without that key, iOS shows "you need a newer version" when a recipient taps a Casalist share link, because it doesn't know the app handles CloudKit share URLs.
+
+What to Test
+- From the owner's phone, open Invite Family and send a share link
+- On the recipient's phone (also on 3.3), tap the link
+- Casalist should open and accept the share

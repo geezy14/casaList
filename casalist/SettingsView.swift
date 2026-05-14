@@ -48,6 +48,7 @@ struct SettingsView: View {
         }
         .foregroundStyle(P.text)
         .task {
+            removeSchemaSeedMembers()
             FamilyPermissions.ensureOwner(members: members, context: modelContext)
             adoptMeIfNeeded()
             await refreshNotifStatus()
@@ -206,8 +207,20 @@ struct SettingsView: View {
             }
             Spacer()
             roleControl(for: m)
+            if iAmOwner && !isMe {
+                Button { deleteMember(m) } label: {
+                    Image(systemName: "trash").font(.system(size: 12))
+                        .foregroundStyle(P.textMuted)
+                        .frame(width: 30, height: 30)
+                }.buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    private func deleteMember(_ m: FamilyMember) {
+        modelContext.delete(m)
+        try? modelContext.save()
     }
 
     @ViewBuilder
@@ -292,6 +305,16 @@ struct SettingsView: View {
         try? modelContext.save()
     }
 
+    private func removeSchemaSeedMembers() {
+        let stale = members.filter {
+            $0.name.hasPrefix("Schema-")
+            || $0.role == "Schema seed"
+            || ($0.name == "Test" && $0.role == "You")
+        }
+        for m in stale { modelContext.delete(m) }
+        if !stale.isEmpty { try? modelContext.save() }
+    }
+
     private func adoptMeIfNeeded() {
         guard meUid.isEmpty else { return }
         let trimmed = userName.trimmingCharacters(in: .whitespaces).lowercased()
@@ -360,6 +383,11 @@ struct SettingsView: View {
                 infoRow("Households", value: "\(households.count)")
                 divider
                 actionButton("Seed schema records") { seedSchemaRecords() }
+                divider
+                actionButton("Remove test members") {
+                    removeSchemaSeedMembers()
+                    wipeMessage = "Removed any Schema-* test members."
+                }
                 divider
                 Button(role: .destructive) { confirmWipe = true } label: {
                     HStack {
