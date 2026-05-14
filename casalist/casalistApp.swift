@@ -94,7 +94,10 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         m.household = shared
         do {
             try context.save()
-            appendShareLog("addJoinerAsFamilyMember: added \(displayName) to shared household")
+            // Claim this member as "me" so the name prompt can rename it later
+            // if the user joined before setting their name.
+            UserDefaults.standard.set(m.uid.uuidString, forKey: "meUid")
+            appendShareLog("addJoinerAsFamilyMember: added \(displayName) to shared household (meUid claimed)")
         } catch {
             appendShareLog("addJoinerAsFamilyMember save error: \(error)")
         }
@@ -199,6 +202,7 @@ struct CasalistApp: App {
 ///   (they've already set a userName), create one.
 enum HouseholdProvisioner {
     static func reconcile(in context: NSManagedObjectContext) {
+        detectRemovalByOwner(in: context)
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
 
@@ -243,6 +247,40 @@ enum HouseholdProvisioner {
             return false
         }
         return true
+    }
+
+    /// If we claimed a FamilyMember (meUid) but it no longer exists in any
+    /// store, the owner deleted us. Auto-leave any shared households so the
+    /// local UI snaps back to a clean state instead of showing a ghost
+    /// identity (userName set, no member, owner's avatars at top-left).
+    static func detectRemovalByOwner(in context: NSManagedObjectContext) {
+        let meUidString = UserDefaults.standard.string(forKey: "meUid") ?? ""
+        guard !meUidString.isEmpty, let myUid = UUID(uuidString: meUidString) else { return }
+
+        let memberReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "uid == %@", myUid as CVarArg)
+        let stillExists = ((try? context.count(for: memberReq)) ?? 0) > 0
+        guard !stillExists else { return }
+
+        let stack = CasaCoreDataStack.shared
+        let req = Household.fetchRequest()
+        let households = (try? context.fetch(req)) ?? []
+        let sharedHouseholds = households.filter { $0.objectID.persistentStore == stack.sharedStore }
+
+        if !sharedHouseholds.isEmpty, let sharedStore = stack.sharedStore {
+            var zoneIDs = Set<CKRecordZone.ID>()
+            for h in sharedHouseholds {
+                if let record = try? stack.container.record(for: h.objectID) {
+                    zoneIDs.insert(record.recordID.zoneID)
+                }
+            }
+            for zid in zoneIDs {
+                stack.container.purgeObjectsAndRecordsInZone(with: zid, in: sharedStore) { _, _ in }
+            }
+            NSLog("Casa: meUid claim missing and shared households present — auto-left share")
+        }
+        // Clear stale claim either way so the UI doesn't dangle.
+        UserDefaults.standard.set("", forKey: "meUid")
     }
 
     /// Creates a household if the user has none. Call this when the user is

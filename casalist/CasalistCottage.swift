@@ -725,12 +725,14 @@ public enum CasalistCottage {
                 HStack {
                     Text("SAVING UP FOR…").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    Button { showAddGoal = true } label: {
-                        Label("Add", systemImage: "plus")
-                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
+                    if canManagePoints {
+                        Button { showAddGoal = true } label: {
+                            Label("Add", systemImage: "plus")
+                                .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
+                        }
                     }
                 }
-                if goalsQuery.isEmpty {
+                if goalsQuery.isEmpty && canManagePoints {
                     Button { showAddGoal = true } label: {
                         VStack(spacing: 6) {
                             Text("🎯").font(.system(size: 30))
@@ -786,12 +788,14 @@ public enum CasalistCottage {
                 HStack {
                     Text("EARN POINTS 💪").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    Button { showAddChore = true } label: {
-                        Label("Add", systemImage: "plus")
-                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
+                    if canManagePoints {
+                        Button { showAddChore = true } label: {
+                            Label("Add", systemImage: "plus")
+                                .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
+                        }
                     }
                 }
-                if choresQuery.isEmpty {
+                if choresQuery.isEmpty && canManagePoints {
                     Button { showAddChore = true } label: {
                         VStack(spacing: 6) {
                             Text("💪").font(.system(size: 30))
@@ -871,7 +875,7 @@ extension CasalistCottage {
         @Environment(\.dismiss) private var dismiss
         @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
-        @State private var filter: String = "Today"
+        @State private var filter: String = "All"
         @State private var showAddTodo = false
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var todos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
@@ -1034,9 +1038,9 @@ extension CasalistCottage {
         private var filters: some View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    pill("All", count: incomplete.count)
                     pill("Today", count: todayItems.count)
                     pill("This week", count: weekItems.count)
-                    pill("All", count: incomplete.count)
                 }
             }
         }
@@ -2075,8 +2079,13 @@ extension CasalistCottage {
         @State private var editingEvent: FamilyEvent? = nil
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
+        private var canAddEvents: Bool {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canCreateEvents ?? true
+        }
         public init() {}
 
         private var upcoming: [FamilyEvent] {
@@ -2131,11 +2140,13 @@ extension CasalistCottage {
                     Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
                 }
-                Button { showAdd = true } label: {
-                    Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.peach))
-                        .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
+                if canAddEvents {
+                    Button { showAdd = true } label: {
+                        Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(P.peach))
+                            .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
+                    }
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -2173,11 +2184,11 @@ extension CasalistCottage {
         }
 
         private var emptyCard: some View {
-            Button { showAdd = true } label: {
+            Button { if canAddEvents { showAdd = true } } label: {
                 VStack(spacing: 8) {
                     Text("📅").font(.system(size: 36))
                     Text("No events scheduled").font(.system(size: 14, weight: .heavy))
-                    Text("Tap + to add a family event").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                    Text(canAddEvents ? "Tap + to add a family event" : "Ask a parent to add events").font(.system(size: 11, weight: .semibold)).opacity(0.7)
                 }
                 .foregroundStyle(P.text)
                 .frame(maxWidth: .infinity).padding(24)
@@ -2265,6 +2276,11 @@ extension CasalistCottage {
 extension CasalistCottage {
     public struct Root: View {
         @State private var page: Int = 0
+        @Environment(\.managedObjectContext) private var moc
+        @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
+        @State private var showNamePrompt: Bool = false
+        @State private var pendingName: String = ""
         public init() {}
         public var body: some View {
             TabView(selection: $page) {
@@ -2274,6 +2290,72 @@ extension CasalistCottage {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
+            .task { evaluateNamePrompt() }
+            .onChange(of: userName) { _, _ in evaluateNamePrompt() }
+            .sheet(isPresented: $showNamePrompt) { namePromptSheet }
+        }
+
+        private func evaluateNamePrompt() {
+            if userName.trimmingCharacters(in: .whitespaces).isEmpty {
+                pendingName = ""
+                showNamePrompt = true
+            }
+        }
+
+        private var namePromptSheet: some View {
+            let palette = Palette.resolve(false)
+            return NavigationStack {
+                ZStack {
+                    palette.bg.ignoresSafeArea()
+                    VStack(spacing: 20) {
+                        Spacer().frame(height: 12)
+                        Text("🏡").font(.system(size: 52))
+                        Text("Welcome to Casalist").font(.system(size: 22, weight: .heavy))
+                        Text("Tell us your name so your family sees who you are.")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(palette.textMuted)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                        TextField("Your name", text: $pendingName)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            .padding(.horizontal, 16).padding(.vertical, 14)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(palette.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(palette.border, lineWidth: 1.5))
+                            .padding(.horizontal, 24)
+                            .onSubmit(commitName)
+                        Button(action: commitName) {
+                            Text("Get started").font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(Capsule().fill(palette.peach))
+                                .padding(.horizontal, 24)
+                        }
+                        .disabled(pendingName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Spacer()
+                    }
+                    .padding(.top, 18)
+                }
+                .foregroundStyle(palette.text)
+            }
+            .interactiveDismissDisabled(true)
+        }
+
+        private func commitName() {
+            let trimmed = pendingName.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return }
+            userName = trimmed
+            // If a FamilyMember was auto-provisioned for this user (e.g. via
+            // share accept) before they typed a name, it'll be sitting at "New
+            // member". Rename it now so the inviter sees the real name.
+            if !meUid.isEmpty, let uuid = UUID(uuidString: meUid) {
+                let req = FamilyMember.fetchRequest()
+                req.predicate = NSPredicate(format: "uid == %@", uuid as CVarArg)
+                if let mine = (try? moc.fetch(req))?.first, mine.name != trimmed {
+                    mine.name = trimmed
+                    try? moc.save()
+                }
+            }
+            showNamePrompt = false
         }
     }
 }

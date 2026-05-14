@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import CloudKit
 import UIKit
 import UserNotifications
 
@@ -22,6 +23,9 @@ struct SettingsView: View {
     @State private var showPromote: Bool = false
     @State private var transferTarget: FamilyMember? = nil
     @State private var showTransfer: Bool = false
+    @State private var awardTarget: FamilyMember? = nil
+    @State private var awardAmount: Int = 5
+    @State private var deleteTarget: FamilyMember? = nil
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
     private var members: FetchedResults<FamilyMember>
@@ -60,6 +64,15 @@ struct SettingsView: View {
             await refreshNotifStatus()
             await refreshPending()
         }
+        .onChange(of: userName) { _, _ in
+            // If the user renames themselves and the old meUid claim no longer
+            // points at any existing member (e.g. after purging a shared
+            // household), drop it so adoptMeIfNeeded can re-claim the right one.
+            if !meUid.isEmpty, !members.contains(where: { $0.uid.uuidString == meUid }) {
+                meUid = ""
+            }
+            adoptMeIfNeeded()
+        }
         .onChange(of: notificationsEnabled) { _, on in
             Task {
                 if on {
@@ -89,6 +102,19 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showTransfer) {
             if let t = transferTarget { transferOwnerSheet(target: t) }
+        }
+        .sheet(item: $awardTarget) { t in awardPointsSheet(target: t) }
+        .alert("Remove \(deleteTarget?.name ?? "")?", isPresented: Binding(
+            get: { deleteTarget != nil },
+            set: { if !$0 { deleteTarget = nil } }
+        ), presenting: deleteTarget) { m in
+            Button("Remove", role: .destructive) {
+                deleteMember(m)
+                deleteTarget = nil
+            }
+            Button("Cancel", role: .cancel) { deleteTarget = nil }
+        } message: { m in
+            Text("\(m.name) will be removed from this household. Their points (\(m.points)) will be lost. This cannot be undone.")
         }
     }
 
@@ -213,8 +239,15 @@ struct SettingsView: View {
             }
             Spacer()
             roleControl(for: m)
-            if iAmOwner && !isMe {
-                Button { deleteMember(m) } label: {
+            if iAmAdmin && !isMe {
+                Button { awardTarget = m; awardAmount = 5 } label: {
+                    Image(systemName: "gift").font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(P.peach)
+                        .frame(width: 30, height: 30)
+                }.buttonStyle(.plain)
+            }
+            if canDelete(m, isMe: isMe) {
+                Button { deleteTarget = m } label: {
                     Image(systemName: "trash").font(.system(size: 12))
                         .foregroundStyle(P.textMuted)
                         .frame(width: 30, height: 30)
@@ -222,6 +255,104 @@ struct SettingsView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    private func awardPointsSheet(target: FamilyMember) -> some View {
+        let current = Int(target.points)
+        let projected = max(0, current + awardAmount)
+        let effectiveDelta = projected - current   // what'll actually be applied after clamping ≥0
+        return NavigationStack {
+            ZStack {
+                P.bg.ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Image(systemName: "gift").font(.system(size: 36)).foregroundStyle(P.peach)
+                    Text("Adjust points for \(target.name)").font(.system(size: 17, weight: .heavy))
+
+                    // Big current → new preview so it's always clear what will land.
+                    HStack(spacing: 14) {
+                        VStack {
+                            Text("Now").font(.system(size: 10, weight: .heavy)).tracking(0.8).foregroundStyle(P.textMuted)
+                            Text("\(current)").font(.system(size: 30, weight: .heavy))
+                            Text("pts").font(.system(size: 10)).foregroundStyle(P.textMuted)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                        Image(systemName: "arrow.right").foregroundStyle(P.textMuted)
+                        VStack {
+                            Text("New").font(.system(size: 10, weight: .heavy)).tracking(0.8).foregroundStyle(P.peach)
+                            Text("\(projected)").font(.system(size: 30, weight: .heavy)).foregroundStyle(P.peach)
+                            Text("pts").font(.system(size: 10)).foregroundStyle(P.textMuted)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(P.peach.opacity(0.12)))
+                    }
+                    .padding(.horizontal, 4)
+
+                    Stepper(value: $awardAmount, in: -1000...1000, step: 1) {
+                        HStack {
+                            Text("Change").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.textMuted)
+                            Spacer()
+                            Text("\(awardAmount >= 0 ? "+" : "")\(awardAmount) pts").font(.system(size: 16, weight: .heavy))
+                        }
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+
+                    HStack(spacing: 8) {
+                        ForEach([-25, -10, -5, 5, 10, 25], id: \.self) { step in
+                            Button { awardAmount += step } label: {
+                                Text("\(step > 0 ? "+" : "")\(step)").font(.system(size: 12, weight: .heavy))
+                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                                    .background(Capsule().fill(step >= 0 ? P.peach.opacity(0.18) : P.surfaceAlt))
+                                    .foregroundStyle(step >= 0 ? P.peach : P.textMuted)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+
+                    Button { awardAmount = -current } label: {
+                        Text("Zero out").font(.system(size: 12, weight: .heavy))
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
+                            .background(Capsule().fill(P.surfaceAlt))
+                            .foregroundStyle(P.text)
+                    }.buttonStyle(.plain)
+                        .disabled(current == 0)
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: 12) {
+                        Button("Cancel") { awardTarget = nil }
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(P.surfaceAlt))
+                            .foregroundStyle(P.text)
+                        Button {
+                            target.points = Int64(projected)
+                            try? moc.save()
+                            awardTarget = nil
+                        } label: {
+                            Text("Apply").font(.system(size: 14, weight: .heavy))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(Capsule().fill(P.peach))
+                        .foregroundStyle(.white)
+                        .disabled(effectiveDelta == 0)
+                    }
+                }
+                .padding(20)
+            }
+            .foregroundStyle(P.text)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// You can delete any non-self member whose household lives in your own
+    /// private store — that's your own household, or a shared one you own. A
+    /// share joiner can't delete members from the inviter's household (those
+    /// records live in the joiner's *shared* store).
+    private func canDelete(_ m: FamilyMember, isMe: Bool) -> Bool {
+        // Only protect the *actual* claimed-me record (uid match). Stale members
+        // that merely share the current userName are deletable so old test
+        // identities can be cleaned out.
+        if !meUid.isEmpty, m.uid.uuidString == meUid { return false }
+        guard let store = m.objectID.persistentStore else { return true }
+        return store == CasaCoreDataStack.shared.privateStore
     }
 
     private func deleteMember(_ m: FamilyMember) {
@@ -239,17 +370,32 @@ struct SettingsView: View {
             } label: {
                 roleBadge(.owner)
             }.buttonStyle(.plain)
-        } else if iAmOwner {
-            Button { promoteTarget = m; showPromote = true } label: {
+        } else if iAmAdmin {
+            // Owner and admin can both retag any non-owner member.
+            Menu {
+                ForEach(FamilyRole.assignable, id: \.self) { r in
+                    Button {
+                        setRole(m, to: r)
+                    } label: {
+                        Label(r.label, systemImage: r.symbol)
+                    }
+                }
+            } label: {
                 roleBadge(m.level)
-            }.buttonStyle(.plain)
+            }
         } else {
             roleBadge(m.level)
         }
     }
 
     private func roleBadge(_ r: FamilyRole) -> some View {
-        let tint: Color = r == .owner ? P.butter : (r == .admin ? P.peach : P.textMuted)
+        let tint: Color
+        switch r {
+        case .owner: tint = P.butter
+        case .admin: tint = P.peach
+        case .kid:   tint = P.sky
+        case .standard: tint = P.textMuted
+        }
         return HStack(spacing: 4) {
             Image(systemName: r.symbol).font(.system(size: 10, weight: .heavy))
             Text(r.label).font(.system(size: 11, weight: .heavy))
@@ -260,7 +406,7 @@ struct SettingsView: View {
     }
 
     private func setRole(_ m: FamilyMember, to next: FamilyRole) {
-        if next == .admin && adminCount >= 2 {
+        if next == .admin && adminCount >= 2 && m.level != .admin {
             wipeMessage = "Max 2 admins. Demote one first."
             return
         }
@@ -309,6 +455,50 @@ struct SettingsView: View {
         for m in members where m.isOwner { m.roleLevel = FamilyRole.admin.rawValue }
         newOwner.roleLevel = FamilyRole.owner.rawValue
         try? moc.save()
+    }
+
+    /// Withdraws this device from every CKShare it has accepted by purging
+    /// every shared-zone the shared store knows about. After this, the shared
+    /// household (and all its members/tasks/etc.) disappears locally — the
+    /// inviter's copy is untouched.
+    private func leaveSharedHouseholds() {
+        let stack = CasaCoreDataStack.shared
+        guard let sharedStore = stack.sharedStore else {
+            wipeMessage = "Shared store not available."
+            return
+        }
+        let sharedHouseholds = households.filter { $0.objectID.persistentStore == sharedStore }
+        guard !sharedHouseholds.isEmpty else {
+            wipeMessage = "No shared households to leave."
+            return
+        }
+        var zoneIDs = Set<CKRecordZone.ID>()
+        for h in sharedHouseholds {
+            if let record = try? stack.container.record(for: h.objectID) {
+                zoneIDs.insert(record.recordID.zoneID)
+            }
+        }
+        guard !zoneIDs.isEmpty else {
+            wipeMessage = "No CloudKit zones to purge yet — try again in a moment."
+            return
+        }
+        let count = sharedHouseholds.count
+        let group = DispatchGroup()
+        var failure: Error? = nil
+        for zid in zoneIDs {
+            group.enter()
+            stack.container.purgeObjectsAndRecordsInZone(with: zid, in: sharedStore) { _, error in
+                if let error { failure = error }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            if let failure {
+                wipeMessage = "Leave failed: \(failure.localizedDescription)"
+            } else {
+                wipeMessage = "Left \(count) shared household\(count == 1 ? "" : "s")."
+            }
+        }
     }
 
     private func removeSchemaSeedMembers() {
@@ -414,6 +604,10 @@ struct SettingsView: View {
                     wipeMessage = "Removed any Schema-* test members."
                 }
                 divider
+                if households.contains(where: { $0.objectID.persistentStore == CasaCoreDataStack.shared.sharedStore }) {
+                    actionButton("Leave shared household") { leaveSharedHouseholds() }
+                    divider
+                }
                 Button(role: .destructive) { confirmWipe = true } label: {
                     HStack {
                         Image(systemName: "trash").font(.system(size: 14, weight: .bold))

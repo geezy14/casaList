@@ -5,10 +5,16 @@ struct AddTaskView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
+    @AppStorage("meUid") private var meUid: String = ""
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
     private var members: FetchedResults<FamilyMember>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
     private var households: FetchedResults<Household>
+
+    private var me: FamilyMember? {
+        FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+    }
+    private var canPickAnyAssignee: Bool { me?.canCreateTasksForOthers ?? true }
 
     @State private var taskName = ""
     @State private var assigneeName: String = ""
@@ -46,12 +52,19 @@ struct AddTaskView: View {
                 Section("Assignee") {
                     if members.isEmpty {
                         TextField("Name", text: $assigneeName)
-                    } else {
+                    } else if canPickAnyAssignee {
                         Picker("Family member", selection: $assigneeName) {
                             Text("No one").tag("")
                             ForEach(members, id: \.uid) { m in
                                 Text(m.name).tag(m.name)
                             }
+                        }
+                    } else {
+                        // Standard / kid: tasks they create are for themselves.
+                        HStack {
+                            Text("For")
+                            Spacer()
+                            Text(me?.name ?? userName).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -125,10 +138,17 @@ struct AddTaskView: View {
     }
 
     private func saveTask() {
+        // Force standard/kid creators to be the assignee.
+        let resolvedAssignee: String
+        if canPickAnyAssignee {
+            resolvedAssignee = assigneeName
+        } else {
+            resolvedAssignee = (me?.name ?? userName).trimmingCharacters(in: .whitespaces)
+        }
         let newTask = TaskItem(
             context: moc,
             task: taskName.trimmingCharacters(in: .whitespaces),
-            assignee: assigneeName.isEmpty ? nil : assigneeName,
+            assignee: resolvedAssignee.isEmpty ? nil : resolvedAssignee,
             dueDate: hasDueDate ? dueDate : nil,
             category: category,
             isCompleted: false,

@@ -32,7 +32,14 @@ public final class FamilyMember: NSManagedObject {
     var level: FamilyRole { FamilyRole(rawValue: roleLevel) ?? .standard }
     var isOwner: Bool { level == .owner }
     var isAdmin: Bool { level == .admin }
+    var isKid: Bool { level == .kid }
     var canManageFamily: Bool { level == .owner || level == .admin }
+    var canCreateTasksForOthers: Bool { level == .owner || level == .admin }
+    var canEditOthersTasks: Bool { level == .owner || level == .admin }
+    var canManageChoresAndGoals: Bool { level == .owner || level == .admin }
+    var canAwardPoints: Bool { level == .owner || level == .admin }
+    var canCreateEvents: Bool { level != .kid }
+    var canDeleteOwnTasks: Bool { level != .kid }
 
     var asCLMember: CLFamilyMember {
         CLFamilyMember(id: uid.uuidString, label: name, role: role, color: color, points: Int(points), photoData: photoData)
@@ -62,13 +69,14 @@ public final class FamilyMember: NSManagedObject {
 }
 
 enum FamilyRole: String, CaseIterable {
-    case owner, admin, standard
+    case owner, admin, standard, kid
 
     var label: String {
         switch self {
         case .owner: return "Owner"
         case .admin: return "Admin"
-        case .standard: return "Member"
+        case .standard: return "Standard"
+        case .kid: return "Kid"
         }
     }
 
@@ -77,6 +85,10 @@ enum FamilyRole: String, CaseIterable {
         case .owner: return "crown.fill"
         case .admin: return "star.fill"
         case .standard: return "person.fill"
+        case .kid: return "figure.child"
         }
     }
+
+    /// Roles that an owner/admin can assign to another member.
+    static var assignable: [FamilyRole] { [.admin, .standard, .kid] }
 }
