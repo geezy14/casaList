@@ -1,9 +1,28 @@
 # Casalist
 
+## Logging — read first
+
+Every meaningful action you take gets logged in TWO places. Do not skip this.
+
+1. **Global ticker** (one-liner, append as you work):
+   `~/.claude/projects/-Users-geezy/memory/replicants_log.md`
+   Format: `[crN · YYYY-MM-DD HH:MM · casaList] summary` (≤90 chars).
+   Newest at the **bottom**.
+
+2. **Project journal — Progress Log section below** (paragraph, end of session):
+   Newest paragraph on **top**. One per session. Terse — what shipped + the key gotcha future-you needs.
+
+**What to log:** TestFlight builds, commits to main, cross-project edits, feature ships/rollbacks, hard-won gotchas. **What to skip:** read-only inspections, single-typo edits, build-only-no-push, anything visible in `git log` anyway.
+
+**Token-bloat prevention:** the Progress Log keeps the latest **5** entries inline. When you add a 6th, move the oldest into `docs/progress-log-archive.md` (newest on top there too). This caps CLAUDE.md size forever. New Claudes read the inline 5 cheaply and grep the archive only when they need deeper history.
+
+Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
+
 ## Progress Log
 
 > Newest entries on top. Keep this section terse — one paragraph per session
-> covering what shipped and what to know going in next time.
+> covering what shipped and what to know going in next time. When this section
+> hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
 ### 2026-05-14 — Multi-user family sharing actually works (Option A complete)
 Two-account share is verified working end-to-end on iPhone Air ↔ iPhone 15
