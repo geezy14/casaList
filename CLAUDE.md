@@ -81,6 +81,29 @@ Each household gets a code (UUID or short string). Records live in the CloudKit 
 - The `CKSharingSupported = YES` Info.plist key only matters for Option A. Setting it without backing data sharing logic does nothing — it just removes one of the "you need a newer version" errors.
 - Xcode's `INFOPLIST_KEY_*` build-setting prefix does NOT honor `CKSharingSupported`. Use an explicit `Info.plist` file at the project root with `INFOPLIST_FILE = Info.plist` and `GENERATE_INFOPLIST_FILE = NO`. (Burned on this; the key was silently dropped in builds 3.2 and 3.3.)
 
+### Rules for every future Claude opening this repo
+
+**Rule 1 — Two-account test is the only proof.**
+No family-sharing feature is "done" until Geezy has installed it on two devices logged into two different iCloud accounts and confirmed a record created on device A appears on device B within 30 seconds. "It compiles," "the sheet opens," "the invite sends," and "the build uploads" are not proof. Two-account observation is proof. Don't claim a sharing feature is done without it.
+
+**Rule 2 — Validate the foundation before stacking features.**
+Before adding any new family-facing feature (invites, roles, permissions, leaderboards, shared lists, anything that says "everyone sees"), stop and verify the data layer actually shares data. If the data layer is broken, building UI on top of it is theater and makes the eventual fix harder. The first question on any family-feature request is "does the store under this support multi-user visibility?" not "what does the screen look like?"
+
+**Rule 4 — Don't trust prior sessions. Run the 5-minute trust check.**
+Future Claudes: assume the data layer is broken for multi-user sharing until you've personally verified it. The 5-minute trust check:
+
+1. **Read the data-layer file.** Find where `ModelContainer` / `ModelConfiguration` / `NSPersistentCloudKitContainer` is set up. Look at the scope:
+   - `cloudKitDatabase: .private(...)` → single-user silo. Sharing is broken. Stop.
+   - `NSPersistentCloudKitContainer` + `share(_:to:)` calls somewhere → likely Option A. Continue to step 2.
+   - `CKContainer.default().publicCloudDatabase` + `householdID` filter on every fetch → likely Option B. Continue to step 2.
+2. **Grep for the field that proves the chosen path.**
+   - Option A: `share(_:to:)` should appear at least once in the codebase.
+   - Option B: every `@Query` / fetch must include a `householdID == X` predicate. Even one unfiltered query leaks data across households — treat that as broken.
+3. **Check `replicants_log.md` for a recent "two-account verified" entry.** If the most recent data-layer entry doesn't include explicit two-account verification, the layer is unverified — treat it as broken.
+4. **If still unsure, ask Geezy to run the test.** Tell him: "Install on two devices on two iCloud accounts. Create a task on device A. Does it appear on device B within 30 seconds?" Yes = trust. No = broken, stop and report.
+
+The cost of a 5-minute check is far smaller than the cost of stacking 4+ hours of UI on a broken foundation and shipping theater. The prior session (cr2, 2026-05-13) did exactly that. Don't repeat it.
+
 ## Dependencies
 
 - **CasaGlassKit** — reusable Swift package for the Casa Glass design system.
