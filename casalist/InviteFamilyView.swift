@@ -137,6 +137,31 @@ struct InviteFamilyView: View {
         }
     }
 
+    /// Sweep through all child entities and attach any record that has no
+    /// household to the given household. Catches records from older app
+    /// versions where the household relationship didn't exist.
+    private func adoptOrphans(into household: Household) {
+        let memberReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "household == nil")
+        for m in (try? moc.fetch(memberReq)) ?? [] { m.household = household }
+
+        let taskReq: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        taskReq.predicate = NSPredicate(format: "household == nil")
+        for t in (try? moc.fetch(taskReq)) ?? [] { t.household = household }
+
+        let goalReq: NSFetchRequest<FamilyGoal> = FamilyGoal.fetchRequest()
+        goalReq.predicate = NSPredicate(format: "household == nil")
+        for g in (try? moc.fetch(goalReq)) ?? [] { g.household = household }
+
+        let choreReq: NSFetchRequest<ChoreTemplate> = ChoreTemplate.fetchRequest()
+        choreReq.predicate = NSPredicate(format: "household == nil")
+        for c in (try? moc.fetch(choreReq)) ?? [] { c.household = household }
+
+        let eventReq: NSFetchRequest<FamilyEvent> = FamilyEvent.fetchRequest()
+        eventReq.predicate = NSPredicate(format: "household == nil")
+        for e in (try? moc.fetch(eventReq)) ?? [] { e.household = household }
+    }
+
     private static func message(for status: CKAccountStatus) -> String {
         switch status {
         case .available: return "Signed in. Ready to share."
@@ -154,24 +179,46 @@ struct InviteFamilyView: View {
         errorMessage = nil
         let trimmedName = householdName.trimmingCharacters(in: .whitespaces)
 
-        guard let household = households.first else {
-            preparingShare = false
-            errorMessage = "No household to share yet. Add a family member first so the household record is created."
-            return
+        let household: Household
+        if let existing = households.first {
+            household = existing
+        } else {
+            guard let fresh = HouseholdProvisioner.ensureHouseholdExists(in: moc) else {
+                preparingShare = false
+                errorMessage = "Could not create a household to share."
+                return
+            }
+            household = fresh
         }
         household.name = trimmedName
+
+        // Adopt any orphan records (no household yet) into this household.
+        adoptOrphans(into: household)
         try? moc.save()
 
-        do {
-            let (_, share, ckContainer) = try await stack.container.share([household], to: nil)
-            share[CKShare.SystemFieldKey.title] = trimmedName as CKRecordValue
-            share.publicPermission = .none
-            preparingShare = false
-            presentCloudSharingController(share: share, container: ckContainer)
-        } catch {
-            preparingShare = false
-            errorMessage = "Could not prepare share: \(error.localizedDescription)"
+        // Try to share. NSPersistentCloudKitContainer needs the household to be
+        // exported to CloudKit first. If we just created it, retry a few times
+        // with a small delay while the background export catches up.
+        for attempt in 1...6 {
+            do {
+                let (_, share, ckContainer) = try await stack.container.share([household], to: nil)
+                share[CKShare.SystemFieldKey.title] = trimmedName as CKRecordValue
+                share.publicPermission = .none
+                preparingShare = false
+                presentCloudSharingController(share: share, container: ckContainer)
+                return
+            } catch let error as NSError where error.code == 134410 && attempt < 6 {
+                // Ineligible — record not exported yet. Wait and retry.
+                try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_500_000_000)
+                continue
+            } catch {
+                preparingShare = false
+                errorMessage = "Could not prepare share: \(error.localizedDescription)"
+                return
+            }
         }
+        preparingShare = false
+        errorMessage = "Couldn't share yet — Casalist is still syncing the household to iCloud. Try again in a few seconds."
     }
 
     @MainActor

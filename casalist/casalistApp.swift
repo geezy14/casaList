@@ -89,12 +89,24 @@ enum HouseholdProvisioner {
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
 
-        // Delete any local empty households once a shared one is present.
-        if households.count > 1 {
-            let empties = households.filter { isEmpty($0) && isOwnedByMe($0, in: context) }
-            // Keep at most one of these (in case both are empty and one is shared).
-            let toDelete = empties.dropLast(max(0, households.count - empties.count))
-            for h in toDelete {
+        // Make sure the user always has a private household to share (so CloudKit
+        // has time to export it before they tap Send Invite).
+        let privateHouseholds = households.filter { isOwnedByMe($0, in: context) }
+        if privateHouseholds.isEmpty {
+            _ = ensureHouseholdExists(in: context)
+        }
+
+        // Delete empty private households if we have more than one private one
+        // OR if a shared household is present (avoids "2 households" after accept).
+        let updatedHouseholds = (try? context.fetch(req)) ?? []
+        let updatedPrivate = updatedHouseholds.filter { isOwnedByMe($0, in: context) }
+        let hasShared = updatedHouseholds.contains { !isOwnedByMe($0, in: context) }
+        let emptyPrivate = updatedPrivate.filter { isEmpty($0) }
+        if (hasShared && !emptyPrivate.isEmpty) || updatedPrivate.count > 1 {
+            // Keep one non-empty private if we have one, otherwise keep one empty.
+            let nonEmpty = updatedPrivate.filter { !isEmpty($0) }
+            let keep: Household? = nonEmpty.first ?? (hasShared ? nil : emptyPrivate.first)
+            for h in updatedPrivate where h != keep {
                 context.delete(h)
             }
             try? context.save()
