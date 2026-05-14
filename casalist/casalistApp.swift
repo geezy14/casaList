@@ -214,18 +214,30 @@ enum HouseholdProvisioner {
             _ = ensureHouseholdExists(in: context)
         }
 
-        // Delete empty private households if we have more than one private one
-        // OR if a shared household is present (avoids "2 households" after accept).
+        // Delete empty private households (and "only-self" stray private
+        // households) once a shared household is present — that's the joiner
+        // arriving and we want to abandon the local placeholder. Also dedupe
+        // if multiple private households piled up.
         let updatedHouseholds = (try? context.fetch(req)) ?? []
         let updatedPrivate = updatedHouseholds.filter { isOwnedByMe($0, in: context) }
         let hasShared = updatedHouseholds.contains { !isOwnedByMe($0, in: context) }
-        let emptyPrivate = updatedPrivate.filter { isEmpty($0) }
-        if (hasShared && !emptyPrivate.isEmpty) || updatedPrivate.count > 1 {
-            // Keep one non-empty private if we have one, otherwise keep one empty.
-            let nonEmpty = updatedPrivate.filter { !isEmpty($0) }
-            let keep: Household? = nonEmpty.first ?? (hasShared ? nil : emptyPrivate.first)
+        let strayPrivate = updatedPrivate.filter { isEmpty($0) || (hasShared && isOnlySelf($0)) }
+        if (hasShared && !strayPrivate.isEmpty) || updatedPrivate.count > 1 {
+            let realPrivate = updatedPrivate.filter { !isEmpty($0) && !(hasShared && isOnlySelf($0)) }
+            let keep: Household? = realPrivate.first ?? (hasShared ? nil : strayPrivate.first)
             for h in updatedPrivate where h != keep {
                 context.delete(h)
+            }
+            // After deletion, any meUid claim that pointed at the local user
+            // in the stray household is now invalid — clear it so the joiner
+            // re-adopts the shared-household FamilyMember via adoptMeIfNeeded.
+            let meUid = UserDefaults.standard.string(forKey: "meUid") ?? ""
+            if !meUid.isEmpty, let uuid = UUID(uuidString: meUid) {
+                let memReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+                memReq.predicate = NSPredicate(format: "uid == %@", uuid as CVarArg)
+                if ((try? context.count(for: memReq)) ?? 0) == 0 {
+                    UserDefaults.standard.set("", forKey: "meUid")
+                }
             }
             try? context.save()
         }
@@ -238,6 +250,23 @@ enum HouseholdProvisioner {
         (h.goals?.count ?? 0) == 0 &&
         (h.chores?.count ?? 0) == 0 &&
         (h.events?.count ?? 0) == 0
+    }
+
+    /// Like `isEmpty`, but also true when the household's only content is the
+    /// local user's own FamilyMember and nothing else. This catches the
+    /// "joiner typed their name before accepting" stray-household state:
+    /// they have a one-person private household that should disappear once
+    /// the real shared household arrives.
+    private static func isOnlySelf(_ h: Household) -> Bool {
+        let lc = (UserDefaults.standard.string(forKey: "userName") ?? "")
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        guard !lc.isEmpty else { return false }
+        let members = (h.members as? Set<FamilyMember>) ?? []
+        guard members.count == 1, let only = members.first, only.name.lowercased() == lc else { return false }
+        return (h.tasks?.count ?? 0) == 0
+            && (h.goals?.count ?? 0) == 0
+            && (h.chores?.count ?? 0) == 0
+            && (h.events?.count ?? 0) == 0
     }
 
     /// True if this household lives in the user's private store (i.e. they own
