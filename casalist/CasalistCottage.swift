@@ -855,7 +855,10 @@ public enum CasalistCottage {
                 points: Int(c.points),
                 createdBy: me
             )
-            item.household = c.household
+            if let h = c.household {
+                modelContext.assign(item, toStoreOf: h)
+                item.household = h
+            }
             try? modelContext.save()
         }
     }
@@ -1314,7 +1317,10 @@ extension CasalistCottage {
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
-            it.household = allTasks.first?.household
+            if let h = allTasks.first?.household {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
             try? modelContext.save()
             newItem = ""
         }
@@ -1436,7 +1442,10 @@ extension CasalistCottage {
                 createdBy: userName.trimmingCharacters(in: .whitespaces),
                 parentUid: trip.uid
             )
-            item.household = trip.household
+            if let h = trip.household {
+                modelContext.assign(item, toStoreOf: h)
+                item.household = h
+            }
             try? modelContext.save()
             newItemByTrip[key] = ""
         }
@@ -1856,7 +1865,10 @@ extension CasalistCottage {
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
-            it.household = allTasks.first?.household
+            if let h = allTasks.first?.household {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
             try? modelContext.save()
             newItem = ""
         }

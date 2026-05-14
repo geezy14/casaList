@@ -53,7 +53,10 @@ struct AddGoalView: View {
             label: label.trimmingCharacters(in: .whitespaces),
             targetPoints: target
         )
-        g.household = households.first
+        if let h = households.first {
+            moc.assign(g, toStoreOf: h)
+            g.household = h
+        }
         try? moc.save()
         dismiss()
     }

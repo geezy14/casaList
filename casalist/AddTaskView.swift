@@ -137,7 +137,10 @@ struct AddTaskView: View {
             repeatHours: 0,
             repeatKind: repeatKind
         )
-        newTask.household = households.first
+        if let h = households.first {
+            moc.assign(newTask, toStoreOf: h)
+            newTask.household = h
+        }
         try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: newTask) }
         dismiss()

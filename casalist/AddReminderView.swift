@@ -176,7 +176,10 @@ struct AddReminderView: View {
                 repeatHours: 0,
                 repeatKind: repeatKind
             )
-            item.household = households.first
+            if let h = households.first {
+                moc.assign(item, toStoreOf: h)
+                item.household = h
+            }
             target = item
         }
         try? moc.save()

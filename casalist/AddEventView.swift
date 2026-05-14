@@ -128,7 +128,10 @@ struct AddEventView: View {
                 repeatKind: repeatKind,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
-            event.household = households.first
+            if let h = households.first {
+                moc.assign(event, toStoreOf: h)
+                event.household = h
+            }
         }
         try? moc.save()
         dismiss()

@@ -91,6 +91,18 @@ final class CasaCoreDataStack {
 
     var context: NSManagedObjectContext { container.viewContext }
 
+    /// Pushes the complete schema (including all CloudKit-sharing system fields
+    /// like CD_moveReceipt) into the **Development** CloudKit container. Call
+    /// this once after a model change while the app is pointed at Dev. After it
+    /// completes, go to the CloudKit Dashboard and Deploy to Production.
+    ///
+    /// Apple specifically calls this out as the way to materialise the
+    /// schema fields that sharing needs — without it, the fields don't exist
+    /// until the first time share() runs, which fails on Production.
+    func initializeCloudKitSchemaForDevelopment() throws {
+        try container.initializeCloudKitSchema(options: [])
+    }
+
     func save() {
         let ctx = container.viewContext
         guard ctx.hasChanges else { return }
@@ -251,6 +263,16 @@ extension NSManagedObjectContext {
     /// into.
     func storeFor(_ object: NSManagedObject) -> NSPersistentStore? {
         object.objectID.persistentStore
+    }
+
+    /// Assigns a brand-new (not yet saved) record to live in the same persistent
+    /// store as `parent`. Required for CloudKit-shared data: a record attached
+    /// to a household in the shared store must also live in the shared store,
+    /// otherwise Core Data drops the cross-store relationship and the new
+    /// record is invisible to other share participants.
+    func assign(_ child: NSManagedObject, toStoreOf parent: NSManagedObject) {
+        guard let store = parent.objectID.persistentStore else { return }
+        assign(child, to: store)
     }
 }
 

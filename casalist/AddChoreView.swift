@@ -62,7 +62,10 @@ struct AddChoreView: View {
             points: points,
             symbol: symbol
         )
-        c.household = households.first
+        if let h = households.first {
+            moc.assign(c, toStoreOf: h)
+            c.household = h
+        }
         try? moc.save()
         dismiss()
     }

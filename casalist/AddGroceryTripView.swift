@@ -51,7 +51,10 @@ struct AddGroceryTripView: View {
             points: 0,
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
-        trip.household = households.first
+        if let h = households.first {
+            moc.assign(trip, toStoreOf: h)
+            trip.household = h
+        }
         try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: trip) }
         dismiss()

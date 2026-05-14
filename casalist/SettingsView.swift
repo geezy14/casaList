@@ -390,6 +390,25 @@ struct SettingsView: View {
                 divider
                 actionButton("Seed schema records") { seedSchemaRecords() }
                 divider
+                actionButton("Init CloudKit schema (dev)") {
+                    Task {
+                        do {
+                            try CasaCoreDataStack.shared.initializeCloudKitSchemaForDevelopment()
+                            await MainActor.run { wipeMessage = "Schema initialized in Dev. Diff + deploy via Dashboard." }
+                        } catch {
+                            let ns = error as NSError
+                            let full = "\(ns)\n\nUserInfo:\n\(ns.userInfo as AnyObject)"
+                            // Write to a file we can read later with devicectl device info files
+                            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                                let url = docs.appendingPathComponent("init-error.txt")
+                                try? full.data(using: .utf8)?.write(to: url)
+                            }
+                            NSLog("Casa initializeCloudKitSchema FULL ERROR: \(full)")
+                            await MainActor.run { wipeMessage = "init failed (full error written to docs/init-error.txt): \(ns.localizedDescription)" }
+                        }
+                    }
+                }
+                divider
                 actionButton("Remove test members") {
                     removeSchemaSeedMembers()
                     wipeMessage = "Removed any Schema-* test members."
@@ -473,13 +492,22 @@ struct SettingsView: View {
     private func seedSchemaRecords() {
         let tempName = "Schema-\(UUID().uuidString.prefix(6))"
         let temp = FamilyMember(context: moc, name: tempName, role: "Schema seed", colorHex: 0xC97357, roleLevel: .admin)
-        temp.household = households.first
+        if let h = households.first {
+            moc.assign(temp, toStoreOf: h)
+            temp.household = h
+        }
         let name = userName.trimmingCharacters(in: .whitespaces)
         let ownerName = name.isEmpty ? "Test" : name
         let goal = FamilyGoal(context: moc, ownerName: ownerName, label: "Schema test", targetPoints: 100)
-        goal.household = households.first
+        if let h = households.first {
+            moc.assign(goal, toStoreOf: h)
+            goal.household = h
+        }
         let chore = ChoreTemplate(context: moc, label: "Schema test", points: 10, symbol: "checkmark.circle")
-        chore.household = households.first
+        if let h = households.first {
+            moc.assign(chore, toStoreOf: h)
+            chore.household = h
+        }
         try? moc.save()
         wipeMessage = "Seeded — wait ~10s then deploy via Dashboard. Temp member: \(tempName)"
     }
