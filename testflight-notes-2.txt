@@ -1,0 +1,21 @@
+Casalist 1.0 (2) — Beta Welcome
+
+What's New
+- Cottage UI: dashboard, my to-do, chore rewards, grocery, maintenance, reminders, family schedule
+- Family member profiles with photo crop
+- Recurring reminders (hourly through yearly) with real notifications
+- Recurring chores that auto-roll forward when checked
+- Grocery trips with nested items
+- Chore Rewards leaderboard, goals, and chore-claim flow
+- Family schedule with shared events
+- iCloud sharing — invite family members via Mail / Messages / Copy Link
+
+What's Fixed
+- N/A — first beta build
+
+What to Test
+- Add yourself as a family member (Settings > Profile photo, or accept an invite from Geezy)
+- Try checking off a chore — your points should land in the leaderboard
+- Open the Schedule tab and add an event; confirm it appears in the agenda strip on Home
+- Turn on notifications in iOS Settings and add a reminder for ~5 minutes from now
+- If Geezy sends you a share link, tap it to join the household

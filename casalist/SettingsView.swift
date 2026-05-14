@@ -14,6 +14,9 @@ struct SettingsView: View {
     @Query(sort: \FamilyMember.createdAt) private var members: [FamilyMember]
     @Query private var tasks: [TaskItem]
     @Query private var households: [Household]
+    @Query private var goals: [FamilyGoal]
+    @Query private var chores: [ChoreTemplate]
+    @Query private var events: [FamilyEvent]
 
     @State private var confirmWipe: Bool = false
     @State private var wipeMessage: String? = nil
@@ -147,7 +150,7 @@ struct SettingsView: View {
                 Button("Wipe everything", role: .destructive) { wipeAll() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Deletes all tasks, family members, and household data on this device. Resets your name and household name. Cannot be undone.")
+                Text("Deletes all tasks, goals, chores, and events on this device. Family members, household, and your profile are preserved. Cannot be undone.")
             }
         }
     }
@@ -165,13 +168,15 @@ struct SettingsView: View {
     }
 
     private func wipeAll() {
+        let totalBefore = tasks.count + goals.count + chores.count + events.count
         for t in tasks { modelContext.delete(t) }
-        for m in members { modelContext.delete(m) }
-        for h in households { modelContext.delete(h) }
+        for g in goals { modelContext.delete(g) }
+        for c in chores { modelContext.delete(c) }
+        for e in events { modelContext.delete(e) }
+        // Reset point balances on members but keep the members themselves.
+        for m in members { m.points = 0 }
         try? modelContext.save()
-        userName = ""
-        householdName = "My Household"
-        wipeMessage = "Cleared \(tasks.count + members.count + households.count) records."
+        wipeMessage = "Cleared \(totalBefore) records. Family and household preserved."
     }
 
     private func removeMember(at offsets: IndexSet) {
