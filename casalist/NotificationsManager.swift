@@ -274,6 +274,67 @@ enum NotificationsManager {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly-recap"])
     }
 
+    // MARK: – Assignment push notifications
+
+    private static let notifiedAssignmentsKey = "notifiedAssignmentUIDs"
+
+    /// Fire a local notification for every TaskItem newly assigned to
+    /// `userName` since the last scan, deduped per device by UID. Runs
+    /// off the .NSPersistentStoreRemoteChange listener — local creations
+    /// don't fire that publisher, so the assignee only gets pinged for
+    /// tasks that came in from another device.
+    @MainActor
+    static func detectAndNotifyAssignments(in context: NSManagedObjectContext, userName: String) async {
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Only look at recent tasks so a freshly synced shared store doesn't
+        // dump months of historical assignments into the notification center.
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let req: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "assignee != nil AND assignee LIKE[c] %@ AND isCompleted == NO AND deletedAt == nil AND createdAt > %@",
+            trimmed, cutoff as NSDate
+        )
+        guard let recent = try? context.fetch(req), !recent.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        var notified = Set(defaults.stringArray(forKey: notifiedAssignmentsKey) ?? [])
+
+        for t in recent {
+            let key = t.uid
+            if key.isEmpty || notified.contains(key) { continue }
+            // Skip if I created the task myself — even if it landed here via
+            // sync, I obviously already know.
+            if t.createdBy.lowercased() == trimmed.lowercased() {
+                notified.insert(key)
+                continue
+            }
+
+            let content = UNMutableNotificationContent()
+            let actor = t.createdBy.isEmpty ? "Casalist" : t.createdBy
+            content.title = "📝 \(actor) assigned you a task"
+            var bodyParts: [String] = [t.task]
+            if t.points > 0 { bodyParts.append("\(t.points) pts") }
+            if !t.category.isEmpty { bodyParts.append(t.category.capitalized) }
+            content.body = bodyParts.joined(separator: " · ")
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "assigned-\(key)",
+                content: content,
+                trigger: trigger
+            )
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedAssignmentsKey)
+    }
+
     // MARK: – Redemption push notifications
 
     private static let notifiedRedemptionsKey = "notifiedRedemptionUIDs"

@@ -165,6 +165,7 @@ struct CasalistApp: App {
     @UIApplicationDelegateAdaptor(CasalistAppDelegate.self) var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
+    @AppStorage("userName") private var userName: String = ""
 
     private let stack = CasaCoreDataStack.shared
 
@@ -183,11 +184,11 @@ struct CasalistApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
                     // A remote change just landed — check for redemptions
-                    // that were performed on another device and fire a local
-                    // notification for each new one.
+                    // and new assignments performed on another device.
                     if notificationsEnabled {
                         Task { @MainActor in
                             await NotificationsManager.detectAndNotifyRedemptions(in: stack.context)
+                            await NotificationsManager.detectAndNotifyAssignments(in: stack.context, userName: userName)
                         }
                     }
                 }
