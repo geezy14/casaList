@@ -14,6 +14,7 @@ public final class Household: NSManagedObject {
     @NSManaged public var goals: NSSet?
     @NSManaged public var chores: NSSet?
     @NSManaged public var events: NSSet?
+    @NSManaged public var routinesJSON: String
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()

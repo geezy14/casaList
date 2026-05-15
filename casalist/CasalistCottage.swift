@@ -176,9 +176,7 @@ public enum CasalistCottage {
                 greetingCard
                 stickyAgenda
                 quickAdd
-                #if DEBUG
                 if canManage { quickAddChips }
-                #endif
                 star
                 tiles
                 whatsNew

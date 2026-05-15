@@ -11,7 +11,7 @@ struct RoutinesView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
     private var households: FetchedResults<Household>
 
-    @State private var routines: [ChoreRoutineTemplate] = ChoreRoutineStore.load()
+    @State private var routines: [ChoreRoutineTemplate] = []
     @State private var editing: ChoreRoutineTemplate? = nil
     @State private var showAdd: Bool = false
     @State private var spawning: ChoreRoutineTemplate? = nil
@@ -56,7 +56,7 @@ struct RoutinesView: View {
                 AddRoutineView(existing: nil) { saved in
                     if let s = saved {
                         routines.append(s)
-                        ChoreRoutineStore.save(routines)
+                        persist()
                     }
                 }
             }
@@ -64,10 +64,11 @@ struct RoutinesView: View {
                 AddRoutineView(existing: r) { saved in
                     if let s = saved, let idx = routines.firstIndex(where: { $0.id == r.id }) {
                         routines[idx] = s
-                        ChoreRoutineStore.save(routines)
+                        persist()
                     }
                 }
             }
+            .onAppear { routines = ChoreRoutineStore.load(from: households.preferredTarget) }
             .confirmationDialog(
                 spawning.map { "Spawn \"\($0.name)\" for \($0.assigneeName)?" } ?? "",
                 isPresented: Binding(
@@ -117,7 +118,7 @@ struct RoutinesView: View {
                     Button { editing = r } label: { Label("Edit", systemImage: "pencil") }
                     Button(role: .destructive) {
                         routines.removeAll { $0.id == r.id }
-                        ChoreRoutineStore.save(routines)
+                        persist()
                     } label: { Label("Delete", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.textMuted)
@@ -129,6 +130,11 @@ struct RoutinesView: View {
                     HStack {
                         Image(systemName: "circle").font(.system(size: 10)).foregroundStyle(P.textMuted)
                         Text(it.label).font(.system(size: 12, weight: .semibold))
+                        Text(it.category.capitalized)
+                            .font(.system(size: 9, weight: .heavy))
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Capsule().fill(P.surfaceAlt))
+                            .foregroundStyle(P.textMuted)
                         Spacer()
                         Text("\(it.points) pt").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach)
                     }
@@ -150,6 +156,10 @@ struct RoutinesView: View {
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+    }
+
+    private func persist() {
+        ChoreRoutineStore.save(routines, to: households.preferredTarget, context: moc)
     }
 
     private func spawn(_ r: ChoreRoutineTemplate, dueDate: Date?) {
@@ -180,6 +190,7 @@ struct AddRoutineView: View {
     @State private var items: [ChoreRoutineTemplate.Item] = []
     @State private var newItemLabel: String = ""
     @State private var newItemPoints: Int = 5
+    @State private var newItemCategory: String = "Chores"
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -215,25 +226,41 @@ struct AddRoutineView: View {
                     ForEach(items) { it in
                         HStack {
                             Text(it.label)
+                            Text(it.category.capitalized)
+                                .font(.caption2.weight(.heavy))
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Capsule().fill(Color.gray.opacity(0.18)))
+                                .foregroundStyle(.secondary)
                             Spacer()
                             Text("\(it.points) pt").foregroundStyle(.secondary)
                         }
                     }
                     .onDelete { idx in items.remove(atOffsets: idx) }
-                    HStack {
+                    VStack(spacing: 8) {
                         TextField("Task label", text: $newItemLabel)
-                        Stepper("\(newItemPoints) pt", value: $newItemPoints, in: 0...500, step: 5)
-                            .labelsHidden()
-                        Text("\(newItemPoints)").frame(width: 30, alignment: .trailing)
-                        Button {
-                            let trimmed = newItemLabel.trimmingCharacters(in: .whitespaces)
-                            guard !trimmed.isEmpty else { return }
-                            items.append(.init(label: trimmed, points: newItemPoints))
-                            newItemLabel = ""
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
+                        HStack {
+                            Picker("Category", selection: $newItemCategory) {
+                                ForEach(RoutineItemCategory.options, id: \.tag) { opt in
+                                    Text(opt.label).tag(opt.tag)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            Spacer()
+                            Stepper("\(newItemPoints) pt", value: $newItemPoints, in: 0...500, step: 5)
+                                .labelsHidden()
+                            Text("\(newItemPoints) pt")
+                                .font(.caption.weight(.heavy)).foregroundStyle(.secondary)
+                                .frame(width: 50, alignment: .trailing)
+                            Button {
+                                let trimmed = newItemLabel.trimmingCharacters(in: .whitespaces)
+                                guard !trimmed.isEmpty else { return }
+                                items.append(.init(label: trimmed, points: newItemPoints, category: newItemCategory))
+                                newItemLabel = ""
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                            }
+                            .disabled(newItemLabel.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
-                        .disabled(newItemLabel.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }

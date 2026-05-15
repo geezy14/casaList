@@ -885,6 +885,13 @@ struct SettingsView: View {
                 divider
                 actionButton("Send test (30s — lock phone)") { Task { await sendTestNotification(delay: 30) } }
                 divider
+                actionButton("Send weekly recap test (5s)") {
+                    Task {
+                        await NotificationsManager.sendRecapTestNow(in: moc)
+                        await MainActor.run { lastTestResult = "Weekly recap test scheduled — fires in 5s." }
+                    }
+                }
+                divider
                 actionButton("Refresh scheduled list") { Task { await refreshPending() } }
                 if !pendingList.isEmpty {
                     divider

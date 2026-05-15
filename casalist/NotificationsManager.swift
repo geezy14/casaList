@@ -273,4 +273,39 @@ enum NotificationsManager {
     static func cancelWeeklyRecap() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly-recap"])
     }
+
+    /// Fires a one-shot test notification in ~5 seconds using the same body
+    /// builder as the Sunday recap, so the parent can see exactly what the
+    /// weekly notification will look like with real data.
+    @MainActor
+    static func sendRecapTestNow(in context: NSManagedObjectContext) async {
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        let memberReq = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "deletedAt == nil")
+        let members = (try? context.fetch(memberReq)) ?? []
+        let sortedMembers = members.sorted { $0.points > $1.points }
+
+        let topThree = sortedMembers.isEmpty
+            ? "No family members yet"
+            : sortedMembers.prefix(3).map { "\($0.name) \($0.points)pt" }.joined(separator: " · ")
+
+        let openReq: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        openReq.predicate = NSPredicate(format: "isCompleted == NO AND points > 0 AND deletedAt == nil")
+        let openCount = (try? context.count(for: openReq)) ?? 0
+
+        let body = openCount == 0
+            ? "\(topThree). No open chores 🎉"
+            : "\(topThree). \(openCount) open chore\(openCount == 1 ? "" : "s") this week."
+
+        let content = UNMutableNotificationContent()
+        content.title = "Casalist weekly recap 🏠 (test)"
+        content.body = body
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(identifier: "weekly-recap-test-\(UUID().uuidString)", content: content, trigger: trigger)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
 }

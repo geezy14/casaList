@@ -226,6 +226,11 @@ final class CasaCoreDataStack {
             attr("name", .stringAttributeType, def: "My Household"),
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("deletedAt", .dateAttributeType),
+            // JSON-encoded [ChoreRoutineTemplate]. Stored on Household so the
+            // template list syncs across family members through the shared
+            // store. Schema redeploy required before this field syncs in
+            // Production CloudKit — see ChoreRoutines.swift.
+            attr("routinesJSON", .stringAttributeType, def: ""),
         ]
 
         // ------- FamilyMember attributes -------

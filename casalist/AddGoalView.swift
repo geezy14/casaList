@@ -45,15 +45,19 @@ struct AddGoalView: View {
                     } else {
                         Picker("Family member", selection: $ownerName) {
                             Text("Pick someone").tag("")
+                            #if DEBUG
                             Text("👨‍👩‍👧‍👦 Whole family").tag(TeamGoal.sentinel)
+                            #endif
                             ForEach(members, id: \.uid) { m in
                                 Text(m.name).tag(m.name)
                             }
                         }
+                        #if DEBUG
                         if ownerName == TeamGoal.sentinel {
                             Text("Whole-family goals add together everyone's points. No points are spent when you redeem — it's a celebration milestone.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                        #endif
                     }
                 }
                 Section("Target points") {
