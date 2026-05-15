@@ -3556,9 +3556,7 @@ extension CasalistCottage {
         private var adultShell: some View {
             TabView(selection: $page) {
                 Home().tag(0)
-                MyToDo(onHome: { page = 0 }).tag(1)
-                FamilyListView(onHome: { page = 0 }).tag(2)
-                Rewards(onHome: { page = 0 }).tag(3)
+                Rewards(onHome: { page = 0 }).tag(1)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
