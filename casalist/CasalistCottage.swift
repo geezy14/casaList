@@ -18,11 +18,11 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `vivid(_:)`   saturated jewel tones (current)
+        ///   - `cottage(_:)` original soft pastels (current)
         ///   - `hearth(_:)`  warm home-decor neutrals
-        ///   - `cottage(_:)` original soft pastels
+        ///   - `vivid(_:)`   saturated jewel tones
         static func resolve(_ dark: Bool) -> Palette {
-            vivid(dark)
+            cottage(dark)
         }
 
         /// Original "Cottage" palette — warm pastel peach/mint/butter on
