@@ -3326,18 +3326,24 @@ extension CasalistCottage {
         private var celebrateOverlay: some View {
             ZStack {
                 Color.black.opacity(0.25).ignoresSafeArea()
-                // Confetti emoji floating upward + outward from the center.
+                // Label moved to top so the center of the screen is a clear
+                // canvas for the confetti to fly across.
+                VStack {
+                    Text(celebrateLabel)
+                        .font(.system(size: 28, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 28).padding(.vertical, 16)
+                        .background(Capsule().fill(P.lavender))
+                        .scaleEffect(celebrate ? 1.0 : 0.5)
+                        .opacity(celebrate ? 1.0 : 0.0)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: celebrate)
+                        .padding(.top, 110)
+                    Spacer()
+                }
+                // Confetti drawn LAST so it sails on top of the label.
                 ForEach(0..<14, id: \.self) { i in
                     confettiBit(index: i)
                 }
-                Text(celebrateLabel)
-                    .font(.system(size: 32, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 36).padding(.vertical, 22)
-                    .background(Capsule().fill(P.lavender))
-                .scaleEffect(celebrate ? 1.0 : 0.5)
-                .opacity(celebrate ? 1.0 : 0.0)
-                .animation(.spring(response: 0.4, dampingFraction: 0.6), value: celebrate)
             }
             .transition(.opacity)
         }
