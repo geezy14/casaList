@@ -1066,12 +1066,8 @@ public enum CasalistCottage {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t.task).font(.system(size: 13, weight: .heavy)).lineLimit(2)
-                    HStack(spacing: 6) {
-                        Text(t.assignee ?? "Unassigned").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                        if let due = t.dueDate {
-                            Text("·").foregroundStyle(P.textMuted)
-                            Text(due, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                        }
+                    if let due = t.dueDate {
+                        Text(due, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
                     }
                 }
                 Spacer()
