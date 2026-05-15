@@ -708,7 +708,7 @@ public enum CasalistCottage {
                         tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
                     }.buttonStyle(.plain)
                     Button { showMyToDo = true } label: {
-                        tile(bg: P.sky, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
+                        tile(bg: P.butter, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.plain)
                     Button { showReminders = true } label: {
                         tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
