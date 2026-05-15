@@ -72,27 +72,28 @@ public enum CasalistCottage {
             )
         }
 
-        /// "Vivid" — saturated jewel tones on near-white / near-black.
-        /// Punchy, confident, modern. Same semantic role per accent slot:
-        ///   peach    → coral red    (primary / CTAs)
-        ///   mint     → emerald      (success / completed / chores)
-        ///   butter   → vivid gold   (highlight / pinned / points)
-        ///   lavender → hot grape    (secondary / maintenance)
-        ///   sky      → electric blue (info / cool secondary)
-        ///   coral    → hot magenta  (warning / overdue / urgent)
+        /// "Vivid" — deeper jewel tones, no traditional red. Burnt sienna
+        /// primary, forest emerald, deep amber, aubergine, sapphire, oxblood
+        /// wine for warnings. Reads richer/luxe rather than candy-bright.
+        ///   peach    → burnt sienna (primary / CTAs)
+        ///   mint     → forest green (success / chores)
+        ///   butter   → deep amber   (highlight / points)
+        ///   lavender → aubergine    (secondary / maintenance)
+        ///   sky      → sapphire     (info / cool secondary)
+        ///   coral    → oxblood wine (warning / overdue — non-traditional red)
         static func vivid(_ dark: Bool) -> Palette {
             dark ? Palette(
                 bg: Color(rgb: 0x0A0A12), surface: Color(rgb: 0x14141F), surfaceAlt: Color(rgb: 0x1F1F30), surfaceHi: Color(rgb: 0x2D2D45),
                 border: Color.white.opacity(0.10),
                 text: Color(rgb: 0xFAFAFA), textDim: Color(rgb: 0xFAFAFA).opacity(0.6), textMuted: Color(rgb: 0xFAFAFA).opacity(0.4),
-                peach: Color(rgb: 0xFF7350), mint: Color(rgb: 0x3DD9A4), butter: Color(rgb: 0xFFD740),
-                lavender: Color(rgb: 0xC084FC), sky: Color(rgb: 0x60A5FA), coral: Color(rgb: 0xFF477E)
+                peach: Color(rgb: 0xDB6940), mint: Color(rgb: 0x3FA784), butter: Color(rgb: 0xE8A828),
+                lavender: Color(rgb: 0xA15CC4), sky: Color(rgb: 0x4A85DB), coral: Color(rgb: 0xB05078)
             ) : Palette(
-                bg: Color(rgb: 0xFFFAF2), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xFFF0E0), surfaceHi: Color(rgb: 0xFFE4C9),
-                border: Color(rgb: 0x1A1A1A).opacity(0.10),
-                text: Color(rgb: 0x1A1A1A), textDim: Color(rgb: 0x1A1A1A).opacity(0.6), textMuted: Color(rgb: 0x1A1A1A).opacity(0.4),
-                peach: Color(rgb: 0xFF4D2E), mint: Color(rgb: 0x00B07F), butter: Color(rgb: 0xFFC107),
-                lavender: Color(rgb: 0x9B4DCA), sky: Color(rgb: 0x1E88E5), coral: Color(rgb: 0xFF1F4F)
+                bg: Color(rgb: 0xFFFAF2), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xF5E8D6), surfaceHi: Color(rgb: 0xE8D4B5),
+                border: Color(rgb: 0x1A0F0A).opacity(0.12),
+                text: Color(rgb: 0x1A0F0A), textDim: Color(rgb: 0x1A0F0A).opacity(0.6), textMuted: Color(rgb: 0x1A0F0A).opacity(0.4),
+                peach: Color(rgb: 0xC44A1D), mint: Color(rgb: 0x0F7A5A), butter: Color(rgb: 0xD18800),
+                lavender: Color(rgb: 0x6D2F8F), sky: Color(rgb: 0x1A4DA8), coral: Color(rgb: 0x7A2944)
             )
         }
 
