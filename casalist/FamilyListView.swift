@@ -11,6 +11,7 @@ import CoreData
 public struct FamilyListView: View {
     @Environment(\.colorScheme) private var sys
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("meUid") private var meUid: String = ""
 
@@ -52,7 +53,7 @@ public struct FamilyListView: View {
 
     private var topBar: some View {
         HStack {
-            Button { if let onHome { onHome() } else {} } label: {
+            Button { if let onHome { onHome() } else { dismiss() } } label: {
                 Image(systemName: "house.fill").font(.system(size: 14, weight: .bold)).foregroundStyle(P.text)
                     .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
             }

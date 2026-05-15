@@ -429,9 +429,12 @@ public enum CasalistCottage {
         private var myDashboardTodos: [TaskItem] {
             let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
                 .trimmingCharacters(in: .whitespaces).lowercased()
+            // Family-category items count in MyToDo *once they have an assignee*
+            // (i.e. someone claimed them). Excluded categories below have their
+            // own tiles (groceries / maintenance / reminders).
             return allTodos.filter { t in
                 !t.isCompleted
-                && !["groceries", "maintenance", "reminders", "family"].contains(t.category.lowercased())
+                && !["groceries", "maintenance", "reminders"].contains(t.category.lowercased())
                 && (t.assignee ?? "").trimmingCharacters(in: .whitespaces).lowercased() == myName
             }
         }
@@ -1485,6 +1488,7 @@ extension CasalistCottage {
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAdd) { AddGroceryTripView() }
+            .swipeToDismiss()
         }
 
         private var topBar: some View {
@@ -1822,6 +1826,7 @@ extension CasalistCottage {
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAdd) { AddTaskView(defaultCategory: "Maintenance") }
+            .swipeToDismiss()
         }
 
         private var topBar: some View {
@@ -2035,6 +2040,7 @@ extension CasalistCottage {
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAddReminder) { AddReminderView() }
             .sheet(item: $editingReminder) { reminder in AddReminderView(editing: reminder) }
+            .swipeToDismiss()
         }
 
         private var topBar: some View {
@@ -2368,6 +2374,7 @@ extension CasalistCottage {
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAdd) { AddEventView() }
             .sheet(item: $editingEvent) { event in AddEventView(editing: event) }
+            .swipeToDismiss()
         }
 
         private var topBar: some View {
