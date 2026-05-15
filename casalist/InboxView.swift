@@ -97,7 +97,7 @@ struct InboxView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 if let m = members.first(where: { $0.name.lowercased() == realOwner.lowercased() }) {
-                    CLAvatar(m.asCLMember, size: 32)
+                    LeveledAvatar(member: m, size: 32)
                 } else {
                     ZStack {
                         Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)

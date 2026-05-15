@@ -100,7 +100,7 @@ public enum CasalistCottage {
 
         private var topBar: some View {
             HStack(spacing: 10) {
-                HStack(spacing: -10) { ForEach(members) { CLAvatar($0.asCLMember, size: 34) } }
+                HStack(spacing: -10) { ForEach(members) { LeveledAvatar(member: $0, size: 34) } }
                 Spacer()
                 Button { showInvite = true } label: {
                     Image(systemName: "person.crop.circle.badge.plus").font(.system(size: 15)).foregroundStyle(P.text)
@@ -126,11 +126,13 @@ public enum CasalistCottage {
                         }
                     }
                 }
+                #if DEBUG
                 Button { showStats = true } label: {
                     Image(systemName: "chart.bar.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
                 }
+                #endif
             }.padding(.horizontal, 20).padding(.bottom, 12)
         }
 
@@ -410,7 +412,7 @@ public enum CasalistCottage {
                     VStack(alignment: .leading, spacing: 10) {
                         if let top {
                             HStack(spacing: 14) {
-                                CLAvatar(top.asCLMember, size: 56)
+                                LeveledAvatar(member: top, size: 56)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("1ST PLACE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.7)
                                     Text(top.name).font(.system(size: 22, weight: .heavy))
@@ -581,7 +583,7 @@ public enum CasalistCottage {
                         ForEach(Array(activityFeed.enumerated()), id: \.element.id) { i, a in
                             HStack(spacing: 12) {
                                 if let m = memberFor(a.who) {
-                                    CLAvatar(m.asCLMember, size: 30)
+                                    LeveledAvatar(member: m, size: 30)
                                 } else if !a.who.isEmpty {
                                     Text(String(a.who.prefix(1)).uppercased())
                                         .font(.system(size: 13, weight: .bold))
@@ -748,7 +750,7 @@ public enum CasalistCottage {
                             let podH: CGFloat = place == 1 ? 68 : (place == 2 ? 48 : 36)
                             let podColor = place == 1 ? P.peach : (place == 2 ? P.coral : P.mint)
                             VStack(spacing: 6) {
-                                CLAvatar(m.asCLMember, size: sz)
+                                LeveledAvatar(member: m, size: sz)
                                 Text(m.name).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(rgb: 0x3B2A22))
                                 Text("\(m.points) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
                                 Text(["🥇","🥈","🥉"][place - 1]).font(.system(size: 24, weight: .heavy))
@@ -778,7 +780,7 @@ public enum CasalistCottage {
                     ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
                         HStack(spacing: 12) {
                             Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 20))
-                            CLAvatar(m.asCLMember, size: 36)
+                            LeveledAvatar(member: m, size: 36)
                             VStack(spacing: 5) {
                                 HStack(spacing: 8) {
                                     Text(m.name).font(.system(size: 14, weight: .heavy))
@@ -868,7 +870,7 @@ public enum CasalistCottage {
             let canRedeem = (memberPoints >= g.targetPoints) && (canManagePoints || isViewerOwnerOfGoal(g))
             return VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    if let m { CLAvatar(m.asCLMember, size: 26) }
+                    if let m { LeveledAvatar(member: m, size: 26) }
                     Text(g.ownerName).font(.system(size: 12, weight: .heavy))
                     Spacer()
                     if canManagePoints || isViewerOwnerOfGoal(g) {
@@ -968,7 +970,7 @@ public enum CasalistCottage {
                                 let m = memberFor(g.ownerName)
                                 let color = m?.color ?? P.peach
                                 HStack(spacing: 10) {
-                                    if let m { CLAvatar(m.asCLMember, size: 28) }
+                                    if let m { LeveledAvatar(member: m, size: 28) }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(g.label).font(.system(size: 13, weight: .heavy))
                                         Text("\(g.ownerName) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
@@ -1084,7 +1086,7 @@ public enum CasalistCottage {
                 ((myMember?.name.lowercased() ?? "") == (t.assignee ?? "").lowercased())
             return HStack(spacing: 12) {
                 if let a = assignee {
-                    CLAvatar(a.asCLMember, size: 32)
+                    LeveledAvatar(member: a, size: 32)
                 } else {
                     ZStack {
                         Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)

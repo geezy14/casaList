@@ -93,7 +93,7 @@ struct FamilyStatsView: View {
             sectionTitle("TOP EARNER")
             if let top = members.max(by: { $0.points < $1.points }), top.points > 0 {
                 HStack(spacing: 14) {
-                    CLAvatar(top.asCLMember, size: 56)
+                    LeveledAvatar(member: top, size: 56)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(top.name).font(.system(size: 18, weight: .heavy))
                         Text("\(top.points) pts")
