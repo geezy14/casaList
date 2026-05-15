@@ -1,0 +1,27 @@
+Casalist 1 (build 1.2) — Critical fix + Rewards approvals on standings
+
+CRITICAL FIX (please install before you delete and reinstall)
+- Fixed a bug where deleting and reinstalling the app could wipe the
+ entire family from every device. Cause: an auto-cleanup routine
+ mistook the not-yet-synced CloudKit household for stray garbage and
+ deleted it, propagating the delete to every family member. Disabled
+ the auto-deletion entirely; duplicates (rare) are now cleaned up
+ manually in Settings.
+
+NEW
+- Rewards page: pending reward requests now show as a peach badge
+ directly on the requesting kid's avatar in standings. Admin taps
+ the avatar to open an inline approval sheet with the requester's
+ "why" note and a points stepper. Removed the tray icon from this
+ page — requests live where the data lives.
+- Settings -> Data -> "Reset all data" now also clears streaks and
+ badges. (Was leaving them behind.)
+
+WHAT TO TEST
+- Normal use should be unchanged. The fix is defensive — it just
+ stops a destructive auto-cleanup from running too eagerly.
+- If anyone in the family deletes and reinstalls the app, they
+ should get all the existing family data back via CloudKit sync
+ (give it 1-2 minutes after first launch).
+- As admin, have a kid suggest a reward. Their avatar in your
+ Rewards standings should show a pending count. Tap to approve.

@@ -232,47 +232,49 @@ struct CasalistApp: App {
 /// - If no household exists at all and the user is going to need one
 ///   (they've already set a userName), create one.
 enum HouseholdProvisioner {
+    /// Tracks the timestamp of the first reconcile in this session. The
+    /// destructive "delete stray households" path only runs after enough
+    /// real wall-clock time has passed for CloudKit to have had a fair
+    /// chance to sync the existing household down. Without this delay,
+    /// reconcile would see a fresh install's still-empty just-synced
+    /// household, mistake it for stray garbage, delete it, and propagate
+    /// that delete back to CloudKit — wiping the entire family from every
+    /// device. (Lost Geezy's setup on 2026-05-15 exactly this way.)
+    private static var firstReconcileAt: Date?
+    private static let cloudKitGrace: TimeInterval = 120  // 2 min
+
     static func reconcile(in context: NSManagedObjectContext) {
         Trash.purgeExpired(in: context)
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
+
+        if firstReconcileAt == nil { firstReconcileAt = Date() }
+        let cloudKitWarm = (Date().timeIntervalSince(firstReconcileAt!) >= cloudKitGrace)
 
         // Only auto-create a private household when the user has none at all
         // (fresh install, no share joined). A joiner — someone whose only
         // household is a shared one — shouldn't get a stray empty private
         // alongside it. If they later try to invite people, InviteFamilyView
         // calls ensureHouseholdExists explicitly to spin one up at that moment.
-        if households.isEmpty {
+        //
+        // CRITICAL: only auto-create AFTER the CloudKit grace period. On a
+        // reinstall, the user's existing household lives in CloudKit but
+        // hasn't fetched yet — if we create a new one here, we end up with
+        // two private households and the dedup logic below could clobber
+        // the real one.
+        if households.isEmpty && cloudKitWarm {
             _ = ensureHouseholdExists(in: context)
         }
 
-        // Delete empty private households (and "only-self" stray private
-        // households) once a shared household is present — that's the joiner
-        // arriving and we want to abandon the local placeholder. Also dedupe
-        // if multiple private households piled up.
-        let updatedHouseholds = (try? context.fetch(req)) ?? []
-        let updatedPrivate = updatedHouseholds.filter { isOwnedByMe($0, in: context) }
-        let hasShared = updatedHouseholds.contains { !isOwnedByMe($0, in: context) }
-        let strayPrivate = updatedPrivate.filter { isEmpty($0) || (hasShared && isOnlySelf($0)) }
-        if (hasShared && !strayPrivate.isEmpty) || updatedPrivate.count > 1 {
-            let realPrivate = updatedPrivate.filter { !isEmpty($0) && !(hasShared && isOnlySelf($0)) }
-            let keep: Household? = realPrivate.first ?? (hasShared ? nil : strayPrivate.first)
-            for h in updatedPrivate where h != keep {
-                context.delete(h)
-            }
-            // After deletion, any meUid claim that pointed at the local user
-            // in the stray household is now invalid — clear it so the joiner
-            // re-adopts the shared-household FamilyMember via adoptMeIfNeeded.
-            let meUid = UserDefaults.standard.string(forKey: "meUid") ?? ""
-            if !meUid.isEmpty, let uuid = UUID(uuidString: meUid) {
-                let memReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
-                memReq.predicate = NSPredicate(format: "uid == %@", uuid as CVarArg)
-                if ((try? context.count(for: memReq)) ?? 0) == 0 {
-                    UserDefaults.standard.set("", forKey: "meUid")
-                }
-            }
-            try? context.save()
-        }
+        // Auto-deletion is DISABLED. The previous version deleted "stray"
+        // private households whenever CloudKit hadn't fetched a household's
+        // members yet — turned a routine reinstall into a family-wide data
+        // loss event. If the user accumulates duplicate households (rare),
+        // they can clean up manually in Settings → Data.
+        //
+        // Keeping the function shape (and the cloudKitWarm guard above) so
+        // the contract for callers doesn't change.
+        _ = cloudKitWarm  // silence unused-warning if we re-enable later
     }
 
     /// True if this household has no members, tasks, goals, chores, or events.
