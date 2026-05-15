@@ -935,8 +935,11 @@ public enum CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var showAddGoal: Bool = false
         @State private var showSettings: Bool = false
-        @State private var showInbox: Bool = false
         @State private var redeemTarget: FamilyGoal? = nil
+        /// When admin taps a member's avatar in standings (and that member
+        /// has at least one pending request), this opens an inline approval
+        /// sheet scoped to just their requests.
+        @State private var pendingForKid: FamilyMember? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var celebrateEmoji: String = "⭐"
@@ -979,17 +982,175 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddGoal) { AddGoalView() }
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .sheet(isPresented: $showInbox) { InboxView() }
+            .sheet(item: $pendingForKid) { m in pendingForKidSheet(m) }
             .celebration(visible: $celebrate, label: celebrateLabel, emoji: celebrateEmoji)
         }
 
-        private var rewardsInboxBadgeCount: Int {
-            let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
-            let pending = goalsQuery.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
-            if me?.canManageFamily == true { return pending.count }
-            let lc = (me?.name.lowercased() ?? userName.lowercased())
-            return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
+        /// Pending FamilyGoals owned by this member (PENDING:<name> pattern),
+        /// excluding redeemed and soft-deleted records.
+        private func pendingForMember(_ m: FamilyMember) -> [FamilyGoal] {
+            let lc = m.name.lowercased()
+            return goalsQuery.filter { g in
+                GoalApproval.isPending(g)
+                && !g.isRedeemed
+                && g.isLive
+                && GoalApproval.realOwnerName(g).lowercased() == lc
+            }
         }
+
+        /// Sheet presented when an admin taps a kid's avatar with a pending
+        /// badge in standings. Shows that kid's pending reward requests with
+        /// inline price-setting + Approve / Deny.
+        private func pendingForKidSheet(_ m: FamilyMember) -> some View {
+            PendingForKidSheet(member: m, palette: P, moc: modelContext)
+        }
+
+    /// Per-member approval sheet — extracted so each pending goal row can
+    /// hold its own `@State` for the price stepper without leaking across
+    /// rows or across sheet presentations.
+    fileprivate struct PendingForKidSheet: View {
+        let member: FamilyMember
+        let palette: Palette
+        let moc: NSManagedObjectContext
+        @Environment(\.dismiss) private var dismiss
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)],
+                      predicate: NSPredicate(format: "deletedAt == nil")) private var goals: FetchedResults<FamilyGoal>
+
+        private var P: Palette { palette }
+
+        private var pending: [FamilyGoal] {
+            let lc = member.name.lowercased()
+            return goals.filter { g in
+                GoalApproval.isPending(g)
+                && !g.isRedeemed
+                && g.isLive
+                && GoalApproval.realOwnerName(g).lowercased() == lc
+            }
+        }
+
+        var body: some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            header
+                            if pending.isEmpty {
+                                VStack(spacing: 10) {
+                                    Text("🎉").font(.system(size: 44))
+                                    Text("All caught up").font(.system(size: 16, weight: .heavy))
+                                    Text("\(member.name) has no pending requests.")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(P.textMuted)
+                                }
+                                .padding(24)
+                                .frame(maxWidth: .infinity)
+                                .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                            } else {
+                                ForEach(pending, id: \.uid) { g in
+                                    PendingGoalCard(goal: g, palette: P, moc: moc)
+                                }
+                            }
+                        }
+                        .padding(20)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .navigationTitle("\(member.name)'s requests")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                }
+                .foregroundStyle(P.text)
+            }
+        }
+
+        private var header: some View {
+            HStack(spacing: 12) {
+                LeveledAvatar(member: member, size: 48, showEmblem: false)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.name).font(.system(size: 18, weight: .heavy))
+                    Text("\(pending.count) pending request\(pending.count == 1 ? "" : "s")")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textMuted)
+                }
+                Spacer()
+            }
+            .padding(.bottom, 4)
+        }
+    }
+
+    /// One pending goal card with its own price stepper state. Approve sets
+    /// the price + strips the PENDING: prefix; Deny soft-deletes.
+    fileprivate struct PendingGoalCard: View {
+        let goal: FamilyGoal
+        let palette: Palette
+        let moc: NSManagedObjectContext
+        @State private var draftPrice: Int = 0
+        @State private var initialized: Bool = false
+
+        private var P: Palette { palette }
+        private var needsPrice: Bool { goal.targetPoints == 0 }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Text("💬").font(.system(size: 24))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(goal.label).font(.system(size: 15, weight: .heavy))
+                        Text(needsPrice ? "Needs a price" : "Suggested: \(goal.targetPoints) pts")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                    Spacer()
+                }
+                if !goal.note.isEmpty {
+                    Text("\u{201C}\(goal.note)\u{201D}")
+                        .font(.system(size: 13, weight: .semibold).italic())
+                        .foregroundStyle(P.textDim)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.4)))
+                }
+                HStack {
+                    Text("Set price").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
+                    Spacer()
+                    Text("\(draftPrice) pts").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.peach)
+                    Stepper("\(draftPrice) pts", value: $draftPrice, in: 10...10_000, step: 10).labelsHidden()
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.5)))
+                HStack(spacing: 10) {
+                    Button {
+                        GoalApproval.deny(goal, in: moc)
+                        try? moc.save()
+                    } label: {
+                        Text("Deny").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(Color.red.opacity(0.8)))
+                    }.buttonStyle(.plain)
+                    Button {
+                        GoalApproval.approve(goal, targetPoints: draftPrice)
+                        try? moc.save()
+                    } label: {
+                        Text("Approve · \(draftPrice) pts")
+                            .font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(P.mint))
+                    }.buttonStyle(.plain)
+                    .disabled(draftPrice < 10)
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+            .onAppear {
+                if !initialized {
+                    draftPrice = goal.targetPoints > 0 ? Int(goal.targetPoints) : 50
+                    initialized = true
+                }
+            }
+        }
+    }
 
         private var topBar: some View {
             HStack(spacing: 10) {
@@ -1004,17 +1165,6 @@ public enum CasalistCottage {
                 Button { showSettings = true } label: {
                     Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
-                Button { showInbox = true } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                        if rewardsInboxBadgeCount > 0 {
-                            Text("\(rewardsInboxBadgeCount)").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
-                                .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(Capsule().fill(P.peach)).offset(x: 6, y: -2)
-                        }
-                    }
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -1091,9 +1241,29 @@ public enum CasalistCottage {
                 Text("STANDINGS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                 VStack(spacing: 0) {
                     ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
+                        let pendingCount = pendingForMember(m).count
+                        let canApprove = canManagePoints && pendingCount > 0
                         HStack(spacing: 12) {
                             Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 20))
-                            LeveledAvatar(member: m, size: 36, showEmblem: false)
+                            Button {
+                                if canApprove { pendingForKid = m }
+                            } label: {
+                                ZStack(alignment: .topTrailing) {
+                                    LeveledAvatar(member: m, size: 36, showEmblem: false)
+                                    if canApprove {
+                                        Text("\(pendingCount)")
+                                            .font(.system(size: 9, weight: .heavy))
+                                            .foregroundStyle(.white)
+                                            .frame(minWidth: 16, minHeight: 16)
+                                            .padding(.horizontal, 3)
+                                            .background(Capsule().fill(P.peach))
+                                            .overlay(Capsule().stroke(P.surface, lineWidth: 2))
+                                            .offset(x: 6, y: -4)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!canApprove)
                             VStack(spacing: 5) {
                                 HStack(spacing: 8) {
                                     Text(m.name).font(.system(size: 14, weight: .heavy))
