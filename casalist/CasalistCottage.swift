@@ -413,12 +413,17 @@ public enum CasalistCottage {
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
 
-        private var openTodoCount: Int {
-            allTodos.filter { !$0.isCompleted && !["groceries", "maintenance", "reminders"].contains($0.category.lowercased()) }.count
+        private var myDashboardTodos: [TaskItem] {
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces).lowercased()
+            return allTodos.filter { t in
+                !t.isCompleted
+                && !["groceries", "maintenance", "reminders", "family"].contains(t.category.lowercased())
+                && (t.assignee ?? "").trimmingCharacters(in: .whitespaces).lowercased() == myName
+            }
         }
-        private var nextTodoTitle: String {
-            allTodos.first(where: { !$0.isCompleted && !["groceries", "maintenance", "reminders"].contains($0.category.lowercased()) })?.task ?? ""
-        }
+        private var openTodoCount: Int { myDashboardTodos.count }
+        private var nextTodoTitle: String { myDashboardTodos.first?.task ?? "" }
         private var groceryItems: [TaskItem] {
             allTodos.filter { t in
                 !t.isCompleted &&
@@ -1089,6 +1094,8 @@ extension CasalistCottage {
         @Environment(\.colorScheme) private var sys
         @Environment(\.dismiss) private var dismiss
         @Environment(\.managedObjectContext) private var modelContext
+        @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
         @State private var darkOverride: Bool? = nil
         @State private var filter: String = "All"
         @State private var showAddTodo = false
@@ -1102,8 +1109,17 @@ extension CasalistCottage {
         private func isModuleCategory(_ cat: String) -> Bool {
             ["groceries", "maintenance", "reminders"].contains(cat.lowercased())
         }
-        private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) } }
-        private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) } }
+        /// True if the task is mine — assignee matches my display name (case
+        /// insensitive). Empty/unassigned tasks are *not* "mine" and shouldn't
+        /// clutter my list (they live on the Family wall).
+        private func isMine(_ t: TaskItem) -> Bool {
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces).lowercased()
+            guard !myName.isEmpty else { return false }
+            return (t.assignee ?? "").trimmingCharacters(in: .whitespaces).lowercased() == myName
+        }
+        private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && isMine($0) } }
+        private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) && isMine($0) } }
         private func isToday(_ d: Date?) -> Bool {
             guard let d else { return false }
             return Calendar.current.isDateInToday(d)
