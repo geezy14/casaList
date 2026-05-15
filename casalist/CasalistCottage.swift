@@ -147,7 +147,9 @@ public enum CasalistCottage {
                 greetingCard
                 stickyAgenda
                 quickAdd
+                #if DEBUG
                 if canManage { quickAddChips }
+                #endif
                 star
                 tiles
                 whatsNew
@@ -934,15 +936,18 @@ public enum CasalistCottage {
         }
 
         private func goalCard(_ g: FamilyGoal) -> some View {
-            let m = memberFor(g.ownerName)
-            let memberPoints = m?.points ?? 0
-            let progress = min(memberPoints, g.targetPoints)
-            let color = m?.color ?? P.peach
-            let canRedeem = (memberPoints >= g.targetPoints) && (canManagePoints || isViewerOwnerOfGoal(g))
+            let isTeam = TeamGoal.isTeam(g)
+            let m = isTeam ? nil : memberFor(g.ownerName)
+            let rawProgress: Int64 = isTeam ? TeamGoal.progress(for: g, members: members) : (m?.points ?? 0)
+            let progress = min(rawProgress, g.targetPoints)
+            let color = isTeam ? P.lavender : (m?.color ?? P.peach)
+            let canRedeem = (rawProgress >= g.targetPoints) && (isTeam || canManagePoints || isViewerOwnerOfGoal(g))
             return VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    if let m { LeveledAvatar(member: m, size: 26) }
-                    Text(g.ownerName).font(.system(size: 12, weight: .heavy))
+                    if isTeam {
+                        Text("👨‍👩‍👧‍👦").font(.system(size: 18))
+                    } else if let m { LeveledAvatar(member: m, size: 26) }
+                    Text(isTeam ? TeamGoal.displayName : g.ownerName).font(.system(size: 12, weight: .heavy))
                     Spacer()
                     if canManagePoints || isViewerOwnerOfGoal(g) {
                         Button {
@@ -983,16 +988,19 @@ public enum CasalistCottage {
         }
 
         private func redeemSheet(_ g: FamilyGoal) -> some View {
-            let m = memberFor(g.ownerName)
-            let color = m?.color ?? P.peach
+            let isTeam = TeamGoal.isTeam(g)
+            let m = isTeam ? nil : memberFor(g.ownerName)
+            let color = isTeam ? P.lavender : (m?.color ?? P.peach)
             return NavigationStack {
                 ZStack {
                     P.bg.ignoresSafeArea()
                     VStack(spacing: 18) {
                         Spacer().frame(height: 8)
-                        Image(systemName: "gift.fill").font(.system(size: 44)).foregroundStyle(color)
+                        Image(systemName: isTeam ? "party.popper.fill" : "gift.fill").font(.system(size: 44)).foregroundStyle(color)
                         Text("Redeem \(g.label)?").font(.system(size: 20, weight: .heavy)).multilineTextAlignment(.center)
-                        Text("\(g.targetPoints) pts will be spent from \(g.ownerName)'s balance.")
+                        Text(isTeam
+                            ? "Whole-family goals are celebration milestones — no points get spent."
+                            : "\(g.targetPoints) pts will be spent from \(g.ownerName)'s balance.")
                             .font(.system(size: 13)).foregroundStyle(P.textMuted)
                             .multilineTextAlignment(.center).padding(.horizontal, 24)
                         HStack(spacing: 12) {
@@ -1001,7 +1009,7 @@ public enum CasalistCottage {
                                 .background(Capsule().fill(P.surfaceAlt))
                                 .foregroundStyle(P.text)
                             Button {
-                                if let m = memberFor(g.ownerName) {
+                                if !isTeam, let m = memberFor(g.ownerName) {
                                     m.points = max(0, m.points - g.targetPoints)
                                 }
                                 g.isRedeemed = true
@@ -1038,13 +1046,16 @@ public enum CasalistCottage {
                         Text("REDEEMED 🏆").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                         VStack(spacing: 8) {
                             ForEach(redeemedGoals.prefix(6)) { g in
-                                let m = memberFor(g.ownerName)
-                                let color = m?.color ?? P.peach
+                                let isTeam = TeamGoal.isTeam(g)
+                                let m = isTeam ? nil : memberFor(g.ownerName)
+                                let color = isTeam ? P.lavender : (m?.color ?? P.peach)
                                 HStack(spacing: 10) {
-                                    if let m { LeveledAvatar(member: m, size: 28) }
+                                    if isTeam {
+                                        Text("👨‍👩‍👧‍👦").font(.system(size: 22))
+                                    } else if let m { LeveledAvatar(member: m, size: 28) }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(g.label).font(.system(size: 13, weight: .heavy))
-                                        Text("\(g.ownerName) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                                        Text("\(isTeam ? TeamGoal.displayName : g.ownerName) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
                                     }
                                     Spacer()
                                     if let d = g.redeemedAt {
