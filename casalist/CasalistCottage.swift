@@ -18,12 +18,11 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `calm(_:)`    cool muted spa tones (current)
-        ///   - `cottage(_:)` original soft pastels
+        ///   - `cottage(_:)` original soft pastels (current)
         ///   - `hearth(_:)`  warm home-decor neutrals
         ///   - `vivid(_:)`   saturated jewel tones
         static func resolve(_ dark: Bool) -> Palette {
-            calm(dark)
+            cottage(dark)
         }
 
         /// Original "Cottage" palette — warm pastel peach/mint/butter on
@@ -98,30 +97,6 @@ public enum CasalistCottage {
             )
         }
 
-        /// "Calm" — cool, low-saturation. Sage / seafoam / dusty rose /
-        /// lilac on stone-white / slate-dark. Spa/meditation vibe; warnings
-        /// stay visible but never shout. Accent role mapping:
-        ///   peach    → dusty rose      (primary / CTAs)
-        ///   mint     → eucalyptus sage (success / chores)
-        ///   butter   → soft sand       (highlight / points)
-        ///   lavender → dusty lilac     (secondary / maintenance)
-        ///   sky      → seafoam         (info / cool secondary)
-        ///   coral    → soft brick      (warning / overdue — muted on purpose)
-        static func calm(_ dark: Bool) -> Palette {
-            dark ? Palette(
-                bg: Color(rgb: 0x1A2024), surface: Color(rgb: 0x232A2E), surfaceAlt: Color(rgb: 0x2D3438), surfaceHi: Color(rgb: 0x3A4248),
-                border: Color.white.opacity(0.08),
-                text: Color(rgb: 0xE8ECEA), textDim: Color(rgb: 0xE8ECEA).opacity(0.55), textMuted: Color(rgb: 0xE8ECEA).opacity(0.35),
-                peach: Color(rgb: 0xE5A8AC), mint: Color(rgb: 0xA8C5B7), butter: Color(rgb: 0xE4CFA2),
-                lavender: Color(rgb: 0xB8AEDB), sky: Color(rgb: 0xA0C2D2), coral: Color(rgb: 0xD49991)
-            ) : Palette(
-                bg: Color(rgb: 0xF1F3F2), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xE3E8E7), surfaceHi: Color(rgb: 0xD0D9D6),
-                border: Color(rgb: 0x2C3839).opacity(0.10),
-                text: Color(rgb: 0x2C3839), textDim: Color(rgb: 0x2C3839).opacity(0.6), textMuted: Color(rgb: 0x2C3839).opacity(0.4),
-                peach: Color(rgb: 0xC98E92), mint: Color(rgb: 0x8AAA9D), butter: Color(rgb: 0xD4BC8F),
-                lavender: Color(rgb: 0x9F95C4), sky: Color(rgb: 0x7FA4B5), coral: Color(rgb: 0xC18278)
-            )
-        }
 
         /// Bright, candy-colored palette used by the Kid (starfield) view.
         static func starfield() -> Palette {
