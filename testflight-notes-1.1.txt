@@ -1,0 +1,32 @@
+Casalist 1 (build 1.1) — Family rollout day
+
+This is the first build the rest of the family will use. Welcome!
+
+WHAT'S NEW IN 1.1
+• Settings → Data → "Reset all data" (admin only). Wipes every chore,
+ goal, event, streak, badge, and quick-add — points reset to 0 — but
+ keeps the household and every family member intact. Use it if you
+ want a clean start without re-inviting everyone.
+
+EVERYTHING ELSE IS UNCHANGED FROM 1.0
+• Kid mode (starfield) for family members marked as Kid.
+• Three color themes in Settings → Appearance: Ember (default), Vivid,
+ Anchor. Swap any time.
+• Push notifications when you get a new task, when a reward request
+ needs approval (admins), and when a family member redeems a reward.
+ Weekly Sunday recap of standings.
+• Goal economy: anyone can ask for a reward (label + optional "why");
+ admins set the points price at approval.
+• "Home" tile bundles home + maintenance with a pill toggle inside.
+• Quick-add chips on Home for one-tap chore creation.
+• Pull-to-refresh on every scrollable screen.
+
+WHAT TO TEST
+• Add a chore assigned to someone else. Within ~30s they should get a
+ push and see it on their dashboard.
+• Have a kid hit "Ask for a reward" with a note. Approve from your
+ inbox with a price you set. Watch the kid's shelf update.
+• Check off chores back-and-forth between phones to verify points
+ sync and the WHAT'S NEW feed picks up the correct doer/time.
+• Try the Reset all data button if you want to start clean before
+ real use. Cannot be undone.

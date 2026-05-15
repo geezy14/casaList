@@ -141,18 +141,33 @@ def upsert_notes(token: str, build_id: str, notes: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
+    # Two args: version (MARKETING_VERSION used to filter App Store Connect)
+    # AND notes-suffix (filename testflight-notes-<suffix>.txt). They diverge
+    # whenever MARKETING_VERSION != CURRENT_PROJECT_VERSION — e.g. version 1
+    # build 1.1.
+    #     scripts/set_testflight_notes.py                # newest notes file
+    #     scripts/set_testflight_notes.py 1.0            # both = "1.0"
+    #     scripts/set_testflight_notes.py 1 1.1          # filter version, notes file
+    if len(sys.argv) >= 3:
+        version = sys.argv[1]
+        notes_suffix = sys.argv[2]
+        notes_path = REPO / f"testflight-notes-{notes_suffix}.txt"
+    elif len(sys.argv) == 2:
         version = sys.argv[1]
         notes_path = REPO / f"testflight-notes-{version}.txt"
+        # If exact match doesn't exist, fall back to newest file by mtime.
+        if not notes_path.exists():
+            candidates = sorted(REPO.glob("testflight-notes-*.txt"),
+                                key=lambda p: p.stat().st_mtime)
+            if candidates:
+                notes_path = candidates[-1]
+                print(f"  (no testflight-notes-{version}.txt — falling back to {notes_path.name})")
     else:
-        # Pick the most-recently-modified file rather than the
-        # alphabetically-last one ("5" > "4.0" in string sort).
         notes_files = sorted(REPO.glob("testflight-notes-*.txt"),
                              key=lambda p: p.stat().st_mtime)
         if not notes_files:
             sys.exit("No testflight-notes-*.txt files in repo")
         notes_path = notes_files[-1]
-        # Extract version from filename.
         version = notes_path.stem.replace("testflight-notes-", "")
 
     if not notes_path.exists():
