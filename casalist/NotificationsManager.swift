@@ -335,6 +335,64 @@ enum NotificationsManager {
         defaults.set(Array(notified), forKey: notifiedAssignmentsKey)
     }
 
+    // MARK: – Reward-request push notifications
+
+    private static let notifiedRequestsKey = "notifiedPendingRequestUIDs"
+
+    /// Fire a local notification for every newly-pending FamilyGoal (a
+    /// reward request from a kid or non-admin) that's landed on this
+    /// device. Only admins get pinged — non-admin family members don't
+    /// need to know about other people's requests.
+    @MainActor
+    static func detectAndNotifyPendingRequests(in context: NSManagedObjectContext, userName: String) async {
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Verify this device's user is actually an admin — non-admins
+        // shouldn't get notified about other people's reward requests.
+        let memberReq = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "deletedAt == nil AND name LIKE[c] %@", trimmed)
+        guard let me = (try? context.fetch(memberReq))?.first, me.canManageFamily else { return }
+
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let goalReq: NSFetchRequest<FamilyGoal> = FamilyGoal.fetchRequest()
+        goalReq.predicate = NSPredicate(
+            format: "ownerName BEGINSWITH %@ AND isRedeemed == NO AND deletedAt == nil AND createdAt > %@",
+            GoalApproval.pendingPrefix, cutoff as NSDate
+        )
+        guard let pending = try? context.fetch(goalReq), !pending.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        var notified = Set(defaults.stringArray(forKey: notifiedRequestsKey) ?? [])
+
+        for g in pending {
+            let key = g.uid.uuidString
+            if notified.contains(key) { continue }
+            let requester = GoalApproval.realOwnerName(g)
+            guard !requester.isEmpty else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = "💬 \(requester) asked for a reward"
+            var bodyParts: [String] = [g.label]
+            if !g.note.isEmpty { bodyParts.append("\u{201C}\(g.note)\u{201D}") }
+            content.body = bodyParts.joined(separator: " — ")
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "request-\(key)",
+                content: content,
+                trigger: trigger
+            )
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedRequestsKey)
+    }
+
     // MARK: – Redemption push notifications
 
     private static let notifiedRedemptionsKey = "notifiedRedemptionUIDs"

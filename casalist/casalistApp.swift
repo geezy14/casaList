@@ -189,6 +189,7 @@ struct CasalistApp: App {
                         Task { @MainActor in
                             await NotificationsManager.detectAndNotifyRedemptions(in: stack.context)
                             await NotificationsManager.detectAndNotifyAssignments(in: stack.context, userName: userName)
+                            await NotificationsManager.detectAndNotifyPendingRequests(in: stack.context, userName: userName)
                         }
                     }
                 }
