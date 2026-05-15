@@ -108,7 +108,7 @@ public enum CasalistCottage {
                 }
                 Button { showInbox = true } label: {
                     ZStack(alignment: .topTrailing) {
-                        Image(systemName: "envelope.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
                             .frame(width: 38, height: 38)
                             .background(Circle().fill(P.surfaceAlt))
                         if inboxBadgeCount > 0 {
