@@ -16,15 +16,36 @@ public enum CasalistCottage {
         let bg, surface, surfaceAlt, surfaceHi, border, text, textDim, textMuted: Color
         let peach, mint, butter, lavender, sky, coral: Color
 
-        /// The currently-active palette. Swap the return statement to flip
-        /// the whole app between themes. Available factories:
-        ///   - `anchor(_:)`  cobalt blue + carrot orange family theme (current)
-        ///   - `dodger(_:)`  dodger-blue-forward
-        ///   - `vivid(_:)`   saturated jewel tones
-        ///   - `ember(_:)`   coral-forward warm
-        ///   - `harbor(_:)`  saturated coastal blue
+        /// Default palette name when none has been picked yet.
+        static let defaultName = "ember"
+
+        /// Resolve a specific palette by name regardless of the user's
+        /// active selection. Used by the Settings picker swatches so they
+        /// can preview each option's colors.
+        static func resolveForPreview(_ name: String, dark: Bool) -> Palette {
+            switch name {
+            case "vivid":  return vivid(dark)
+            case "anchor": return anchor(dark)
+            case "harbor": return harbor(dark)
+            case "dodger": return dodger(dark)
+            default:       return ember(dark)
+            }
+        }
+
+        /// User-selectable theme. Routes to one of the named factories based
+        /// on the "paletteName" AppStorage value (Settings → Appearance).
+        ///
+        /// IMPORTANT: any view that wants palette changes to take effect must
+        /// declare `@AppStorage("paletteName")` in scope (or be a child of a
+        /// view that does) so SwiftUI re-evaluates the `P` computed property
+        /// when the user flips the picker.
         static func resolve(_ dark: Bool) -> Palette {
-            anchor(dark)
+            let name = UserDefaults.standard.string(forKey: "paletteName") ?? defaultName
+            switch name {
+            case "vivid":  return vivid(dark)
+            case "anchor": return anchor(dark)
+            default:       return ember(dark)
+            }
         }
 
         /// "Anchor" — the Casalist family theme. Cobalt-blue primary
@@ -3660,6 +3681,11 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         @AppStorage("appearancePref") private var appearancePref: String = "system"
+        // Forces the entire shell to re-render when the user picks a different
+        // theme in Settings. We don't use the value directly; we just need
+        // SwiftUI to observe it. Palette.resolve(_:) reads it from
+        // UserDefaults at body-eval time.
+        @AppStorage("paletteName") private var paletteName: String = Palette.defaultName
         @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
         private var members: FetchedResults<FamilyMember>

@@ -34,6 +34,7 @@ struct SettingsView: View {
     @State private var showHelp: Bool = false
     @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
+    @AppStorage("paletteName") private var paletteName: String = "ember"  // ember | vivid | anchor
     @AppStorage("backupEnabled") private var backupEnabled: Bool = true
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
@@ -724,9 +725,49 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16).padding(.vertical, 12)
+                divider
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COLOR PALETTE")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.0)
+                        .foregroundStyle(P.textMuted)
+                    HStack(spacing: 8) {
+                        paletteSwatch("ember", label: "Ember")
+                        paletteSwatch("vivid", label: "Vivid")
+                        paletteSwatch("anchor", label: "Anchor")
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
             .cardBg(P)
         }
+    }
+
+    /// Swatch button — shows the palette's primary + a couple accents and the
+    /// label. Tapping it swaps the active palette via AppStorage. Re-renders
+    /// the whole app because Root observes `paletteName`.
+    private func paletteSwatch(_ name: String, label: String) -> some View {
+        let active = paletteName == name
+        let swatch = CasalistCottage.Palette.resolveForPreview(name, dark: false)
+        return Button { paletteName = name } label: {
+            VStack(spacing: 6) {
+                HStack(spacing: 0) {
+                    swatch.peach.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    swatch.mint.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    swatch.butter.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                Text(label).font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(active ? P.text : P.textDim)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12).fill(active ? P.surfaceAlt : Color.clear))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(active ? P.peach : P.border, lineWidth: active ? 2 : 1)
+            )
+        }.buttonStyle(.plain)
     }
 
     // MARK: About
