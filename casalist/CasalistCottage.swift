@@ -584,9 +584,18 @@ public enum CasalistCottage {
         private var groceryActiveCount: Int { groceryItems.count }
         private var groceryNextItems: String { groceryItems.prefix(3).map { $0.task }.joined(separator: ", ") }
         private var maintenanceItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "maintenance" } }
-        private var maintenanceActiveCount: Int { maintenanceItems.count }
+        /// "Home" tile bundles both `home` and `maintenance` category tasks so
+        /// the dashboard surfaces both kinds at a glance. The detail view has
+        /// a pill toggle to drill into one category at a time.
+        private var homeAndMaintenanceItems: [TaskItem] {
+            allTodos.filter { !$0.isCompleted && (["home", "maintenance"].contains($0.category.lowercased())) }
+        }
+        private var homeTileCount: Int { homeAndMaintenanceItems.count }
         private var maintenanceOverdueCount: Int { maintenanceItems.filter { ($0.dueDate ?? .distantFuture) < Date() }.count }
-        private var maintenanceNextItem: String { maintenanceItems.first?.task ?? "" }
+        private var homeOverdueCount: Int {
+            homeAndMaintenanceItems.filter { ($0.dueDate ?? .distantFuture) < Date() }.count
+        }
+        private var homeNextItem: String { homeAndMaintenanceItems.first?.task ?? "" }
         private var reminderItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "reminders" } }
         private var reminderCount: Int { reminderItems.count }
         private var reminderPreview: String { reminderItems.prefix(3).map { $0.task }.joined(separator: ", ") }
@@ -599,7 +608,7 @@ public enum CasalistCottage {
                         tile(bg: P.mint, emoji: "🛒", label: "Grocery", big: "\(groceryActiveCount)", suffix: "to get", sub: groceryNextItems)
                     }.buttonStyle(.plain)
                     Button { showMaintenance = true } label: {
-                        tile(bg: P.lavender, emoji: "🔧", label: "Maintenance", big: "\(maintenanceActiveCount)", suffix: "open", sub: maintenanceNextItem, badge: maintenanceOverdueCount > 0 ? "\(maintenanceOverdueCount) DUE" : nil)
+                        tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
                     }.buttonStyle(.plain)
                     Button { showMyToDo = true } label: {
                         tile(bg: P.sky, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
@@ -2104,13 +2113,20 @@ extension CasalistCottage {
         @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var showAdd = false
+        /// Category pill — "Home" or "Maintenance". The dashboard tile is now
+        /// labeled "Home" and lands here; default to the home category so the
+        /// view title matches what the user just tapped.
+        @State private var categoryPill: String = "Home"
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
 
-        private var maintenanceTasks: [TaskItem] { allTasks.filter { $0.category.lowercased() == "maintenance" } }
+        private var activeCategoryTag: String {
+            categoryPill == "Maintenance" ? "maintenance" : "home"
+        }
+        private var maintenanceTasks: [TaskItem] { allTasks.filter { $0.category.lowercased() == activeCategoryTag } }
         private var active: [TaskItem] { maintenanceTasks.filter { !$0.isCompleted } }
         private var done: [TaskItem] { maintenanceTasks.filter { $0.isCompleted } }
         private var overdue: [TaskItem] {
@@ -2144,8 +2160,29 @@ extension CasalistCottage {
             }
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
-            .sheet(isPresented: $showAdd) { AddTaskView(defaultCategory: "Maintenance") }
+            .sheet(isPresented: $showAdd) {
+                AddTaskView(defaultCategory: categoryPill == "Maintenance" ? "Maintenance" : "home")
+            }
             .swipeToDismiss()
+        }
+
+        private var pill: some View {
+            HStack(spacing: 8) {
+                ForEach(["Home", "Maintenance"], id: \.self) { opt in
+                    let active = categoryPill == opt
+                    Button { categoryPill = opt } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: opt == "Home" ? "house.fill" : "wrench.and.screwdriver.fill")
+                                .font(.system(size: 11, weight: .heavy))
+                            Text(opt).font(.system(size: 13, weight: .heavy))
+                        }
+                        .foregroundStyle(active ? .white : P.textDim)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Capsule().fill(active ? P.lavender : P.surfaceAlt))
+                    }.buttonStyle(.plain)
+                }
+                Spacer()
+            }
         }
 
         private var topBar: some View {
@@ -2170,6 +2207,7 @@ extension CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 hero
+                pill
                 if active.isEmpty && done.isEmpty {
                     emptyCard
                 } else {
@@ -2185,10 +2223,11 @@ extension CasalistCottage {
             HStack(spacing: 16) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 76, height: 76)
-                    Image(systemName: "wrench.and.screwdriver.fill").font(.system(size: 32)).foregroundStyle(.white)
+                    Image(systemName: categoryPill == "Maintenance" ? "wrench.and.screwdriver.fill" : "house.fill")
+                        .font(.system(size: 32)).foregroundStyle(.white)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("MAINTENANCE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    Text(categoryPill.uppercased()).font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
                     Text("\(active.count) on the list").font(.system(size: 22, weight: .heavy))
                     Text(overdue.isEmpty ? "All good" : "\(overdue.count) overdue").font(.system(size: 12, weight: .semibold)).opacity(0.85)
                 }
