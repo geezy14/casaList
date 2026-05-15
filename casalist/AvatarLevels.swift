@@ -12,10 +12,10 @@ enum AvatarLevel: Int, CaseIterable {
 
     init(points: Int) {
         switch points {
-        case 0..<50:    self = .rookie
-        case 50..<150:  self = .bronze
-        case 150..<300: self = .silver
-        case 300..<500: self = .gold
+        case 0..<10:    self = .rookie
+        case 10..<75:   self = .bronze
+        case 75..<200:  self = .silver
+        case 200..<400: self = .gold
         default:        self = .platinum
         }
     }
