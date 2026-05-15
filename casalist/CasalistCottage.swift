@@ -18,11 +18,12 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `cottage(_:)` soft pastels (current)
+        ///   - `harbor(_:)`  coastal blue + warm accents (current)
+        ///   - `cottage(_:)` soft pastels
         ///   - `hearth(_:)`  warm home-decor neutrals
         ///   - `vivid(_:)`   saturated jewel tones
         static func resolve(_ dark: Bool) -> Palette {
-            cottage(dark)
+            harbor(dark)
         }
 
         /// "Cottage" — soft pastel peach/mint/butter on warm cream / dark
@@ -92,6 +93,31 @@ public enum CasalistCottage {
                 text: Color(rgb: 0x1A1A1A), textDim: Color(rgb: 0x1A1A1A).opacity(0.6), textMuted: Color(rgb: 0x1A1A1A).opacity(0.4),
                 peach: Color(rgb: 0xFF4D2E), mint: Color(rgb: 0x00B07F), butter: Color(rgb: 0xFFC107),
                 lavender: Color(rgb: 0x9B4DCA), sky: Color(rgb: 0x1E88E5), coral: Color(rgb: 0xFF1F4F)
+            )
+        }
+
+        /// "Harbor" — coastal blue-forward with warm complementary accents
+        /// so it's not chilly. Pottery-Barn-beach-house energy. Blue
+        /// dominates surfaces & text; warm coral and honey balance.
+        ///   peach    → warm coral   (primary / CTAs)
+        ///   mint     → sea glass    (success / chores)
+        ///   butter   → sand honey   (highlight / points)
+        ///   lavender → periwinkle   (secondary / maintenance)
+        ///   sky      → chambray     (info / cool secondary)
+        ///   coral    → coral red    (warning / overdue)
+        static func harbor(_ dark: Bool) -> Palette {
+            dark ? Palette(
+                bg: Color(rgb: 0x0E1A2A), surface: Color(rgb: 0x16263B), surfaceAlt: Color(rgb: 0x1F324A), surfaceHi: Color(rgb: 0x2E4561),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xEAF1F7), textDim: Color(rgb: 0xEAF1F7).opacity(0.6), textMuted: Color(rgb: 0xEAF1F7).opacity(0.4),
+                peach: Color(rgb: 0xF09877), mint: Color(rgb: 0x8FC9B2), butter: Color(rgb: 0xEFC679),
+                lavender: Color(rgb: 0xA8B5E2), sky: Color(rgb: 0x6BB0DC), coral: Color(rgb: 0xE57F79)
+            ) : Palette(
+                bg: Color(rgb: 0xF2F6F9), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xE3EBF1), surfaceHi: Color(rgb: 0xD0DCE7),
+                border: Color(rgb: 0x1B3950).opacity(0.10),
+                text: Color(rgb: 0x1B3950), textDim: Color(rgb: 0x1B3950).opacity(0.6), textMuted: Color(rgb: 0x1B3950).opacity(0.4),
+                peach: Color(rgb: 0xE07856), mint: Color(rgb: 0x6FB59C), butter: Color(rgb: 0xE3B45C),
+                lavender: Color(rgb: 0x8A98D4), sky: Color(rgb: 0x4A90C2), coral: Color(rgb: 0xD9605A)
             )
         }
 
