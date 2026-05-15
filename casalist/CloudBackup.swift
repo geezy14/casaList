@@ -145,8 +145,20 @@ enum BackupEncoder {
 enum BackupDecoder {
     /// Additive restore — only inserts records whose uid isn't already in
     /// the store. Doesn't touch existing records. Returns count inserted.
+    ///
+    /// Controls what subset of a snapshot is imported.
+    /// - `householdOnly`: restore the Household + FamilyMember records only.
+    ///   Useful after a household-wipe accident — gets the family back
+    ///   without dragging stale chores/goals/events along.
+    /// - `everything`: restore every entity (Household, members, tasks,
+    ///   goals, events). The original behavior.
+    enum Scope {
+        case householdOnly
+        case everything
+    }
+
     @discardableResult
-    static func restore(_ backup: CasalistBackup, into context: NSManagedObjectContext) -> Int {
+    static func restore(_ backup: CasalistBackup, into context: NSManagedObjectContext, scope: Scope = .everything) -> Int {
         var inserted = 0
         let stack = CasaCoreDataStack.shared
         // Index existing uids per entity for fast existence check.
@@ -205,6 +217,13 @@ enum BackupDecoder {
                 obj.household = h
             }
             inserted += 1
+        }
+        // Stop here for household-only restores. The Household + FamilyMember
+        // records are enough to reconstitute "the family" without bringing
+        // back potentially stale chore / goal / event history.
+        if scope == .householdOnly {
+            try? context.save()
+            return inserted
         }
         for t in backup.tasks where !existingTaskUids.contains(t.uid) {
             let obj = TaskItem(
@@ -336,7 +355,7 @@ enum CloudBackup {
     }
 
     /// Loads a snapshot from disk and restores it (additive — non-destructive).
-    static func restore(from fileURL: URL, into context: NSManagedObjectContext) -> Result<Int, BackupError> {
+    static func restore(from fileURL: URL, into context: NSManagedObjectContext, scope: BackupDecoder.Scope = .everything) -> Result<Int, BackupError> {
         guard let data = try? Data(contentsOf: fileURL) else { return .failure(.readFailed) }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -346,7 +365,7 @@ enum CloudBackup {
         guard backup.version <= CasalistBackup.currentVersion else {
             return .failure(.versionMismatch(backup.version))
         }
-        let n = BackupDecoder.restore(backup, into: context)
+        let n = BackupDecoder.restore(backup, into: context, scope: scope)
         return .success(n)
     }
 

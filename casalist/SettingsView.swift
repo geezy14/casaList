@@ -30,6 +30,10 @@ struct SettingsView: View {
     @State private var showAddMember: Bool = false
     @State private var showTrash: Bool = false
     @State private var showRestorePicker: Bool = false
+    /// Set when the user picks one of the two restore buttons. The
+    /// fileImporter callback reads this to decide whether to bring back
+    /// just the family structure or every entity.
+    @State private var pendingRestoreScope: BackupDecoder.Scope = .everything
     @State private var backupStatus: String? = nil
     @State private var showHelp: Bool = false
     @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
@@ -147,10 +151,13 @@ struct SettingsView: View {
             case .success(let url):
                 let didStart = url.startAccessingSecurityScopedResource()
                 defer { if didStart { url.stopAccessingSecurityScopedResource() } }
-                let restore = CloudBackup.restore(from: url, into: moc)
+                let restore = CloudBackup.restore(from: url, into: moc, scope: pendingRestoreScope)
+                let scopeLabel = pendingRestoreScope == .householdOnly ? "household-only" : "full"
                 switch restore {
                 case .success(let n):
-                    backupStatus = n == 0 ? "Nothing new to restore — your data was already up to date." : "Restored \(n) record\(n == 1 ? "" : "s")."
+                    backupStatus = n == 0
+                        ? "Nothing new to restore (\(scopeLabel)) — your data was already up to date."
+                        : "Restored \(n) record\(n == 1 ? "" : "s") (\(scopeLabel))."
                 case .failure(let err):
                     backupStatus = err.message
                 }
@@ -851,7 +858,15 @@ struct SettingsView: View {
                     }
                 }
                 divider
-                actionButton("Restore from backup…") { showRestorePicker = true }
+                actionButton("Restore household only…") {
+                    pendingRestoreScope = .householdOnly
+                    showRestorePicker = true
+                }
+                divider
+                actionButton("Restore household + data…") {
+                    pendingRestoreScope = .everything
+                    showRestorePicker = true
+                }
                 if let backupStatus {
                     divider
                     Text(backupStatus).font(.caption).foregroundStyle(P.textMuted)
