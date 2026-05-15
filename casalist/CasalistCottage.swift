@@ -18,25 +18,26 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `cobalt(_:)`  built around #0059AC (current)
+        ///   - `anchor(_:)`  cobalt blue + carrot orange family theme (current)
         ///   - `dodger(_:)`  dodger-blue-forward
         ///   - `vivid(_:)`   saturated jewel tones
         ///   - `ember(_:)`   coral-forward warm
         ///   - `harbor(_:)`  saturated coastal blue
         static func resolve(_ dark: Bool) -> Palette {
-            cobalt(dark)
+            anchor(dark)
         }
 
-        /// "Cobalt" — primary is exact #0059AC (deep saturated royal blue).
-        /// Cool blue surfaces; warm amber + forest green + plum + brick
-        /// accents prevent monochrome.
+        /// "Anchor" — the Casalist family theme. Cobalt-blue primary
+        /// (#0059AC) grounds; warm amber + forest green + plum + brick
+        /// give it life. Companion to the carrot-orange Family List tile
+        /// on the dashboard.
         ///   peach    → cobalt #0059AC  (primary / CTAs)
         ///   mint     → forest green    (success / chores)
         ///   butter   → warm amber      (highlight / points)
         ///   lavender → plum violet     (secondary / maintenance)
         ///   sky      → lighter cobalt  (info / cool secondary)
         ///   coral    → brick red       (warning / overdue)
-        static func cobalt(_ dark: Bool) -> Palette {
+        static func anchor(_ dark: Bool) -> Palette {
             dark ? Palette(
                 bg: Color(rgb: 0x05101E), surface: Color(rgb: 0x0F1E33), surfaceAlt: Color(rgb: 0x18304E), surfaceHi: Color(rgb: 0x254569),
                 border: Color.white.opacity(0.10),
