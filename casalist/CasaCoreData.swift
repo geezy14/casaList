@@ -283,6 +283,10 @@ final class CasaCoreDataStack {
             attr("isRedeemed", .booleanAttributeType, optional: false, def: false),
             attr("redeemedAt", .dateAttributeType),
             attr("deletedAt", .dateAttributeType),
+            // Optional context written by the requester (kid or non-admin)
+            // explaining what they want and why. Shown to the admin in the
+            // approval flow. Empty string for parent-created goals.
+            attr("note", .stringAttributeType, def: ""),
         ]
 
         // ------- ChoreTemplate attributes -------

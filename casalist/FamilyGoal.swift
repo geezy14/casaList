@@ -11,6 +11,7 @@ public final class FamilyGoal: NSManagedObject {
     @NSManaged public var isRedeemed: Bool
     @NSManaged public var redeemedAt: Date?
     @NSManaged public var deletedAt: Date?
+    @NSManaged public var note: String
     @NSManaged public var household: Household?
 
     var isLive: Bool { deletedAt == nil }

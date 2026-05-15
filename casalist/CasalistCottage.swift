@@ -2792,64 +2792,74 @@ extension CasalistCottage {
         // MARK: – Suggest-a-goal (kid)
 
         @State private var suggestLabel: String = ""
-        @State private var suggestTarget: Int = 50
+        @State private var suggestNote: String = ""
 
         private var suggestSheet: some View {
             NavigationStack {
                 ZStack {
                     P.bg.ignoresSafeArea()
-                    VStack(spacing: 18) {
-                        Spacer().frame(height: 8)
-                        Image(systemName: "lightbulb.fill").font(.system(size: 50)).foregroundStyle(P.butter)
-                        Text("Suggest a goal").font(.system(size: 22, weight: .heavy))
-                        Text("A parent will see your idea and decide. They can say yes or no.")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(P.textDim)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16)
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            Spacer().frame(height: 8)
+                            Text("🎁").font(.system(size: 56))
+                            Text("Ask for a reward").font(.system(size: 22, weight: .heavy))
+                            Text("Tell a parent what you'd like. They'll decide if yes — and how many points it should cost.")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(P.textDim)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 16)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("What do you want?").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
-                            TextField("e.g. Sleepover with Sam", text: $suggestLabel)
-                                .textInputAutocapitalization(.sentences)
-                                .padding(12)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
-                                .foregroundStyle(P.text)
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("How many points?").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
-                                Spacer()
-                                Text("\(suggestTarget) pts").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.butter)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("What do you want?").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
+                                TextField("e.g. Sleepover with Sam", text: $suggestLabel)
+                                    .textInputAutocapitalization(.sentences)
+                                    .padding(12)
+                                    .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                                    .foregroundStyle(P.text)
                             }
-                            Stepper("\(suggestTarget) pts", value: $suggestTarget, in: 10...2000, step: 10)
-                                .labelsHidden()
-                                .padding(.horizontal, 12).padding(.vertical, 6)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
-                        }
 
-                        HStack(spacing: 12) {
-                            Button("Cancel") {
-                                suggestLabel = ""; suggestTarget = 50
-                                showSuggest = false
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Why? (optional)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
+                                    Spacer()
+                                    Text("\(suggestNote.count)/120")
+                                        .font(.system(size: 10, weight: .heavy))
+                                        .foregroundStyle(P.textMuted)
+                                }
+                                TextField("Make your case…", text: $suggestNote, axis: .vertical)
+                                    .lineLimit(2...4)
+                                    .textInputAutocapitalization(.sentences)
+                                    .padding(12)
+                                    .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                                    .foregroundStyle(P.text)
+                                    .onChange(of: suggestNote) { _, new in
+                                        if new.count > 120 { suggestNote = String(new.prefix(120)) }
+                                    }
                             }
-                            .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(Capsule().fill(P.surfaceAlt)).foregroundStyle(P.text)
 
-                            Button {
-                                submitSuggestion()
-                            } label: {
-                                Text("Send to parent").font(.system(size: 15, weight: .heavy))
-                                    .foregroundStyle(Color(rgb: 0x1B1E4A))
+                            HStack(spacing: 12) {
+                                Button("Cancel") {
+                                    suggestLabel = ""; suggestNote = ""
+                                    showSuggest = false
+                                }
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(Capsule().fill(P.surfaceAlt)).foregroundStyle(P.text)
+
+                                Button {
+                                    submitSuggestion()
+                                } label: {
+                                    Text("Send to parent").font(.system(size: 15, weight: .heavy))
+                                        .foregroundStyle(Color(rgb: 0x1B1E4A))
+                                }
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(Capsule().fill(P.butter))
+                                .disabled(suggestLabel.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
-                            .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(Capsule().fill(P.butter))
-                            .disabled(suggestLabel.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .padding(.horizontal, 4)
+                            Spacer(minLength: 30)
                         }
-                        .padding(.horizontal, 20)
-                        Spacer()
+                        .padding(20)
                     }
-                    .padding(20)
                 }
                 .foregroundStyle(P.text)
             }
@@ -2861,8 +2871,10 @@ extension CasalistCottage {
             guard !trimmed.isEmpty else { return }
             let g = FamilyGoal(context: moc)
             g.label = trimmed
-            g.targetPoints = Int64(suggestTarget)
-            // PENDING:<myName> so the parent's inbox surfaces it for approval.
+            // targetPoints = 0 signals "parent hasn't set a price yet". The
+            // approval flow will set the real number.
+            g.targetPoints = 0
+            g.note = suggestNote.trimmingCharacters(in: .whitespaces)
             g.ownerName = GoalApproval.makePendingOwnerName(myName)
             if let h = households.preferredTarget {
                 moc.assign(g, toStoreOf: h)
@@ -2870,7 +2882,7 @@ extension CasalistCottage {
             }
             try? moc.save()
             suggestLabel = ""
-            suggestTarget = 50
+            suggestNote = ""
             showSuggest = false
             celebrateLabel = "Sent to parent ✨"
             celebrate = true
@@ -3012,22 +3024,28 @@ extension CasalistCottage {
 
         private func goalCard(_ g: FamilyGoal) -> some View {
             let target = Int(g.targetPoints)
-            let canRedeem = myPoints >= target
+            let canRedeem = target > 0 && myPoints >= target
             let progress = min(1.0, Double(myPoints) / Double(max(target, 1)))
             let remaining = max(0, target - myPoints)
             let isPending = GoalApproval.isPending(g)
+            let needsPrice = isPending && target == 0
             return VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 14) {
-                    Text(isPending ? "⏳" : (canRedeem ? "🎁" : "🔒")).font(.system(size: 26))
+                    Text(needsPrice ? "💬"
+                         : isPending ? "⏳"
+                         : canRedeem ? "🎁"
+                         : "🔒").font(.system(size: 26))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(g.label).font(.system(size: 15, weight: .heavy)).lineLimit(1)
-                        Text(isPending
-                             ? "Waiting for a parent to approve · \(target) pts"
-                             : (canRedeem
-                                ? "Ready to redeem · \(target) pts"
-                                : "Need \(remaining) more pts"))
+                        Text(needsPrice
+                             ? "Sent — waiting for a parent to set the price"
+                             : isPending
+                                ? "Waiting for a parent to approve · \(target) pts"
+                                : canRedeem
+                                    ? "Ready to redeem · \(target) pts"
+                                    : "Need \(remaining) more pts")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isPending ? P.sky : (canRedeem ? P.butter : P.textDim))
+                            .foregroundStyle(needsPrice ? P.sky : isPending ? P.sky : canRedeem ? P.butter : P.textDim)
                     }
                     Spacer()
                     if canRedeem && !isPending {
@@ -3041,7 +3059,7 @@ extension CasalistCottage {
                         }.buttonStyle(.plain)
                     }
                 }
-                if !isPending {
+                if !isPending && target > 0 {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(P.surfaceHi).frame(height: 8)

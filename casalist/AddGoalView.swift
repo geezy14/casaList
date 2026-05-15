@@ -14,6 +14,7 @@ struct AddGoalView: View {
     @State private var ownerName: String = ""
     @State private var label: String = ""
     @State private var target: Int = 200
+    @State private var note: String = ""
 
     private var me: FamilyMember? {
         FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
@@ -60,13 +61,28 @@ struct AddGoalView: View {
                         #endif
                     }
                 }
-                Section("Target points") {
-                    Stepper(value: $target, in: 10...10_000, step: 10) {
-                        Text("\(target) pts")
+                if iAmAdmin {
+                    Section("Target points") {
+                        Stepper(value: $target, in: 10...10_000, step: 10) {
+                            Text("\(target) pts")
+                        }
+                    }
+                } else {
+                    Section {
+                        TextField("Why do you want it? (optional)", text: $note, axis: .vertical)
+                            .lineLimit(2...4)
+                            .textInputAutocapitalization(.sentences)
+                            .onChange(of: note) { _, new in
+                                if new.count > 120 { note = String(new.prefix(120)) }
+                            }
+                        Text("A parent decides the points price when they approve.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } header: {
+                        Text("Make your case (optional)")
                     }
                 }
             }
-            .navigationTitle("New goal")
+            .navigationTitle(iAmAdmin ? "New goal" : "Ask for a reward")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -90,12 +106,18 @@ struct AddGoalView: View {
     private func save() {
         let realOwner = resolvedOwner
         let storedOwner = iAmAdmin ? realOwner : GoalApproval.makePendingOwnerName(realOwner)
+        // Non-admins don't price their own goals — the admin sets it at
+        // approval time. Store 0 so the approval UI knows it needs a price.
+        let storedTarget = iAmAdmin ? target : 0
         let g = FamilyGoal(
             context: moc,
             ownerName: storedOwner,
             label: label.trimmingCharacters(in: .whitespaces),
-            targetPoints: target
+            targetPoints: storedTarget
         )
+        if !iAmAdmin {
+            g.note = note.trimmingCharacters(in: .whitespaces)
+        }
         if let h = households.preferredTarget {
             moc.assign(g, toStoreOf: h)
             g.household = h

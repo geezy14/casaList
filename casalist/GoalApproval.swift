@@ -26,10 +26,16 @@ enum GoalApproval {
         pendingPrefix + realName
     }
 
-    /// Approve: strip the prefix in place. Caller saves the context.
-    static func approve(_ g: FamilyGoal) {
+    /// Approve: strip the PENDING: prefix and (optionally) set the price.
+    /// Pass `targetPoints` when approving a suggestion the requester didn't
+    /// price themselves (the new redesigned flow). Pass nil to keep whatever
+    /// price is already on the goal (legacy flow). Caller saves the context.
+    static func approve(_ g: FamilyGoal, targetPoints: Int? = nil) {
         guard isPending(g) else { return }
         g.ownerName = realOwnerName(g)
+        if let tp = targetPoints {
+            g.targetPoints = Int64(max(1, tp))
+        }
     }
 
     /// Deny: soft-delete the record (goes to Trash). Caller saves the context.

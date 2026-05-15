@@ -93,46 +93,97 @@ struct InboxView: View {
     }
 
     private func parentApprovalRow(_ g: FamilyGoal) -> some View {
-        let realOwner = GoalApproval.realOwnerName(g)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                if let m = members.first(where: { $0.name.lowercased() == realOwner.lowercased() }) {
-                    LeveledAvatar(member: m, size: 32)
-                } else {
-                    ZStack {
-                        Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)
-                        Image(systemName: "questionmark").font(.system(size: 12)).foregroundStyle(P.textMuted)
+        ApprovalRow(goal: g, members: Array(members), palette: P, moc: moc)
+    }
+
+    /// Pulled out into its own View so it can hold per-goal `@State`
+    /// for the price stepper without leaking between rows.
+    private struct ApprovalRow: View {
+        let goal: FamilyGoal
+        let members: [FamilyMember]
+        let palette: CasalistCottage.Palette
+        let moc: NSManagedObjectContext
+        @State private var draftPrice: Int = 0
+        @State private var initialized: Bool = false
+
+        private var P: CasalistCottage.Palette { palette }
+        private var realOwner: String { GoalApproval.realOwnerName(goal) }
+        private var needsPrice: Bool { goal.targetPoints == 0 }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    if let m = members.first(where: { $0.name.lowercased() == realOwner.lowercased() }) {
+                        LeveledAvatar(member: m, size: 32)
+                    } else {
+                        ZStack {
+                            Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)
+                            Image(systemName: "questionmark").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                        }
                     }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(goal.label).font(.system(size: 14, weight: .heavy))
+                        Text(needsPrice
+                             ? "\(realOwner) · needs a price"
+                             : "\(realOwner) · \(goal.targetPoints) pts")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                    Spacer()
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(g.label).font(.system(size: 14, weight: .heavy))
-                    Text("\(realOwner) · \(g.targetPoints) pts")
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                if !goal.note.isEmpty {
+                    Text("\u{201C}\(goal.note)\u{201D}")
+                        .font(.system(size: 12, weight: .semibold).italic())
+                        .foregroundStyle(P.textDim)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.4)))
                 }
-                Spacer()
+                if needsPrice {
+                    HStack {
+                        Text("Set price").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
+                        Spacer()
+                        Text("\(draftPrice) pts").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.peach)
+                        Stepper("\(draftPrice) pts", value: $draftPrice, in: 10...10_000, step: 10)
+                            .labelsHidden()
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.5)))
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        GoalApproval.deny(goal, in: moc)
+                        try? moc.save()
+                    } label: {
+                        Text("Deny").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(Capsule().fill(Color.red.opacity(0.8)))
+                    }.buttonStyle(.plain)
+                    Button {
+                        if needsPrice {
+                            GoalApproval.approve(goal, targetPoints: draftPrice)
+                        } else {
+                            GoalApproval.approve(goal)
+                        }
+                        try? moc.save()
+                    } label: {
+                        Text(needsPrice ? "Approve · \(draftPrice) pts" : "Approve")
+                            .font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(Capsule().fill(P.mint))
+                    }.buttonStyle(.plain)
+                    .disabled(needsPrice && draftPrice < 10)
+                }
             }
-            HStack(spacing: 10) {
-                Button {
-                    GoalApproval.deny(g, in: moc)
-                    try? moc.save()
-                } label: {
-                    Text("Deny").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(Capsule().fill(Color.red.opacity(0.8)))
-                }.buttonStyle(.plain)
-                Button {
-                    GoalApproval.approve(g)
-                    try? moc.save()
-                } label: {
-                    Text("Approve").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(Capsule().fill(P.mint))
-                }.buttonStyle(.plain)
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+            .onAppear {
+                if !initialized {
+                    draftPrice = Int(goal.targetPoints) > 0 ? Int(goal.targetPoints) : 50
+                    initialized = true
+                }
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
     }
 
     private func approvedRow(_ g: FamilyGoal) -> some View {
