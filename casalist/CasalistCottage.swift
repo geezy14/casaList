@@ -1018,26 +1018,12 @@ public enum CasalistCottage {
         }
 
         private func earningGroupCard(_ group: EarningGroup) -> some View {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    if let m = group.member {
-                        CLAvatar(m.asCLMember, size: 28)
-                    } else {
-                        ZStack {
-                            Circle().fill(P.surfaceAlt).frame(width: 28, height: 28)
-                            Image(systemName: "person.fill").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                        }
-                    }
-                    Text(group.displayName).font(.system(size: 13, weight: .heavy))
-                    Spacer()
-                    Text("\(group.tasks.count) open · \(group.totalPoints) pts")
-                        .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
-                }
-                .padding(.horizontal, 4)
-                VStack(spacing: 6) {
-                    ForEach(group.tasks, id: \.uid) { t in
-                        earningRow(t)
-                    }
+            // Group header dropped — the per-row avatar already tags assignee,
+            // and the section heading on the page handles the section purpose.
+            // Tasks stay ordered by member (still grouped under the hood).
+            VStack(spacing: 6) {
+                ForEach(group.tasks, id: \.uid) { t in
+                    earningRow(t)
                 }
             }
         }
