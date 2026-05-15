@@ -18,12 +18,38 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `dodger(_:)`  dodger-blue-forward (current)
+        ///   - `cobalt(_:)`  built around #0059AC (current)
+        ///   - `dodger(_:)`  dodger-blue-forward
         ///   - `vivid(_:)`   saturated jewel tones
         ///   - `ember(_:)`   coral-forward warm
         ///   - `harbor(_:)`  saturated coastal blue
         static func resolve(_ dark: Bool) -> Palette {
-            dodger(dark)
+            cobalt(dark)
+        }
+
+        /// "Cobalt" — primary is exact #0059AC (deep saturated royal blue).
+        /// Cool blue surfaces; warm amber + forest green + plum + brick
+        /// accents prevent monochrome.
+        ///   peach    → cobalt #0059AC  (primary / CTAs)
+        ///   mint     → forest green    (success / chores)
+        ///   butter   → warm amber      (highlight / points)
+        ///   lavender → plum violet     (secondary / maintenance)
+        ///   sky      → lighter cobalt  (info / cool secondary)
+        ///   coral    → brick red       (warning / overdue)
+        static func cobalt(_ dark: Bool) -> Palette {
+            dark ? Palette(
+                bg: Color(rgb: 0x05101E), surface: Color(rgb: 0x0F1E33), surfaceAlt: Color(rgb: 0x18304E), surfaceHi: Color(rgb: 0x254569),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xE6EEF7), textDim: Color(rgb: 0xE6EEF7).opacity(0.6), textMuted: Color(rgb: 0xE6EEF7).opacity(0.4),
+                peach: Color(rgb: 0x3B86D0), mint: Color(rgb: 0x2EAA75), butter: Color(rgb: 0xE8AB44),
+                lavender: Color(rgb: 0x9956C2), sky: Color(rgb: 0x5BA0DB), coral: Color(rgb: 0xDD5E5E)
+            ) : Palette(
+                bg: Color(rgb: 0xF2F6FB), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xD4E0EF), surfaceHi: Color(rgb: 0xB5C7DD),
+                border: Color(rgb: 0x002A60).opacity(0.12),
+                text: Color(rgb: 0x002A60), textDim: Color(rgb: 0x002A60).opacity(0.6), textMuted: Color(rgb: 0x002A60).opacity(0.4),
+                peach: Color(rgb: 0x0059AC), mint: Color(rgb: 0x067A4F), butter: Color(rgb: 0xD89019),
+                lavender: Color(rgb: 0x6A2A8C), sky: Color(rgb: 0x2A7EC9), coral: Color(rgb: 0xC93B3B)
+            )
         }
 
         /// "Dodger" — classic dodger blue (#1E90FF) as the primary. Cool
