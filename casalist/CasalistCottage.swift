@@ -736,7 +736,21 @@ public enum CasalistCottage {
             .foregroundStyle(Color(rgb: 0x3B2A22))
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 24).fill(bg))
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(bg)
+                    .overlay(
+                        // Subtle top highlight + bottom shade gives the
+                        // solid color a saturated, dimensional look without
+                        // shifting the underlying palette value.
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), Color.clear, Color.black.opacity(0.22)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
+            )
+            .shadow(color: bg.opacity(0.35), radius: 10, x: 0, y: 4)
         }
 
         private struct ActivityEntry: Identifiable {
