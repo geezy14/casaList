@@ -32,6 +32,7 @@ echo
 # Each check: (record type, field name, friendly description)
 checks=(
     "CD_TaskItem|CD_completedAt|completion timestamp (drives WHAT'S NEW + My Wins log)"
+    "CD_TaskItem|CD_repeatEndMinutes|hourly reminder stop-time-of-day"
     "CD_FamilyGoal|CD_note|reward-request note (kid 'make your case' text)"
     "CD_Household|CD_routinesJSON|routine templates (DEBUG-only feature for now)"
 )

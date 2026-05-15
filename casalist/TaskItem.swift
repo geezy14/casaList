@@ -18,6 +18,7 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var parentUid: String
     @NSManaged public var deletedAt: Date?
     @NSManaged public var completedAt: Date?
+    @NSManaged public var repeatEndMinutes: Int64
     @NSManaged public var household: Household?
 
     var isLive: Bool { deletedAt == nil }

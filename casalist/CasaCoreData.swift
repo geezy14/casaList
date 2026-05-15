@@ -271,6 +271,12 @@ final class CasaCoreDataStack {
             // ordering and Kid view's "My Wins" log so completions sort by
             // when they actually happened, not when the task was created.
             attr("completedAt", .dateAttributeType),
+            // Stop-time-of-day for cadence reminders (hourly / every2h /
+            // every4h / every8h / every12h). Stored as minutes-since-
+            // midnight. 0 = no stop time (default); 1-1439 = stop at this
+            // minute-of-day. Schema redeploy required before this syncs in
+            // Production.
+            attr("repeatEndMinutes", .integer64AttributeType, def: 0),
         ]
 
         // ------- FamilyGoal attributes -------

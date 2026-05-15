@@ -2658,12 +2658,24 @@ extension CasalistCottage {
         private func scheduleDetail(_ t: TaskItem) -> String? {
             let kind = t.effectiveRepeatKind
             let f = DateFormatter()
+            // For cadence kinds, append " · until <time>" if the user set a
+            // stop time on this reminder.
+            let stopSuffix: String = {
+                let mins = Int(t.repeatEndMinutes)
+                guard mins > 0 else { return "" }
+                let cal = Calendar.current
+                let base = cal.startOfDay(for: Date())
+                guard let stop = cal.date(byAdding: .minute, value: mins, to: base) else { return "" }
+                let stopF = DateFormatter()
+                stopF.dateFormat = "h:mm a"
+                return " · until \(stopF.string(from: stop))"
+            }()
             switch kind {
-            case "hourly":   return "Every hour"
-            case "every2h":  return "Every 2h"
-            case "every4h":  return "Every 4h"
-            case "every8h":  return "Every 8h"
-            case "every12h": return "Every 12h"
+            case "hourly":   return "Every hour\(stopSuffix)"
+            case "every2h":  return "Every 2h\(stopSuffix)"
+            case "every4h":  return "Every 4h\(stopSuffix)"
+            case "every8h":  return "Every 8h\(stopSuffix)"
+            case "every12h": return "Every 12h\(stopSuffix)"
             case "daily":
                 guard let due = t.dueDate else { return "Daily" }
                 f.dateFormat = "'Daily at' h:mm a"

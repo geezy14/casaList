@@ -93,6 +93,7 @@ enum NotificationsManager {
         let body = subtitle(for: task)
         let kind = task.effectiveRepeatKind
         let dueDate = task.dueDate
+        let endMinutes = task.repeatEndMinutes
         let isCompleted = task.isCompleted
 
         let status = await currentStatus()
@@ -110,7 +111,7 @@ enum NotificationsManager {
         guard !isCompleted || isRecurring else { return }
 
         let now = Date()
-        let triggers = computeTriggers(kind: kind, dueDate: dueDate, now: now)
+        let triggers = computeTriggers(kind: kind, dueDate: dueDate, now: now, endMinutes: endMinutes)
         for (suffix, trigger) in triggers {
             let content = UNMutableNotificationContent()
             content.title = title
@@ -122,32 +123,23 @@ enum NotificationsManager {
         }
     }
 
-    private static func computeTriggers(kind: String, dueDate: Date?, now: Date) -> [(String, UNNotificationTrigger)] {
+    private static func computeTriggers(kind: String, dueDate: Date?, now: Date, endMinutes: Int64 = 0) -> [(String, UNNotificationTrigger)] {
         let cal = Calendar.current
         switch kind {
-        case "hourly":
-            if let due = dueDate {
-                var c = DateComponents()
-                c.minute = cal.component(.minute, from: due)
-                return [("hourly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-            }
-            return [("hourly", UNTimeIntervalNotificationTrigger(timeInterval: 3600, repeats: true))]
-        case "every2h", "every4h", "every8h", "every12h":
-            let step: Int = (kind == "every2h" ? 2 : kind == "every4h" ? 4 : kind == "every8h" ? 8 : 12)
-            if let due = dueDate {
-                let startHour = cal.component(.hour, from: due)
-                let minute = cal.component(.minute, from: due)
-                var out: [(String, UNNotificationTrigger)] = []
-                for offset in stride(from: 0, to: 24, by: step) {
-                    let hour = (startHour + offset) % 24
-                    var c = DateComponents()
-                    c.hour = hour
-                    c.minute = minute
-                    out.append(("\(kind)-h\(hour)", UNCalendarNotificationTrigger(dateMatching: c, repeats: true)))
+        case "hourly", "every2h", "every4h", "every8h", "every12h":
+            let step: Int = {
+                switch kind {
+                case "hourly":   return 1
+                case "every2h":  return 2
+                case "every4h":  return 4
+                case "every8h":  return 8
+                default:         return 12
                 }
-                return out
+            }()
+            guard let due = dueDate else {
+                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
             }
-            return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
+            return cadenceTriggers(kind: kind, due: due, step: step, endMinutes: Int(endMinutes), cal: cal)
         case "daily":
             guard let due = dueDate else { return [] }
             let c = cal.dateComponents([.hour, .minute], from: due)
@@ -171,33 +163,44 @@ enum NotificationsManager {
         }
     }
 
+    /// Shared cadence-trigger builder. Generates one UNCalendarNotificationTrigger
+    /// per scheduled hour-of-day from the start time (`due`) onward in `step`
+    /// increments, clipped to a daytime window if `endMinutes` > 0 and > the
+    /// start's minute-of-day. Overnight ranges (stop < start) aren't
+    /// supported yet — endMinutes is ignored in that case.
+    private static func cadenceTriggers(kind: String, due: Date, step: Int, endMinutes: Int, cal: Calendar) -> [(String, UNNotificationTrigger)] {
+        let startMin = cal.component(.hour, from: due) * 60 + cal.component(.minute, from: due)
+        let hasStop = endMinutes > startMin
+        var out: [(String, UNNotificationTrigger)] = []
+        for offset in stride(from: 0, to: 24, by: step) {
+            let mod = (startMin + offset * 60) % (24 * 60)
+            if hasStop, mod < startMin || mod > endMinutes { continue }
+            var c = DateComponents()
+            c.hour = mod / 60
+            c.minute = mod % 60
+            out.append(("\(kind)-h\(mod/60)m\(mod%60)", UNCalendarNotificationTrigger(dateMatching: c, repeats: true)))
+        }
+        return out
+    }
+
     private static func triggers(for t: TaskItem, now: Date) -> [(String, UNNotificationTrigger)] {
         let cal = Calendar.current
         let kind = t.effectiveRepeatKind
         switch kind {
-        case "hourly":
-            if let due = t.dueDate {
-                var c = DateComponents()
-                c.minute = cal.component(.minute, from: due)
-                return [("hourly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-            }
-            return [("hourly", UNTimeIntervalNotificationTrigger(timeInterval: 3600, repeats: true))]
-        case "every2h", "every4h", "every8h", "every12h":
-            let step: Int = (kind == "every2h" ? 2 : kind == "every4h" ? 4 : kind == "every8h" ? 8 : 12)
-            if let due = t.dueDate {
-                let startHour = cal.component(.hour, from: due)
-                let minute = cal.component(.minute, from: due)
-                var out: [(String, UNNotificationTrigger)] = []
-                for offset in stride(from: 0, to: 24, by: step) {
-                    let hour = (startHour + offset) % 24
-                    var c = DateComponents()
-                    c.hour = hour
-                    c.minute = minute
-                    out.append(("\(kind)-h\(hour)", UNCalendarNotificationTrigger(dateMatching: c, repeats: true)))
+        case "hourly", "every2h", "every4h", "every8h", "every12h":
+            let step: Int = {
+                switch kind {
+                case "hourly":   return 1
+                case "every2h":  return 2
+                case "every4h":  return 4
+                case "every8h":  return 8
+                default:         return 12
                 }
-                return out
+            }()
+            guard let due = t.dueDate else {
+                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
             }
-            return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
+            return cadenceTriggers(kind: kind, due: due, step: step, endMinutes: Int(t.repeatEndMinutes), cal: cal)
         case "daily":
             guard let due = t.dueDate else { return [] }
             let c = cal.dateComponents([.hour, .minute], from: due)

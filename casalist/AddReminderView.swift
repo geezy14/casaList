@@ -14,6 +14,11 @@ struct AddReminderView: View {
     @State private var repeatKind: String
     @State private var hasFireDate: Bool
     @State private var fireDate: Date
+    /// Cadence-only stop-time-of-day. Off by default. When on, hourly /
+    /// every2h / every4h / every8h / every12h reminders only fire within
+    /// [fireDate.timeOfDay, stopDate.timeOfDay] each day.
+    @State private var hasStopTime: Bool
+    @State private var stopDate: Date
     @State private var confirmDelete: Bool = false
 
     init(editing: TaskItem? = nil) {
@@ -23,12 +28,26 @@ struct AddReminderView: View {
             _repeatKind = State(initialValue: t.effectiveRepeatKind)
             _hasFireDate = State(initialValue: t.dueDate != nil)
             _fireDate = State(initialValue: t.dueDate ?? Date().addingTimeInterval(3600))
+            let mins = Int(t.repeatEndMinutes)
+            _hasStopTime = State(initialValue: mins > 0)
+            // Reconstitute a Date for the picker from minutes-since-midnight.
+            let cal = Calendar.current
+            let baseToday = cal.startOfDay(for: Date())
+            let stopAnchor = cal.date(byAdding: .minute, value: mins > 0 ? mins : 22 * 60, to: baseToday) ?? baseToday
+            _stopDate = State(initialValue: stopAnchor)
         } else {
             _title = State(initialValue: "")
             _repeatKind = State(initialValue: "")
             _hasFireDate = State(initialValue: false)
             _fireDate = State(initialValue: Date().addingTimeInterval(3600))
+            _hasStopTime = State(initialValue: false)
+            let cal = Calendar.current
+            _stopDate = State(initialValue: cal.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date())
         }
+    }
+
+    private var isCadenceKind: Bool {
+        ["hourly", "every2h", "every4h", "every8h", "every12h"].contains(repeatKind)
     }
 
     private let repeatOptions: [(label: String, kind: String)] = [
@@ -90,6 +109,16 @@ struct AddReminderView: View {
                             DatePicker("Date", selection: $fireDate, displayedComponents: .date)
                                 .datePickerStyle(.graphical)
                             DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
+                        }
+                    }
+                }
+                if isCadenceKind {
+                    Section("Stop time (optional)") {
+                        Toggle("Stop firing after a time", isOn: $hasStopTime)
+                        if hasStopTime {
+                            DatePicker("Stop at", selection: $stopDate, displayedComponents: .hourAndMinute)
+                            Text("Notifications only fire between the start time and the stop time each day. Set stop > start (overnight ranges aren't supported yet).")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -155,6 +184,18 @@ struct AddReminderView: View {
         }
     }
 
+    /// Stop time as minutes-since-midnight, or 0 when no stop time set or
+    /// when the cadence doesn't support it. Validates start < stop; returns
+    /// 0 (no-op) when the user inverted them.
+    private var stopMinutesValue: Int64 {
+        guard isCadenceKind, hasStopTime else { return 0 }
+        let cal = Calendar.current
+        let stopMin = cal.component(.hour, from: stopDate) * 60 + cal.component(.minute, from: stopDate)
+        let startMin = cal.component(.hour, from: fireDate) * 60 + cal.component(.minute, from: fireDate)
+        guard stopMin > startMin else { return 0 }
+        return Int64(stopMin)
+    }
+
     private func save() {
         let storeDate: Date? = isPinned ? nil : fireDate
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
@@ -164,6 +205,7 @@ struct AddReminderView: View {
             editing.dueDate = storeDate
             editing.repeatKind = repeatKind
             editing.repeatHours = 0
+            editing.repeatEndMinutes = stopMinutesValue
             target = editing
         } else {
             let item = TaskItem(
@@ -176,6 +218,7 @@ struct AddReminderView: View {
                 repeatHours: 0,
                 repeatKind: repeatKind
             )
+            item.repeatEndMinutes = stopMinutesValue
             if let h = households.preferredTarget {
                 moc.assign(item, toStoreOf: h)
                 item.household = h
