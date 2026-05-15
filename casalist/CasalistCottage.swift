@@ -29,6 +29,26 @@ public enum CasalistCottage {
                 lavender: Color(rgb: 0xA892D8), sky: Color(rgb: 0x6FA8D0), coral: Color(rgb: 0xE47A82)
             )
         }
+
+        /// Bright, candy-colored palette used by the Kid (starfield) view.
+        static func starfield() -> Palette {
+            Palette(
+                bg: Color(rgb: 0x1B1E4A),
+                surface: Color(rgb: 0x2A2E66),
+                surfaceAlt: Color(rgb: 0x363C7E),
+                surfaceHi: Color(rgb: 0x4A5099),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xFFFCEC),
+                textDim: Color(rgb: 0xFFFCEC).opacity(0.7),
+                textMuted: Color(rgb: 0xFFFCEC).opacity(0.45),
+                peach: Color(rgb: 0xFF6B9D),
+                mint: Color(rgb: 0x4ECDC4),
+                butter: Color(rgb: 0xFFD93D),
+                lavender: Color(rgb: 0xB084F5),
+                sky: Color(rgb: 0x5DC8FF),
+                coral: Color(rgb: 0xFF8B5C)
+            )
+        }
     }
 
     public struct Home: View {
@@ -2689,6 +2709,313 @@ extension CasalistCottage {
 }
 
 extension CasalistCottage {
+    // MARK: – Kids (starfield)
+    /// Full-screen, simplified UI shown to FamilyMembers with role == .kid.
+    public struct Kids: View {
+        @Environment(\.managedObjectContext) private var moc
+        @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goals: FetchedResults<FamilyGoal>
+        @State private var redeemTarget: FamilyGoal? = nil
+        @State private var celebrate: Bool = false
+        @State private var celebrateLabel: String = ""
+
+        private var P: Palette { Palette.starfield() }
+
+        private var me: FamilyMember? {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+        }
+        private var myName: String { me?.name ?? userName }
+        private var myPoints: Int { Int(me?.points ?? 0) }
+
+        private var myChores: [TaskItem] {
+            let lc = myName.lowercased()
+            return allTodos.filter { t in
+                !t.isCompleted
+                && t.points > 0
+                && (t.assignee ?? "").lowercased() == lc
+                && !["reminders", "groceries", "maintenance"].contains(t.category.lowercased())
+            }
+        }
+        private var myActiveGoals: [FamilyGoal] {
+            goals.filter { !$0.isRedeemed && $0.ownerName.lowercased() == myName.lowercased() }
+                .sorted { $0.targetPoints < $1.targetPoints }
+        }
+        private var myRedeemedGoals: [FamilyGoal] {
+            goals.filter { $0.isRedeemed && $0.ownerName.lowercased() == myName.lowercased() }
+                .sorted { ($0.redeemedAt ?? .distantPast) > ($1.redeemedAt ?? .distantPast) }
+        }
+        private var nextGoal: FamilyGoal? {
+            myActiveGoals.first(where: { Int($0.targetPoints) > myPoints }) ?? myActiveGoals.last
+        }
+
+        public init() {}
+
+        public var body: some View {
+            ZStack {
+                LinearGradient(colors: [P.bg, Color(rgb: 0x2D1B6B)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 22) {
+                        header
+                        choresSection
+                        pointsSection
+                        winsSection
+                        Spacer(minLength: 30)
+                    }
+                    .padding(.horizontal, 18).padding(.top, 8)
+                }
+                .scrollIndicators(.hidden)
+                if celebrate { celebrateOverlay }
+            }
+            .foregroundStyle(P.text)
+            .preferredColorScheme(.dark)
+            .sheet(item: $redeemTarget) { g in redeemSheet(g) }
+        }
+
+        private var header: some View {
+            HStack(spacing: 14) {
+                if let m = me {
+                    CLAvatar(m.asCLMember, size: 56)
+                } else {
+                    Circle().fill(P.peach).frame(width: 56, height: 56)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hi, \(myName) 👋").font(.system(size: 22, weight: .heavy))
+                    Text("Let's earn some points").font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
+                }
+                Spacer()
+            }
+            .padding(.top, 8)
+        }
+
+        private var choresSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("MY STUFF TO DO", emoji: "✨", color: P.butter)
+                if myChores.isEmpty {
+                    emptyCard("🎉", title: "All caught up!", subtitle: "Nothing to do right now. Go play.", tint: P.mint)
+                } else {
+                    VStack(spacing: 10) { ForEach(myChores, id: \.uid) { choreTile($0) } }
+                }
+            }
+        }
+
+        private func choreTile(_ t: TaskItem) -> some View {
+            let overdue: Bool = {
+                guard let d = t.dueDate else { return false }
+                return d < Date().addingTimeInterval(-3600) && !Calendar.current.isDateInToday(d)
+            }()
+            let dueToday = t.dueDate.map { Calendar.current.isDateInToday($0) } ?? false
+            return HStack(spacing: 14) {
+                Button { completeChore(t) } label: {
+                    ZStack {
+                        Circle().fill(P.mint).frame(width: 52, height: 52)
+                        Image(systemName: "checkmark").font(.system(size: 22, weight: .heavy)).foregroundStyle(.white)
+                    }
+                }.buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t.task).font(.system(size: 17, weight: .heavy)).lineLimit(2)
+                    if dueToday {
+                        Text("Today").font(.system(size: 11, weight: .heavy))
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Capsule().fill(P.butter)).foregroundStyle(Color(rgb: 0x1B1E4A))
+                    } else if overdue {
+                        Text("Overdue").font(.system(size: 11, weight: .heavy))
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Capsule().fill(P.peach)).foregroundStyle(.white)
+                    }
+                }
+                Spacer()
+                VStack(spacing: 2) {
+                    Text("\(t.points)").font(.system(size: 22, weight: .heavy)).foregroundStyle(P.butter)
+                    Text("pts").font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textDim)
+                }
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func completeChore(_ t: TaskItem) {
+            let pts = Int(t.points)
+            FamilyPoints.toggle(t, in: members)
+            try? moc.save()
+            if pts > 0 {
+                celebrateLabel = "+\(pts) pts!"
+                celebrate = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { celebrate = false }
+            }
+        }
+
+        private var pointsSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("MY POINTS", emoji: "⭐", color: P.sky)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28).fill(
+                        LinearGradient(colors: [P.lavender, P.sky], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    HStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(myPoints)").font(.system(size: 56, weight: .heavy)).foregroundStyle(.white)
+                            Text("points").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white.opacity(0.85))
+                        }
+                        Spacer()
+                        if let g = nextGoal { progressRing(for: g) }
+                    }
+                    .padding(22)
+                }
+                if let g = nextGoal {
+                    goalCard(g)
+                } else if !myActiveGoals.isEmpty {
+                    Text("All your goals are done!").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textDim)
+                }
+            }
+        }
+
+        private func progressRing(for g: FamilyGoal) -> some View {
+            let progress = min(1.0, Double(myPoints) / Double(max(Int(g.targetPoints), 1)))
+            return ZStack {
+                Circle().stroke(Color.white.opacity(0.25), lineWidth: 8).frame(width: 84, height: 84)
+                Circle().trim(from: 0, to: progress)
+                    .stroke(P.butter, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .frame(width: 84, height: 84).rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text("\(Int(progress * 100))%").font(.system(size: 16, weight: .heavy)).foregroundStyle(.white)
+                    Text("of \(g.targetPoints)").font(.system(size: 9, weight: .heavy)).foregroundStyle(.white.opacity(0.85))
+                }
+            }
+        }
+
+        private func goalCard(_ g: FamilyGoal) -> some View {
+            let canRedeem = myPoints >= Int(g.targetPoints)
+            return HStack(spacing: 14) {
+                Text("🎯").font(.system(size: 30))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(g.label).font(.system(size: 15, weight: .heavy))
+                    Text("\(myPoints) / \(g.targetPoints) pts").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                }
+                Spacer()
+                if canRedeem {
+                    Button { redeemTarget = g } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "gift.fill").font(.system(size: 12, weight: .heavy))
+                            Text("Redeem").font(.system(size: 13, weight: .heavy))
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(Capsule().fill(P.butter)).foregroundStyle(Color(rgb: 0x1B1E4A))
+                    }.buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func redeemSheet(_ g: FamilyGoal) -> some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    VStack(spacing: 18) {
+                        Spacer().frame(height: 8)
+                        Image(systemName: "gift.fill").font(.system(size: 50)).foregroundStyle(P.butter)
+                        Text("Redeem \(g.label)?").font(.system(size: 22, weight: .heavy)).multilineTextAlignment(.center)
+                        Text("\(g.targetPoints) pts will be spent.")
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(P.textDim)
+                        HStack(spacing: 12) {
+                            Button("Not yet") { redeemTarget = nil }
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(Capsule().fill(P.surfaceAlt)).foregroundStyle(P.text)
+                            Button {
+                                if let mine = me { mine.points = max(0, mine.points - g.targetPoints) }
+                                g.isRedeemed = true
+                                g.redeemedAt = Date()
+                                try? moc.save()
+                                redeemTarget = nil
+                                celebrateLabel = "🎉 Redeemed!"
+                                celebrate = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { celebrate = false }
+                            } label: {
+                                Text("Redeem").font(.system(size: 15, weight: .heavy)).foregroundStyle(Color(rgb: 0x1B1E4A))
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Capsule().fill(P.butter))
+                        }
+                        .padding(.horizontal, 20)
+                        Spacer()
+                    }
+                    .padding(20)
+                }
+                .foregroundStyle(P.text)
+            }
+            .presentationDetents([.medium])
+        }
+
+        private var winsSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("MY WINS", emoji: "🏆", color: P.peach)
+                if myRedeemedGoals.isEmpty {
+                    emptyCard("🏅", title: "No wins yet", subtitle: "Finish chores to earn rewards.", tint: P.lavender)
+                } else {
+                    VStack(spacing: 8) { ForEach(myRedeemedGoals.prefix(8)) { winRow($0) } }
+                }
+            }
+        }
+
+        private func winRow(_ g: FamilyGoal) -> some View {
+            HStack(spacing: 12) {
+                Text("🏆").font(.system(size: 24))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(g.label).font(.system(size: 14, weight: .heavy))
+                    if let d = g.redeemedAt {
+                        Text(d, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
+                    }
+                }
+                Spacer()
+                Text("\(g.targetPoints) pts").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.butter)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func sectionTitle(_ text: String, emoji: String, color: Color) -> some View {
+            HStack(spacing: 8) {
+                Text(emoji).font(.system(size: 22))
+                Text(text).font(.system(size: 13, weight: .heavy)).tracking(1.4).foregroundStyle(color)
+                Spacer()
+            }.padding(.horizontal, 4)
+        }
+
+        private func emptyCard(_ emoji: String, title: String, subtitle: String, tint: Color) -> some View {
+            VStack(spacing: 8) {
+                Text(emoji).font(.system(size: 44))
+                Text(title).font(.system(size: 16, weight: .heavy))
+                Text(subtitle).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+            }
+            .frame(maxWidth: .infinity).padding(24)
+            .background(RoundedRectangle(cornerRadius: 22).fill(tint.opacity(0.25)))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(tint.opacity(0.5), lineWidth: 1.5))
+        }
+
+        private var celebrateOverlay: some View {
+            ZStack {
+                Color.black.opacity(0.25).ignoresSafeArea()
+                VStack(spacing: 10) {
+                    Text("⭐️").font(.system(size: 90))
+                    Text(celebrateLabel).font(.system(size: 28, weight: .heavy)).foregroundStyle(.white)
+                }
+                .padding(40)
+                .background(RoundedRectangle(cornerRadius: 32).fill(P.lavender))
+                .scaleEffect(celebrate ? 1.0 : 0.5)
+                .opacity(celebrate ? 1.0 : 0.0)
+                .animation(.spring(response: 0.4, dampingFraction: 0.6), value: celebrate)
+            }
+            .transition(.opacity)
+        }
+    }
+
     public struct Root: View {
         @State private var page: Int = 0
         @Environment(\.managedObjectContext) private var moc
@@ -2696,10 +3023,18 @@ extension CasalistCottage {
         @AppStorage("meUid") private var meUid: String = ""
         @AppStorage("appearancePref") private var appearancePref: String = "system"
         @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+        private var members: FetchedResults<FamilyMember>
         @State private var showNamePrompt: Bool = false
         @State private var pendingName: String = ""
         @State private var showTutorial: Bool = false
         public init() {}
+
+        #if DEBUG
+        private var meIsKid: Bool {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.isKid ?? false
+        }
+        #endif
 
         private var preferredScheme: ColorScheme? {
             switch appearancePref {
@@ -2710,14 +3045,17 @@ extension CasalistCottage {
         }
 
         public var body: some View {
-            TabView(selection: $page) {
-                Home().tag(0)
-                MyToDo(onHome: { page = 0 }).tag(1)
-                FamilyListView(onHome: { page = 0 }).tag(2)
-                Rewards(onHome: { page = 0 }).tag(3)
+            Group {
+                #if DEBUG
+                if meIsKid {
+                    Kids()
+                } else {
+                    adultShell
+                }
+                #else
+                adultShell
+                #endif
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
             .preferredColorScheme(preferredScheme)
             .task {
                 evaluateNamePrompt()
@@ -2729,6 +3067,17 @@ extension CasalistCottage {
             }
             .sheet(isPresented: $showNamePrompt) { namePromptSheet }
             .sheet(isPresented: $showTutorial) { HelpView() }
+        }
+
+        private var adultShell: some View {
+            TabView(selection: $page) {
+                Home().tag(0)
+                MyToDo(onHome: { page = 0 }).tag(1)
+                FamilyListView(onHome: { page = 0 }).tag(2)
+                Rewards(onHome: { page = 0 }).tag(3)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
         }
 
         private func evaluateTutorial() {
