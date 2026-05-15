@@ -3037,12 +3037,23 @@ extension CasalistCottage {
                 if !isPending {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.12)).frame(height: 6)
+                            Capsule().fill(P.surfaceHi).frame(height: 8)
                             Capsule()
                                 .fill(canRedeem ? P.butter : P.mint)
-                                .frame(width: geo.size.width * CGFloat(progress), height: 6)
+                                .frame(width: max(8, geo.size.width * CGFloat(progress)), height: 8)
                         }
-                    }.frame(height: 6)
+                    }.frame(height: 8)
+                    HStack {
+                        Text("\(myPoints) / \(target) pts")
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(P.textMuted)
+                        Spacer()
+                        if !canRedeem {
+                            Text("\(Int(progress * 100))%")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(P.textMuted)
+                        }
+                    }
                 }
             }
             .padding(14)
@@ -3108,7 +3119,10 @@ extension CasalistCottage {
         private var familyPeek: [FamilyPeekEntry] {
             let lc = myName.lowercased()
             return members.filter {
-                $0.deletedAt == nil && $0.name.lowercased() != lc && !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
+                $0.deletedAt == nil
+                && $0.isKid
+                && $0.name.lowercased() != lc
+                && !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
             }.prefix(4).map { m in
                 // Find their nearest unredeemed approved goal above their points,
                 // or fall back to their highest unredeemed.
@@ -3133,9 +3147,11 @@ extension CasalistCottage {
         @ViewBuilder
         private var familyPeekSection: some View {
             let entries = familyPeek
-            if !entries.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("MY FAMILY", emoji: "🌟", color: P.mint)
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("MY FAMILY", emoji: "🌟", color: P.mint)
+                if entries.isEmpty {
+                    emptyCard("👯", title: "Just you for now", subtitle: "When other kids join the family, you'll see what they're working toward here.", tint: P.mint)
+                } else {
                     VStack(spacing: 8) {
                         ForEach(entries) { e in familyPeekRow(e) }
                     }
