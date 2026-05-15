@@ -4027,6 +4027,15 @@ extension CasalistCottage {
             HouseholdProvisioner.ensureHouseholdExists(in: moc)
             let allReq = FamilyMember.fetchRequest()
             let existing = (try? moc.fetch(allReq)) ?? []
+            // Adopt-before-create: if CloudKit already synced down a
+            // FamilyMember with this name into the current household, claim
+            // it instead of creating a duplicate. Avoids the reinstall race
+            // where two same-name records show up minutes later.
+            if let already = existing.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
+                meUid = already.uid.uuidString
+                showNamePrompt = false
+                return
+            }
             let role: FamilyRole = existing.isEmpty ? .owner : .standard
             if let household = (try? moc.fetch(Household.fetchRequest()))?.preferredTarget {
                 let me = FamilyMember(context: moc, name: trimmed, role: role.label, colorHex: 0xC97357, roleLevel: role)
@@ -4036,6 +4045,12 @@ extension CasalistCottage {
                 try? moc.save()
             }
             showNamePrompt = false
+            // Schedule a follow-up dedupe pass — if CloudKit syncs an
+            // original same-name record after this commit, it'll merge
+            // back onto whichever is older.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                FamilyDedupe.mergeDuplicateMeRecords(in: moc, userName: trimmed)
+            }
         }
     }
 }

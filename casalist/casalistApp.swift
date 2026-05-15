@@ -204,6 +204,11 @@ struct CasalistApp: App {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(800))
                 stack.context.refreshAllObjects()
+                // After the cache invalidates and CloudKit has had a beat
+                // to land remote changes, run the dedupe pass. Catches the
+                // reinstall-race "two me" pattern.
+                try? await Task.sleep(for: .milliseconds(1500))
+                FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
             }
             if notificationsEnabled {
                 Task {
