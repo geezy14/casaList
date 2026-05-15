@@ -1162,7 +1162,9 @@ struct SettingsView: View {
         // remove anything matching those prefixes.
         let d = UserDefaults.standard
         for k in d.dictionaryRepresentation().keys
-            where k.hasPrefix("streak_") || k.hasPrefix("badges_") {
+            where k.hasPrefix("streak_")
+                || k.hasPrefix("badges_")
+                || k.hasPrefix("reminder_streak_") {
             d.removeObject(forKey: k)
         }
         d.removeObject(forKey: "choreRoutinesJSON")

@@ -30,6 +30,10 @@ enum FamilyPoints {
         if let due = t.dueDate {
             t.dueDate = nextOccurrence(after: due, kind: t.effectiveRepeatKind)
         }
+        // Reminders carry their own per-task 🔥 streak counter — bump it
+        // here so daily/weekly/monthly/yearly reminders earn a streak when
+        // checked off on cadence.
+        ReminderStreak.recordCompletion(for: t)
     }
 
     private static func nextOccurrence(after date: Date, kind: String) -> Date {

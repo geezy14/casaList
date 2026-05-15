@@ -2974,6 +2974,27 @@ extension CasalistCottage {
                                         .lineLimit(4)
                                         .foregroundStyle(P.text)
                                     Spacer(minLength: 0)
+                                    // Per-reminder 🔥 streak — only renders
+                                    // when the reminder has a cadence
+                                    // supporting streaks (daily/weekly/monthly/
+                                    // yearly) AND the user has completed at
+                                    // least once on schedule.
+                                    let streak = ReminderStreak.current(for: t.uid)
+                                    if streak > 0 {
+                                        HStack(spacing: 4) {
+                                            Text("🔥\(streak)")
+                                                .font(.system(size: 11, weight: .heavy))
+                                                .foregroundStyle(P.peach)
+                                            let best = ReminderStreak.best(for: t.uid)
+                                            if best > streak {
+                                                Text("· best \(best)")
+                                                    .font(.system(size: 9, weight: .heavy))
+                                                    .foregroundStyle(P.textMuted)
+                                            }
+                                        }
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(Capsule().fill(P.peach.opacity(0.15)))
+                                    }
                                 }
                                 .padding(14)
                                 .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
