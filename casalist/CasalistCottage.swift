@@ -620,6 +620,8 @@ public enum CasalistCottage {
         @Environment(\.colorScheme) private var sys
         @State private var darkOverride: Bool? = nil
         @State private var showAddGoal: Bool = false
+        @State private var showSettings: Bool = false
+        @State private var showInbox: Bool = false
         @State private var redeemTarget: FamilyGoal? = nil
         @Environment(\.dismiss) private var dismiss
         @Environment(\.managedObjectContext) private var modelContext
@@ -650,10 +652,20 @@ public enum CasalistCottage {
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAddGoal) { AddGoalView() }
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
+            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showInbox) { InboxView() }
+        }
+
+        private var rewardsInboxBadgeCount: Int {
+            let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+            let pending = goalsQuery.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
+            if me?.canManageFamily == true { return pending.count }
+            let lc = (me?.name.lowercased() ?? userName.lowercased())
+            return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
         }
 
         private var topBar: some View {
-            HStack {
+            HStack(spacing: 10) {
                 Button { if let onHome { onHome() } else { dismiss() } } label: {
                     Image(systemName: "house.fill")
                         .font(.system(size: 14, weight: .bold))
@@ -662,9 +674,20 @@ public enum CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                }
+                Button { showInbox = true } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                        if rewardsInboxBadgeCount > 0 {
+                            Text("\(rewardsInboxBadgeCount)").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(P.peach)).offset(x: 6, y: -2)
+                        }
+                    }
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -1101,8 +1124,11 @@ extension CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var filter: String = "All"
         @State private var showAddTodo = false
+        @State private var showSettings = false
+        @State private var showInbox = false
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var todos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)]) private var allGoals: FetchedResults<FamilyGoal>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
@@ -1191,10 +1217,20 @@ extension CasalistCottage {
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
+            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showInbox) { InboxView() }
+        }
+
+        private var inboxBadgeCount: Int {
+            let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+            let pending = allGoals.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
+            if me?.canManageFamily == true { return pending.count }
+            let lc = (me?.name.lowercased() ?? userName.lowercased())
+            return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
         }
 
         private var topBar: some View {
-            HStack {
+            HStack(spacing: 10) {
                 Button { if let onHome { onHome() } else { dismiss() } } label: {
                     Image(systemName: "house.fill")
                         .font(.system(size: 14, weight: .bold))
@@ -1203,9 +1239,20 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                }
+                Button { showInbox = true } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                        if inboxBadgeCount > 0 {
+                            Text("\(inboxBadgeCount)").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(P.peach)).offset(x: 6, y: -2)
+                        }
+                    }
                 }
                 Button { showAddTodo = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
@@ -1487,10 +1534,6 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
                 Button { showAdd = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
@@ -1825,10 +1868,6 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
                 Button { showAdd = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
@@ -2039,10 +2078,6 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
                 Button { showAddReminder = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
@@ -2373,10 +2408,6 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
                 if canAddEvents {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)

@@ -24,6 +24,11 @@ public struct FamilyListView: View {
 
     @State private var darkOverride: Bool? = nil
     @State private var showAdd: Bool = false
+    @State private var showSettings: Bool = false
+    @State private var showInbox: Bool = false
+
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)])
+    private var allGoals: FetchedResults<FamilyGoal>
 
     public var onHome: (() -> Void)?
     public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
@@ -49,15 +54,40 @@ public struct FamilyListView: View {
         .foregroundStyle(P.text)
         .preferredColorScheme(dark ? .dark : .light)
         .sheet(isPresented: $showAdd) { AddFamilyListItemView() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showInbox) { InboxView() }
+    }
+
+    private var inboxBadgeCount: Int {
+        let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+        let pending = allGoals.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
+        if me?.canManageFamily == true { return pending.count }
+        let lc = (me?.name.lowercased() ?? userName.lowercased())
+        return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
     }
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button { if let onHome { onHome() } else { dismiss() } } label: {
                 Image(systemName: "house.fill").font(.system(size: 14, weight: .bold)).foregroundStyle(P.text)
                     .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
             }
             Spacer()
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                    .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+            }
+            Button { showInbox = true } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    if inboxBadgeCount > 0 {
+                        Text("\(inboxBadgeCount)").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(P.peach)).offset(x: 6, y: -2)
+                    }
+                }
+            }
             Button { showAdd = true } label: {
                 Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                     .frame(width: 38, height: 38)
