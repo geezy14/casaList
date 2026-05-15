@@ -31,6 +31,8 @@ struct SettingsView: View {
     @State private var showTrash: Bool = false
     @State private var showRestorePicker: Bool = false
     @State private var backupStatus: String? = nil
+    @State private var showHelp: Bool = false
+    @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
     @AppStorage("backupEnabled") private var backupEnabled: Bool = true
 
@@ -183,6 +185,7 @@ struct SettingsView: View {
             notificationsSection
             backupSection
             dataSection
+            aboutSection
             #if DEBUG
             developerSection
             #endif
@@ -722,6 +725,39 @@ struct SettingsView: View {
             }
             .cardBg(P)
         }
+    }
+
+    // MARK: About
+
+    private var versionLine: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "Version \(v) (build \(b))"
+    }
+
+    private var aboutSection: some View {
+        section(title: "ABOUT") {
+            VStack(spacing: 0) {
+                Button { showHelp = true } label: {
+                    HStack {
+                        Image(systemName: "questionmark.circle.fill").font(.system(size: 14)).foregroundStyle(P.peach)
+                        Text("How Casalist works").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.text)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                }.buttonStyle(.plain)
+                divider
+                HStack {
+                    Text("Build").font(.system(size: 14, weight: .semibold))
+                    Spacer()
+                    Text(versionLine).font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textMuted)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .cardBg(P)
+        }
+        .sheet(isPresented: $showHelp) { HelpView() }
     }
 
     // MARK: Backup (iCloud Drive)

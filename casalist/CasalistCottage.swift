@@ -2549,8 +2549,10 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         @AppStorage("appearancePref") private var appearancePref: String = "system"
+        @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
         @State private var showNamePrompt: Bool = false
         @State private var pendingName: String = ""
+        @State private var showTutorial: Bool = false
         public init() {}
 
         private var preferredScheme: ColorScheme? {
@@ -2571,9 +2573,26 @@ extension CasalistCottage {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
             .preferredColorScheme(preferredScheme)
-            .task { evaluateNamePrompt() }
-            .onChange(of: userName) { _, _ in evaluateNamePrompt() }
+            .task {
+                evaluateNamePrompt()
+                evaluateTutorial()
+            }
+            .onChange(of: userName) { _, _ in
+                evaluateNamePrompt()
+                evaluateTutorial()
+            }
             .sheet(isPresented: $showNamePrompt) { namePromptSheet }
+            .sheet(isPresented: $showTutorial) { HelpView() }
+        }
+
+        private func evaluateTutorial() {
+            // Show the tutorial once name is set and the user hasn't seen it.
+            if !hasSeenTutorial && !userName.trimmingCharacters(in: .whitespaces).isEmpty && !showNamePrompt {
+                // Tiny delay so it doesn't race the name prompt's dismiss animation.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    if !hasSeenTutorial { showTutorial = true }
+                }
+            }
         }
 
         private func evaluateNamePrompt() {
