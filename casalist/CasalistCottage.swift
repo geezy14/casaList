@@ -45,6 +45,7 @@ public enum CasalistCottage {
         @State private var showMyToDo = false
         @State private var showSchedule = false
         @State private var showFamilyList = false
+        @State private var selectedAgendaTask: TaskItem? = nil
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
@@ -85,6 +86,7 @@ public enum CasalistCottage {
             .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
             .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
+            .sheet(item: $selectedAgendaTask) { t in TaskDetailView(task: t) }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
         }
 
@@ -225,6 +227,7 @@ public enum CasalistCottage {
             let sub: String
             let symbol: String
             let color: Color
+            let taskUid: String?   // nil for event tiles, set for task/reminder tiles
         }
 
         private func tileSymbol(_ cat: String) -> String {
@@ -264,7 +267,8 @@ public enum CasalistCottage {
                     label: e.title,
                     sub: e.attendees,
                     symbol: "calendar",
-                    color: P.sky
+                    color: P.sky,
+                    taskUid: nil
                 )
             }
             let timedTiles = dueToday.map { task in
@@ -273,7 +277,8 @@ public enum CasalistCottage {
                     label: task.task,
                     sub: task.assignee ?? "",
                     symbol: tileSymbol(task.category),
-                    color: tileColor(task.category)
+                    color: tileColor(task.category),
+                    taskUid: task.uid
                 )
             }
             let pinnedTiles = pinned.map { task -> AgendaTile in
@@ -309,7 +314,8 @@ public enum CasalistCottage {
                     label: task.task,
                     sub: "",
                     symbol: symbol,
-                    color: P.coral
+                    color: P.coral,
+                    taskUid: task.uid
                 )
             }
             return eventTiles + timedTiles + pinnedTiles
@@ -318,26 +324,33 @@ public enum CasalistCottage {
         @ViewBuilder
         private var stickyAgenda: some View {
             if !todayAgenda.isEmpty {
-                Button { showSchedule = true } label: {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(Array(todayAgenda.enumerated()), id: \.element.id) { i, a in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Image(systemName: a.symbol).font(.system(size: 15)).foregroundStyle(a.color)
-                                    .frame(width: 30, height: 30)
-                                    .background(Circle().fill(a.color.opacity(0.2)))
-                                Text(a.label).font(.system(size: 13, weight: .heavy)).lineLimit(2)
-                                Text(a.sub.isEmpty ? a.timeText : "\(a.timeText) · \(a.sub)")
-                                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(2)
-                            }
-                            .padding(14).frame(width: 130, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 20).fill(i % 2 == 0 ? P.surface : P.surfaceAlt))
-                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                            Button {
+                                if let uid = a.taskUid,
+                                   let t = allTodos.first(where: { $0.uid == uid }) {
+                                    selectedAgendaTask = t
+                                } else {
+                                    showSchedule = true
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Image(systemName: a.symbol).font(.system(size: 15)).foregroundStyle(a.color)
+                                        .frame(width: 30, height: 30)
+                                        .background(Circle().fill(a.color.opacity(0.2)))
+                                    Text(a.label).font(.system(size: 13, weight: .heavy)).lineLimit(2)
+                                    Text(a.sub.isEmpty ? a.timeText : "\(a.timeText) · \(a.sub)")
+                                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(2)
+                                }
+                                .padding(14).frame(width: 130, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 20).fill(i % 2 == 0 ? P.surface : P.surfaceAlt))
+                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                            }.buttonStyle(.plain)
                         }
                     }.padding(.vertical, 4)
                 }
                 .foregroundStyle(P.text)
-                }.buttonStyle(.plain)
             }
         }
 
