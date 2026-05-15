@@ -1156,10 +1156,15 @@ struct SettingsView: View {
 
         try? moc.save()
 
-        // Per-device UserDefaults that mirror Core Data state.
+        // Per-device UserDefaults that mirror Core Data state. Streaks and
+        // badges are stored as `streak_<UUID>` / `badges_<UUID>` (one entry
+        // per FamilyMember) so we iterate the whole defaults dictionary and
+        // remove anything matching those prefixes.
         let d = UserDefaults.standard
-        d.removeObject(forKey: "streakStateJSON")
-        d.removeObject(forKey: "awardedBadgesJSON")
+        for k in d.dictionaryRepresentation().keys
+            where k.hasPrefix("streak_") || k.hasPrefix("badges_") {
+            d.removeObject(forKey: k)
+        }
         d.removeObject(forKey: "choreRoutinesJSON")
         d.removeObject(forKey: "quickAddHistoryJSON")
         d.removeObject(forKey: "notifiedAssignmentUIDs")
