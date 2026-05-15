@@ -2913,8 +2913,15 @@ extension CasalistCottage {
             return HStack(spacing: 14) {
                 Button { completeChore(t) } label: {
                     ZStack {
-                        Circle().fill(P.mint).frame(width: 52, height: 52)
-                        Image(systemName: "checkmark").font(.system(size: 22, weight: .heavy)).foregroundStyle(.white)
+                        // Empty outlined circle in the resting state — the kid
+                        // can clearly tell the chore isn't done yet.
+                        Circle()
+                            .stroke(P.mint, lineWidth: 3)
+                            .frame(width: 52, height: 52)
+                        // Faint inner mint fill so it still feels tappable.
+                        Circle()
+                            .fill(P.mint.opacity(0.12))
+                            .frame(width: 46, height: 46)
                     }
                 }.buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 4) {
@@ -3286,6 +3293,10 @@ extension CasalistCottage {
         private var celebrateOverlay: some View {
             ZStack {
                 Color.black.opacity(0.25).ignoresSafeArea()
+                // Confetti emoji floating upward + outward from the center.
+                ForEach(0..<14, id: \.self) { i in
+                    confettiBit(index: i)
+                }
                 VStack(spacing: 10) {
                     Text("⭐️").font(.system(size: 90))
                     Text(celebrateLabel).font(.system(size: 28, weight: .heavy)).foregroundStyle(.white)
@@ -3297,6 +3308,23 @@ extension CasalistCottage {
                 .animation(.spring(response: 0.4, dampingFraction: 0.6), value: celebrate)
             }
             .transition(.opacity)
+        }
+
+        private func confettiBit(index: Int) -> some View {
+            let emojis = ["🎉", "✨", "⭐️", "🎊", "💫", "🌟"]
+            let emoji = emojis[index % emojis.count]
+            // Deterministic-per-index pseudo-random spread so each bit takes
+            // a different path without re-randomizing on view rebuilds.
+            let angle = Double(index) * (2 * .pi / 14)
+            let distance: Double = 140 + Double((index * 17) % 60)
+            let dx = cos(angle) * distance
+            let dy = sin(angle) * distance - 40
+            return Text(emoji)
+                .font(.system(size: 28))
+                .offset(x: celebrate ? dx : 0, y: celebrate ? dy : 0)
+                .opacity(celebrate ? 0.0 : 1.0)
+                .scaleEffect(celebrate ? 0.6 : 1.2)
+                .animation(.easeOut(duration: 1.2).delay(Double(index % 4) * 0.04), value: celebrate)
         }
     }
 
