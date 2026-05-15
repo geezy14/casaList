@@ -3,6 +3,7 @@ import CoreData
 import CloudKit
 import UIKit
 import UserNotifications
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.colorScheme) private var sys
@@ -28,7 +29,10 @@ struct SettingsView: View {
     @State private var deleteTarget: FamilyMember? = nil
     @State private var showAddMember: Bool = false
     @State private var showTrash: Bool = false
+    @State private var showRestorePicker: Bool = false
+    @State private var backupStatus: String? = nil
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
+    @AppStorage("backupEnabled") private var backupEnabled: Bool = true
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
@@ -133,6 +137,22 @@ struct SettingsView: View {
             Text("\(m.name) moves to Trash. You have \(Trash.retentionDays) days to restore them from Settings → Data → Trash.")
         }
         .sheet(isPresented: $showTrash) { TrashView() }
+        .fileImporter(isPresented: $showRestorePicker, allowedContentTypes: [.json, .data]) { result in
+            switch result {
+            case .success(let url):
+                let didStart = url.startAccessingSecurityScopedResource()
+                defer { if didStart { url.stopAccessingSecurityScopedResource() } }
+                let restore = CloudBackup.restore(from: url, into: moc)
+                switch restore {
+                case .success(let n):
+                    backupStatus = n == 0 ? "Nothing new to restore — your data was already up to date." : "Restored \(n) record\(n == 1 ? "" : "s")."
+                case .failure(let err):
+                    backupStatus = err.message
+                }
+            case .failure(let err):
+                backupStatus = "Couldn't pick file: \(err.localizedDescription)"
+            }
+        }
     }
 
     private var topBar: some View {
@@ -161,6 +181,7 @@ struct SettingsView: View {
             familySection
             appearanceSection
             notificationsSection
+            backupSection
             dataSection
             developerSection
             Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
@@ -696,6 +717,66 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .cardBg(P)
+        }
+    }
+
+    // MARK: Backup (iCloud Drive)
+
+    private var lastBackupText: String {
+        if let d = CloudBackup.lastSnapshotDate {
+            let f = RelativeDateTimeFormatter()
+            f.unitsStyle = .short
+            return "Last backup \(f.localizedString(for: d, relativeTo: Date()))"
+        }
+        return "No backup yet"
+    }
+
+    private var backupSection: some View {
+        section(title: "BACKUP") {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(P.sky.opacity(0.22)).frame(width: 44, height: 44)
+                        Image(systemName: "icloud.fill").font(.system(size: 20)).foregroundStyle(P.sky)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("iCloud Drive Backup").font(.system(size: 14, weight: .heavy))
+                        Text(CloudBackup.isAvailable ? lastBackupText : "iCloud Drive unavailable")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                    Spacer()
+                    if CloudBackup.isAvailable {
+                        Text("ON").font(.system(size: 9, weight: .heavy)).tracking(0.5)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(P.mint.opacity(0.25)))
+                            .foregroundStyle(P.mint)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                divider
+                Toggle(isOn: $backupEnabled) {
+                    Text("Auto-back up daily").font(.system(size: 14, weight: .semibold))
+                }
+                .tint(P.peach)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                divider
+                actionButton("Back up now") {
+                    let result = CloudBackup.snapshot(in: moc)
+                    switch result {
+                    case .success: backupStatus = "Backed up to iCloud Drive."
+                    case .failure(let err): backupStatus = err.message
+                    }
+                }
+                divider
+                actionButton("Restore from backup…") { showRestorePicker = true }
+                if let backupStatus {
+                    divider
+                    Text(backupStatus).font(.caption).foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .cardBg(P)
         }

@@ -184,8 +184,16 @@ struct CasalistApp: App {
                 }
         }
         .onChange(of: scenePhase) { _, new in
-            if new == .active && notificationsEnabled {
+            guard new == .active else { return }
+            if notificationsEnabled {
                 Task { await NotificationsManager.syncFromContext(stack.context) }
+            }
+            // Auto-snapshot to iCloud Drive if enabled and a day has passed.
+            let backupOn = UserDefaults.standard.object(forKey: "backupEnabled") as? Bool ?? true
+            if backupOn && CloudBackup.isAvailable && CloudBackup.isDue {
+                DispatchQueue.global(qos: .utility).async {
+                    _ = CloudBackup.snapshot(in: stack.context)
+                }
             }
         }
     }
