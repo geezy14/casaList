@@ -100,8 +100,10 @@ struct SettingsView: View {
                 if on {
                     _ = await NotificationsManager.requestAuth()
                     await NotificationsManager.syncFromContext(moc)
+                    await NotificationsManager.scheduleWeeklyRecap(in: moc)
                 } else {
                     await NotificationsManager.cancelAll()
+                    await NotificationsManager.cancelWeeklyRecap()
                 }
                 await refreshNotifStatus()
             }

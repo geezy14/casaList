@@ -227,4 +227,50 @@ enum NotificationsManager {
         if !t.category.isEmpty { parts.append(t.category.capitalized) }
         return parts.isEmpty ? "Casalist reminder" : parts.joined(separator: " · ")
     }
+
+    // MARK: – Weekly recap (Sunday 7pm)
+
+    @MainActor
+    static func scheduleWeeklyRecap(in context: NSManagedObjectContext) async {
+        let recapId = "weekly-recap"
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [recapId])
+
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        let memberReq = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "deletedAt == nil")
+        let members = (try? context.fetch(memberReq)) ?? []
+        let sortedMembers = members.sorted { $0.points > $1.points }
+        guard !sortedMembers.isEmpty else { return }
+
+        let topThree = sortedMembers.prefix(3).map { "\($0.name) \($0.points)pt" }.joined(separator: " · ")
+
+        let openReq: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        openReq.predicate = NSPredicate(format: "isCompleted == NO AND points > 0 AND deletedAt == nil")
+        let openCount = (try? context.count(for: openReq)) ?? 0
+
+        let body = openCount == 0
+            ? "\(topThree). No open chores 🎉"
+            : "\(topThree). \(openCount) open chore\(openCount == 1 ? "" : "s") this week."
+
+        let content = UNMutableNotificationContent()
+        content.title = "Casalist weekly recap 🏠"
+        content.body = body
+        content.sound = .default
+
+        var dc = DateComponents()
+        dc.weekday = 1   // Sunday
+        dc.hour = 19
+        dc.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        let request = UNNotificationRequest(identifier: recapId, content: content, trigger: trigger)
+        try? await center.add(request)
+    }
+
+    @MainActor
+    static func cancelWeeklyRecap() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly-recap"])
+    }
 }

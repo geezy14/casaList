@@ -177,6 +177,7 @@ struct CasalistApp: App {
                     if notificationsEnabled {
                         _ = await NotificationsManager.requestAuth()
                         await NotificationsManager.syncFromContext(stack.context)
+                        await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
@@ -186,7 +187,10 @@ struct CasalistApp: App {
         .onChange(of: scenePhase) { _, new in
             guard new == .active else { return }
             if notificationsEnabled {
-                Task { await NotificationsManager.syncFromContext(stack.context) }
+                Task {
+                    await NotificationsManager.syncFromContext(stack.context)
+                    await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
+                }
             }
             // Auto-snapshot to iCloud Drive if enabled and a day has passed.
             let backupOn = UserDefaults.standard.object(forKey: "backupEnabled") as? Bool ?? true
