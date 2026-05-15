@@ -2470,42 +2470,43 @@ extension CasalistCottage {
         }
 
         private func eventRow(_ e: FamilyEvent, color: Color, isFirst: Bool, isPast: Bool) -> some View {
-            Button { editingEvent = e } label: {
-                HStack(spacing: 12) {
-                    VStack(spacing: 2) {
-                        Text(dayLabel(e.startDate)).font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textDim).tracking(0.5)
-                        Text(monthLabel(e.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
-                    }
-                    .frame(width: 44)
-                    .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.18)))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(e.title)
-                            .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(isPast ? P.textDim : P.text)
-                            .strikethrough(isPast)
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock").font(.system(size: 10)).foregroundStyle(color)
-                            Text(timeLabel(e))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(P.textDim)
-                            if !e.location.isEmpty {
-                                Text("·").foregroundStyle(P.textMuted)
-                                Image(systemName: "mappin").font(.system(size: 10)).foregroundStyle(P.textMuted)
-                                Text(e.location).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim).lineLimit(1)
-                            }
-                        }
-                        if !e.attendees.isEmpty {
-                            Text(e.attendees).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
-                }.padding(.vertical, 11)
-                .overlay(alignment: .top) {
-                    if !isFirst { Rectangle().fill(P.border).frame(height: 1) }
+            HStack(spacing: 12) {
+                VStack(spacing: 2) {
+                    Text(dayLabel(e.startDate)).font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textDim).tracking(0.5)
+                    Text(monthLabel(e.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
                 }
-            }.buttonStyle(.plain)
+                .frame(width: 44)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.18)))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(e.title)
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(isPast ? P.textDim : P.text)
+                        .strikethrough(isPast)
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock").font(.system(size: 10)).foregroundStyle(color)
+                        Text(timeLabel(e))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(P.textDim)
+                        if !e.location.isEmpty {
+                            Text("·").foregroundStyle(P.textMuted)
+                            Image(systemName: "mappin").font(.system(size: 10)).foregroundStyle(P.textMuted)
+                            Text(e.location).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim).lineLimit(1)
+                        }
+                    }
+                    if !e.attendees.isEmpty {
+                        Text(e.attendees).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
+            }
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+            .onTapGesture { editingEvent = e }
+            .overlay(alignment: .top) {
+                if !isFirst { Rectangle().fill(P.border).frame(height: 1) }
+            }
         }
 
         private func dayLabel(_ d: Date) -> String {

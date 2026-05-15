@@ -8,8 +8,13 @@ public final class FamilyEvent: NSManagedObject {
     @NSManaged public var startDate: Date
     @NSManaged public var isAllDay: Bool
     @NSManaged public var location: String
+    @NSManaged public var latitude: Double
+    @NSManaged public var longitude: Double
     @NSManaged public var attendees: String
     @NSManaged public var notes: String
+
+    /// Convenience — has a real picked location (not just typed text).
+    var hasCoordinates: Bool { latitude != 0 || longitude != 0 }
     @NSManaged public var repeatKind: String
     @NSManaged public var createdAt: Date
     @NSManaged public var createdBy: String

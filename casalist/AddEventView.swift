@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import MapKit
 
 struct AddEventView: View {
     @Environment(\.managedObjectContext) private var moc
@@ -16,10 +17,13 @@ struct AddEventView: View {
     @State private var startDate: Date
     @State private var isAllDay: Bool
     @State private var location: String
+    @State private var latitude: Double
+    @State private var longitude: Double
     @State private var attendees: String
     @State private var notes: String
     @State private var repeatKind: String
     @State private var confirmDelete: Bool = false
+    @State private var showLocationPicker: Bool = false
 
     init(editing: FamilyEvent? = nil) {
         self.editing = editing
@@ -27,10 +31,14 @@ struct AddEventView: View {
         _startDate = State(initialValue: editing?.startDate ?? Date())
         _isAllDay = State(initialValue: editing?.isAllDay ?? false)
         _location = State(initialValue: editing?.location ?? "")
+        _latitude = State(initialValue: editing?.latitude ?? 0)
+        _longitude = State(initialValue: editing?.longitude ?? 0)
         _attendees = State(initialValue: editing?.attendees ?? "")
         _notes = State(initialValue: editing?.notes ?? "")
         _repeatKind = State(initialValue: editing?.repeatKind ?? "")
     }
+
+    private var hasCoordinates: Bool { latitude != 0 || longitude != 0 }
 
     private let repeatOptions: [(label: String, kind: String)] = [
         ("None",    ""),
@@ -63,8 +71,36 @@ struct AddEventView: View {
                     }
                 }
                 Section("Where") {
-                    TextField("Location (optional)", text: $location)
-                        .textInputAutocapitalization(.words)
+                    Button {
+                        showLocationPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: hasCoordinates ? "mappin.circle.fill" : "mappin.circle")
+                                .foregroundStyle(hasCoordinates ? .orange : .secondary)
+                            if location.isEmpty {
+                                Text("Pick a location").foregroundStyle(.secondary)
+                            } else {
+                                Text(location).foregroundStyle(.primary).lineLimit(1)
+                            }
+                            Spacer()
+                            if !location.isEmpty {
+                                Button {
+                                    location = ""
+                                    latitude = 0
+                                    longitude = 0
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.system(size: 12, weight: .semibold))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    if hasCoordinates {
+                        LocationMiniMap(latitude: latitude, longitude: longitude, title: location)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    }
                 }
                 Section("Who") {
                     if members.isEmpty {
@@ -103,6 +139,13 @@ struct AddEventView: View {
                 Button("Delete", role: .destructive) { delete() }
                 Button("Cancel", role: .cancel) {}
             }
+            .sheet(isPresented: $showLocationPicker) {
+                LocationPickerSheet { picked in
+                    location = picked.displayName
+                    latitude = picked.latitude
+                    longitude = picked.longitude
+                }
+            }
         }
     }
 
@@ -113,6 +156,8 @@ struct AddEventView: View {
             editing.startDate = startDate
             editing.isAllDay = isAllDay
             editing.location = location.trimmingCharacters(in: .whitespaces)
+            editing.latitude = latitude
+            editing.longitude = longitude
             editing.attendees = attendees
             editing.notes = notes
             editing.repeatKind = repeatKind
@@ -128,6 +173,8 @@ struct AddEventView: View {
                 repeatKind: repeatKind,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
+            event.latitude = latitude
+            event.longitude = longitude
             if let h = households.preferredTarget {
                 moc.assign(event, toStoreOf: h)
                 event.household = h

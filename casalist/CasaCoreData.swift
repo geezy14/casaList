@@ -287,6 +287,8 @@ final class CasaCoreDataStack {
             attr("startDate", .dateAttributeType, def: Date()),
             attr("isAllDay", .booleanAttributeType, def: false),
             attr("location", .stringAttributeType, def: ""),
+            attr("latitude", .doubleAttributeType, optional: false, def: 0.0),
+            attr("longitude", .doubleAttributeType, optional: false, def: 0.0),
             attr("attendees", .stringAttributeType, def: ""),
             attr("notes", .stringAttributeType, def: ""),
             attr("repeatKind", .stringAttributeType, def: ""),
