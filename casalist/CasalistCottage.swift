@@ -18,12 +18,12 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `vivid(_:)`   saturated jewel tones (current)
+        ///   - `ember(_:)`   coral-forward warm (current)
+        ///   - `vivid(_:)`   saturated jewel tones
         ///   - `harbor(_:)`  saturated coastal blue
         ///   - `cottage(_:)` soft pastels
-        ///   - `hearth(_:)`  warm home-decor neutrals
         static func resolve(_ dark: Bool) -> Palette {
-            vivid(dark)
+            ember(dark)
         }
 
         /// "Cottage" — soft pastel peach/mint/butter on warm cream / dark
@@ -44,31 +44,29 @@ public enum CasalistCottage {
             )
         }
 
-        /// "Hearth" — warm modern home-decor: terracotta primary, sage,
-        /// mustard, plum, denim, brick. Cream linen → deep cocoa
-        /// backgrounds. Confidently homey, less sugary than cottage.
-        ///
-        /// Semantic role of each accent name is preserved so existing
-        /// view code continues to make sense:
-        ///   peach    → terracotta  (primary / CTAs)
-        ///   mint     → sage        (success / completed / chores)
-        ///   butter   → mustard     (highlight / pinned / points)
-        ///   lavender → plum        (secondary / maintenance)
-        ///   sky      → denim       (info / cool secondary)
-        ///   coral    → brick       (warning / overdue / urgent)
-        static func hearth(_ dark: Bool) -> Palette {
+        /// "Ember" — coral-forward warm. Confident coral primary, teal
+        /// complement to keep it from being one-note, gold + mauve-rose
+        /// accents. Light-mode bg has a peachy tint; dark mode goes warm
+        /// brown rather than cool slate.
+        ///   peach    → confident coral (primary / CTAs)
+        ///   mint     → teal           (success / chores)
+        ///   butter   → warm gold      (highlight / points)
+        ///   lavender → mauve-rose     (secondary / maintenance)
+        ///   sky      → teal-blue      (info / cool secondary)
+        ///   coral    → deep red-coral (warning / overdue)
+        static func ember(_ dark: Bool) -> Palette {
             dark ? Palette(
-                bg: Color(rgb: 0x1F1612), surface: Color(rgb: 0x2A1F18), surfaceAlt: Color(rgb: 0x3A2A1E), surfaceHi: Color(rgb: 0x4D3826),
-                border: Color.white.opacity(0.08),
-                text: Color(rgb: 0xF5EFE3), textDim: Color(rgb: 0xF5EFE3).opacity(0.55), textMuted: Color(rgb: 0xF5EFE3).opacity(0.35),
-                peach: Color(rgb: 0xDB8868), mint: Color(rgb: 0x9CB37F), butter: Color(rgb: 0xE8B85C),
-                lavender: Color(rgb: 0xA887AB), sky: Color(rgb: 0x8EA8C2), coral: Color(rgb: 0xC76A5A)
+                bg: Color(rgb: 0x2A1610), surface: Color(rgb: 0x3A1E18), surfaceAlt: Color(rgb: 0x4D2A20), surfaceHi: Color(rgb: 0x6B3D2D),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xFFF1E8), textDim: Color(rgb: 0xFFF1E8).opacity(0.55), textMuted: Color(rgb: 0xFFF1E8).opacity(0.35),
+                peach: Color(rgb: 0xFF8266), mint: Color(rgb: 0x3DCDC0), butter: Color(rgb: 0xF0B449),
+                lavender: Color(rgb: 0xE07AAC), sky: Color(rgb: 0x80D0DF), coral: Color(rgb: 0xE85248)
             ) : Palette(
-                bg: Color(rgb: 0xF5F0E8), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xEDE3D2), surfaceHi: Color(rgb: 0xE0D4BD),
-                border: Color(rgb: 0x3D2B1F).opacity(0.10),
-                text: Color(rgb: 0x2D1F17), textDim: Color(rgb: 0x2D1F17).opacity(0.6), textMuted: Color(rgb: 0x2D1F17).opacity(0.4),
-                peach: Color(rgb: 0xC2734F), mint: Color(rgb: 0x7B9266), butter: Color(rgb: 0xD9A441),
-                lavender: Color(rgb: 0x8E6F8F), sky: Color(rgb: 0x6D8AA8), coral: Color(rgb: 0xB05246)
+                bg: Color(rgb: 0xFFF4EE), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xFFDDD0), surfaceHi: Color(rgb: 0xFFC9B5),
+                border: Color(rgb: 0x5C2A1F).opacity(0.12),
+                text: Color(rgb: 0x5C2A1F), textDim: Color(rgb: 0x5C2A1F).opacity(0.6), textMuted: Color(rgb: 0x5C2A1F).opacity(0.4),
+                peach: Color(rgb: 0xFF5E3A), mint: Color(rgb: 0x00A89B), butter: Color(rgb: 0xE89A2A),
+                lavender: Color(rgb: 0xC9528A), sky: Color(rgb: 0x4FB3C8), coral: Color(rgb: 0xC8362E)
             )
         }
 
