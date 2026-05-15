@@ -41,9 +41,9 @@ enum AvatarLevel: Int, CaseIterable {
     var emblem: String? {
         switch self {
         case .rookie:   return nil
-        case .bronze:   return "⭐"
-        case .silver:   return "⭐⭐"
-        case .gold:     return "🏅"
+        case .bronze:   return "🥉"
+        case .silver:   return "🥈"
+        case .gold:     return "🥇"
         case .platinum: return "👑"
         }
     }
@@ -79,6 +79,7 @@ struct LeveledAvatar: View {
     private var level: AvatarLevel { AvatarLevel(points: Int(member.points)) }
 
     var body: some View {
+        #if DEBUG
         let ringWidth: CGFloat = max(2, size * 0.07)
         let emblemSize: CGFloat = max(10, size * 0.32)
         ZStack {
@@ -104,5 +105,8 @@ struct LeveledAvatar: View {
             }
         }
         .frame(width: size + ringWidth, height: size + ringWidth)
+        #else
+        CLAvatar(member.asCLMember, size: size)
+        #endif
     }
 }

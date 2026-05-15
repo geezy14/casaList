@@ -57,6 +57,12 @@ public enum CasalistCottage {
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
+        private var canManage: Bool {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+        }
+        @State private var quickAddPing: String? = nil
+        @State private var quickAddTick: Int = 0
+        @Environment(\.managedObjectContext) private var modelContext
         private var inboxBadgeCount: Int {
             let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
             let pending = allGoals.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
@@ -141,10 +147,75 @@ public enum CasalistCottage {
                 greetingCard
                 stickyAgenda
                 quickAdd
+                if canManage { quickAddChips }
                 star
                 tiles
                 whatsNew
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var quickAddChips: some View {
+            let entries = QuickAddHistory.load()
+            return Group {
+                if !entries.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("QUICK ADD").font(.system(size: 10, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim)
+                            if let ping = quickAddPing {
+                                Text("· \(ping)")
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(P.peach)
+                                    .transition(.opacity)
+                            }
+                            Spacer()
+                        }
+                        .padding(.leading, 4)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(entries) { e in
+                                    quickAddChip(e)
+                                }
+                            }.padding(.horizontal, 4)
+                        }
+                    }
+                    .id(quickAddTick)
+                }
+            }
+        }
+
+        private func quickAddChip(_ e: QuickAddEntry) -> some View {
+            Button {
+                let households = (try? modelContext.fetch(Household.fetchRequest())) ?? []
+                let t = QuickAddHistory.spawn(
+                    e, creator: userName.trimmingCharacters(in: .whitespaces),
+                    in: modelContext, household: households.preferredTarget
+                )
+                Task { await NotificationsManager.scheduleNow(for: t) }
+                withAnimation { quickAddPing = "Added \"\(e.label)\" for \(e.assignee.isEmpty ? "no one" : e.assignee)" }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    withAnimation { quickAddPing = nil }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(e.label).font(.system(size: 12, weight: .heavy)).foregroundStyle(P.text)
+                    if !e.assignee.isEmpty {
+                        Text("· \(e.assignee)").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
+                    }
+                    if e.points > 0 {
+                        Text("⭐\(e.points)").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.peach)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Capsule().fill(P.surface))
+                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button(role: .destructive) {
+                    QuickAddHistory.remove(e)
+                    quickAddTick += 1
+                } label: { Label("Remove", systemImage: "trash") }
+            }
         }
 
         private var isNight: Bool {

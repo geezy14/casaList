@@ -163,6 +163,12 @@ struct AddTaskView: View {
         }
         try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: newTask) }
+        QuickAddHistory.record(
+            label: newTask.task,
+            assignee: newTask.assignee,
+            points: Int(newTask.points),
+            category: newTask.category
+        )
         dismiss()
     }
 }
