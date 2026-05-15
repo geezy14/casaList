@@ -39,6 +39,7 @@ public enum CasalistCottage {
         @State private var showSettings = false
         @State private var showInbox = false
         @State private var showStats = false
+        @State private var showRoutines = false
         @State private var showAddTodo = false
         @State private var showGrocery = false
         @State private var showMaintenance = false
@@ -87,6 +88,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
             .sheet(isPresented: $showStats) { FamilyStatsView() }
+            .sheet(isPresented: $showRoutines) { RoutinesView() }
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
@@ -137,6 +139,13 @@ public enum CasalistCottage {
                     Image(systemName: "chart.bar.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
+                }
+                if canManage {
+                    Button { showRoutines = true } label: {
+                        Image(systemName: "wand.and.stars").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(P.surfaceAlt))
+                    }
                 }
                 #endif
             }.padding(.horizontal, 20).padding(.bottom, 12)
