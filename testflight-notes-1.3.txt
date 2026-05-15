@@ -1,0 +1,18 @@
+Casalist 1 (build 1.3)
+
+REMINDERS GET BETTER
+- Each repeating reminder now grows its own streak counter. Check it
+ off on cadence (daily, weekly, monthly, yearly) and watch the
+ number climb. Miss a cycle and it resets, but the all-time best
+ is preserved.
+- Hourly and every-N-hour reminders gain an optional STOP TIME. Set
+ "Drink water every hour from 8am to 10pm" and it stops firing at
+ night instead of buzzing through every hour around the clock.
+
+WHAT TO TEST
+- Create a daily reminder. Check it off today and tomorrow. The card
+ should show a 2-day streak. Skip a day and watch it reset (but the
+ best count sticks).
+- Create an hourly reminder. Turn on Stop time and pick something
+ like 9pm. Verify notifications only fire between the start hour
+ and 9pm.
