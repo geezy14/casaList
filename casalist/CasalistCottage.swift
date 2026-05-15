@@ -15,7 +15,19 @@ public enum CasalistCottage {
     struct Palette {
         let bg, surface, surfaceAlt, surfaceHi, border, text, textDim, textMuted: Color
         let peach, mint, butter, lavender, sky, coral: Color
+
+        /// The currently-active palette. Swap the return statement to flip
+        /// the whole app between themes (the prior pastel-cottage palette
+        /// is preserved as `cottage(_:)` so it's one line to revert).
         static func resolve(_ dark: Bool) -> Palette {
+            hearth(dark)
+        }
+
+        /// Original "Cottage" palette — warm pastel peach/mint/butter on
+        /// cream/dark-cocoa. Preserved so it's one line away if Hearth
+        /// doesn't land. To bring it back: change `resolve(_:)` to call
+        /// `cottage(dark)`.
+        static func cottage(_ dark: Bool) -> Palette {
             dark ? Palette(
                 bg: Color(rgb: 0x251812), surface: Color(rgb: 0x1A0F0A), surfaceAlt: Color(rgb: 0x3A2418), surfaceHi: Color(rgb: 0x4D2F1F),
                 border: Color.white.opacity(0.05),
@@ -28,6 +40,34 @@ public enum CasalistCottage {
                 text: Color(rgb: 0x3B2A22), textDim: Color(rgb: 0x3B2A22).opacity(0.6), textMuted: Color(rgb: 0x3B2A22).opacity(0.4),
                 peach: Color(rgb: 0xFF9E7C), mint: Color(rgb: 0x7AB97D), butter: Color(rgb: 0xE8B040),
                 lavender: Color(rgb: 0xA892D8), sky: Color(rgb: 0x6FA8D0), coral: Color(rgb: 0xE47A82)
+            )
+        }
+
+        /// "Hearth" — warm modern home-decor: terracotta primary, sage,
+        /// mustard, plum, denim, brick. Cream linen → deep cocoa
+        /// backgrounds. Confidently homey, less sugary than cottage.
+        ///
+        /// Semantic role of each accent name is preserved so existing
+        /// view code continues to make sense:
+        ///   peach    → terracotta  (primary / CTAs)
+        ///   mint     → sage        (success / completed / chores)
+        ///   butter   → mustard     (highlight / pinned / points)
+        ///   lavender → plum        (secondary / maintenance)
+        ///   sky      → denim       (info / cool secondary)
+        ///   coral    → brick       (warning / overdue / urgent)
+        static func hearth(_ dark: Bool) -> Palette {
+            dark ? Palette(
+                bg: Color(rgb: 0x1F1612), surface: Color(rgb: 0x2A1F18), surfaceAlt: Color(rgb: 0x3A2A1E), surfaceHi: Color(rgb: 0x4D3826),
+                border: Color.white.opacity(0.08),
+                text: Color(rgb: 0xF5EFE3), textDim: Color(rgb: 0xF5EFE3).opacity(0.55), textMuted: Color(rgb: 0xF5EFE3).opacity(0.35),
+                peach: Color(rgb: 0xDB8868), mint: Color(rgb: 0x9CB37F), butter: Color(rgb: 0xE8B85C),
+                lavender: Color(rgb: 0xA887AB), sky: Color(rgb: 0x8EA8C2), coral: Color(rgb: 0xC76A5A)
+            ) : Palette(
+                bg: Color(rgb: 0xF5F0E8), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xEDE3D2), surfaceHi: Color(rgb: 0xE0D4BD),
+                border: Color(rgb: 0x3D2B1F).opacity(0.10),
+                text: Color(rgb: 0x2D1F17), textDim: Color(rgb: 0x2D1F17).opacity(0.6), textMuted: Color(rgb: 0x2D1F17).opacity(0.4),
+                peach: Color(rgb: 0xC2734F), mint: Color(rgb: 0x7B9266), butter: Color(rgb: 0xD9A441),
+                lavender: Color(rgb: 0x8E6F8F), sky: Color(rgb: 0x6D8AA8), coral: Color(rgb: 0xB05246)
             )
         }
 
