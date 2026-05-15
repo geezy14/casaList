@@ -781,8 +781,7 @@ public enum CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("CHORE REWARDS 🏆").font(.system(size: 12, weight: .heavy)).tracking(1.2).foregroundStyle(P.peach)
-                    Text("Family Leaderboard").font(.system(size: 28, weight: .heavy))
+                    Text("Family Leaderboard 🏆").font(.system(size: 28, weight: .heavy))
                 }
                 podium
                 standings
