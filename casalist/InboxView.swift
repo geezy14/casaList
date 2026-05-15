@@ -54,6 +54,16 @@ struct InboxView: View {
                     .padding(20)
                 }
                 .scrollIndicators(.hidden)
+                .refreshable {
+                    // Yank down → wait briefly so CloudKit's background pull
+                    // has a chance to land any pending shared-zone changes,
+                    // then drop cached objects so the @FetchRequests re-read
+                    // the store. Doesn't bypass CloudKit latency, but cuts
+                    // the "I know it's coming but my screen looks stale"
+                    // perception.
+                    try? await Task.sleep(for: .seconds(2))
+                    moc.refreshAllObjects()
+                }
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)

@@ -196,6 +196,15 @@ struct CasalistApp: App {
         }
         .onChange(of: scenePhase) { _, new in
             guard new == .active else { return }
+            // Foregrounding: invalidate the row cache so the next read pulls
+            // any changes that synced while the app was backgrounded.
+            // NSPersistentCloudKitContainer already fetches automatically on
+            // foreground; refreshAllObjects ensures the UI displays the new
+            // state without waiting for a separate user action.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                stack.context.refreshAllObjects()
+            }
             if notificationsEnabled {
                 Task {
                     await NotificationsManager.syncFromContext(stack.context)

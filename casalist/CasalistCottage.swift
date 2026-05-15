@@ -99,7 +99,15 @@ public enum CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -796,7 +804,15 @@ public enum CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -1398,7 +1414,15 @@ extension CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -1718,7 +1742,15 @@ extension CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -2052,7 +2084,15 @@ extension CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -2261,7 +2301,15 @@ extension CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
@@ -2591,7 +2639,15 @@ extension CasalistCottage {
                 P.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     topBar
-                    ScrollView { content }.scrollIndicators(.hidden)
+                    ScrollView { content }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            // Pull-to-refresh: wait briefly so CloudKit can
+                            // land pending shared-zone changes, then drop
+                            // cached objects so @FetchRequests re-read.
+                            try? await Task.sleep(for: .seconds(2))
+                            modelContext.refreshAllObjects()
+                        }
                 }
             }
             .foregroundStyle(P.text)
