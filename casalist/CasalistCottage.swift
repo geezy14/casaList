@@ -133,7 +133,7 @@ public enum CasalistCottage {
 
         private var topBar: some View {
             HStack(spacing: 10) {
-                HStack(spacing: -10) { ForEach(members) { LeveledAvatar(member: $0, size: 34) } }
+                HStack(spacing: -10) { ForEach(members) { LeveledAvatar(member: $0, size: 34, showEmblem: false) } }
                 Spacer()
                 Button { showInvite = true } label: {
                     Image(systemName: "person.crop.circle.badge.plus").font(.system(size: 15)).foregroundStyle(P.text)
