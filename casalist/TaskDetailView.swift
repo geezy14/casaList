@@ -210,7 +210,6 @@ struct TaskDetailView: View {
                 fieldRow("Category") {
                     Picker("", selection: $editCategory) {
                         Text("Chores").tag("Chores")
-                        Text("Kitchen").tag("kitchen")
                         Text("Maintenance").tag("Maintenance")
                         Text("Family").tag("family")
                     }.pickerStyle(.menu).labelsHidden()
@@ -269,7 +268,6 @@ struct TaskDetailView: View {
     private func categoryEmoji(_ c: String) -> String {
         switch c.lowercased() {
         case "chores":      return "🧹"
-        case "kitchen":     return "🍳"
         case "groceries":   return "🛒"
         case "maintenance": return "🔧"
         case "reminders":   return "📌"

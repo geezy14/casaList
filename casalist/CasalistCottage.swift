@@ -233,7 +233,6 @@ public enum CasalistCottage {
         private func tileSymbol(_ cat: String) -> String {
             switch cat.lowercased() {
             case "chores": return "checkmark.circle.fill"
-            case "kitchen": return "fork.knife"
             case "groceries": return "cart.fill"
             case "maintenance": return "wrench.fill"
             default: return "calendar"
@@ -243,7 +242,6 @@ public enum CasalistCottage {
         private func tileColor(_ cat: String) -> Color {
             switch cat.lowercased() {
             case "chores": return P.mint
-            case "kitchen": return P.butter
             case "groceries": return P.peach
             case "maintenance": return P.lavender
             default: return P.sky
@@ -1174,7 +1172,6 @@ extension CasalistCottage {
         private func categoryColor(_ cat: String) -> Color {
             switch cat.lowercased() {
             case "chores": return P.mint
-            case "kitchen": return P.butter
             case "groceries": return P.coral
             case "maintenance": return P.lavender
             default: return P.peach
@@ -1183,7 +1180,6 @@ extension CasalistCottage {
         private func categorySymbol(_ cat: String) -> String {
             switch cat.lowercased() {
             case "chores": return "checkmark.circle.fill"
-            case "kitchen": return "fork.knife"
             case "groceries": return "cart.fill"
             case "maintenance": return "wrench.fill"
             default: return "circle.fill"
@@ -1347,7 +1343,6 @@ extension CasalistCottage {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         kindChip(emoji: "🧹", label: "Chores", color: P.mint, count: counts["Chores"] ?? 0)
-                        kindChip(emoji: "🍴", label: "Kitchen", color: P.butter, count: counts["kitchen"] ?? 0)
                         kindChip(emoji: "🛒", label: "Groceries", color: P.coral, count: counts["groceries"] ?? 0)
                         kindChip(emoji: "🔧", label: "Maintenance", color: P.lavender, count: counts["Maintenance"] ?? 0)
                     }

@@ -34,11 +34,11 @@ struct AddTaskView: View {
 
     init(defaultCategory: String = "Chores") {
         _category = State(initialValue: defaultCategory)
-        _points = State(initialValue: (defaultCategory == "kitchen" || defaultCategory == "groceries") ? 0 : 10)
+        _points = State(initialValue: defaultCategory == "groceries" ? 0 : 10)
     }
 
     private var isPointless: Bool {
-        category.lowercased() == "kitchen" || category.lowercased() == "groceries"
+        category.lowercased() == "groceries"
     }
 
     var body: some View {
@@ -72,13 +72,12 @@ struct AddTaskView: View {
                 Section("Category") {
                     Picker("Category", selection: $category) {
                         Text("Chores").tag("Chores")
-                        Text("Kitchen").tag("kitchen")
                         Text("Groceries").tag("groceries")
                         Text("Maintenance").tag("Maintenance")
                     }
                     .pickerStyle(.menu)
                     .onChange(of: category) { _, new in
-                        if new.lowercased() == "kitchen" || new.lowercased() == "groceries" {
+                        if new.lowercased() == "groceries" {
                             points = 0
                         } else if points == 0 {
                             points = 10

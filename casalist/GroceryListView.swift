@@ -4,7 +4,7 @@ import CoreData
 struct GroceryListView: View {
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)],
-        predicate: NSPredicate(format: "category IN %@", ["kitchen", "groceries"])
+        predicate: NSPredicate(format: "category == %@", "groceries")
     ) private var groceryItems: FetchedResults<TaskItem>
 
     var body: some View {
