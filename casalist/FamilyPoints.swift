@@ -11,8 +11,10 @@ enum FamilyPoints {
         } else {
             t.isCompleted.toggle()
             if t.isCompleted {
+                t.completedAt = Date()
                 award(t, in: members)
             } else {
+                t.completedAt = nil
                 revoke(t, in: members)
             }
         }
@@ -20,6 +22,10 @@ enum FamilyPoints {
 
     private static func advanceRecurring<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         award(t, in: members)
+        // Recurring tasks never stay "completed", but stamp completedAt
+        // each time so WHAT'S NEW and My Wins can show the most recent
+        // pass-through with an accurate timestamp.
+        t.completedAt = Date()
         t.completionCount += 1
         if let due = t.dueDate {
             t.dueDate = nextOccurrence(after: due, kind: t.effectiveRepeatKind)

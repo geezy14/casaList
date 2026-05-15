@@ -642,20 +642,27 @@ public enum CasalistCottage {
         }
 
         private var activityFeed: [ActivityEntry] {
+            // Each task surfaces at most once: completions take priority over
+            // creations. completedAt is preferred for ordering completions,
+            // falling back to createdAt for tasks that haven't been touched.
             allTodos
-                .sorted { $0.createdAt > $1.createdAt }
+                .sorted { ($0.completedAt ?? $0.createdAt) > ($1.completedAt ?? $1.createdAt) }
                 .prefix(6)
                 .map { t in
+                    let isCompletion = t.isCompleted || t.completedAt != nil
                     let who: String = {
+                        // For completions, prefer assignee (the doer); for
+                        // additions, the creator.
+                        if isCompletion, let a = t.assignee, !a.isEmpty { return a }
                         if !t.createdBy.isEmpty { return t.createdBy }
                         if let a = t.assignee, !a.isEmpty { return a }
                         return ""
                     }()
                     return ActivityEntry(
                         who: who,
-                        verb: t.isCompleted ? "completed" : "added",
+                        verb: isCompletion ? "completed" : "added",
                         target: t.task,
-                        when: t.createdAt
+                        when: isCompletion ? (t.completedAt ?? t.createdAt) : t.createdAt
                     )
                 }
         }
@@ -2950,28 +2957,38 @@ extension CasalistCottage {
             .presentationDetents([.medium])
         }
 
+        /// Chore completions assigned to me, newest first.
+        private var myCompletedChores: [TaskItem] {
+            let lc = myName.lowercased()
+            return allTodos.filter { t in
+                (t.assignee ?? "").lowercased() == lc
+                && t.points > 0
+                && t.completedAt != nil
+            }.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+        }
+
         private var winsSection: some View {
             VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("MY WINS", emoji: "🏆", color: P.peach)
-                if myRedeemedGoals.isEmpty {
-                    emptyCard("🏅", title: "No wins yet", subtitle: "Finish chores to earn rewards.", tint: P.lavender)
+                if myCompletedChores.isEmpty {
+                    emptyCard("🏅", title: "No wins yet", subtitle: "Check off a chore to start your win streak.", tint: P.lavender)
                 } else {
-                    VStack(spacing: 8) { ForEach(myRedeemedGoals.prefix(8)) { winRow($0) } }
+                    VStack(spacing: 8) { ForEach(Array(myCompletedChores.prefix(8)), id: \.uid) { winRow($0) } }
                 }
             }
         }
 
-        private func winRow(_ g: FamilyGoal) -> some View {
+        private func winRow(_ t: TaskItem) -> some View {
             HStack(spacing: 12) {
                 Text("🏆").font(.system(size: 24))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(g.label).font(.system(size: 14, weight: .heavy))
-                    if let d = g.redeemedAt {
-                        Text(d, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
+                    Text(t.task).font(.system(size: 14, weight: .heavy)).lineLimit(1)
+                    if let d = t.completedAt {
+                        Text(d, style: .relative).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
                     }
                 }
                 Spacer()
-                Text("\(g.targetPoints) pts").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.butter)
+                Text("+\(t.points) pts").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.butter)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))

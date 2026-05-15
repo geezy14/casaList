@@ -266,6 +266,11 @@ final class CasaCoreDataStack {
             attr("completionCount", .integer64AttributeType, def: 0),
             attr("parentUid", .stringAttributeType, def: ""),
             attr("deletedAt", .dateAttributeType),
+            // Stamped by FamilyPoints.toggle when a task transitions
+            // false → true (cleared on un-complete). Drives WHAT'S NEW
+            // ordering and Kid view's "My Wins" log so completions sort by
+            // when they actually happened, not when the task was created.
+            attr("completedAt", .dateAttributeType),
         ]
 
         // ------- FamilyGoal attributes -------
