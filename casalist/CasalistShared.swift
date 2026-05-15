@@ -16,15 +16,15 @@ public struct CLFamilyMember: Identifiable, Hashable {
     public let role: String
     public let color: Color   // light-mode anchor; direction palettes may tint further
     public let points: Int
-    public var photoData: Data? = nil
+    public var photoBlob: Data? = nil
 
-    public init(id: String, label: String, role: String, color: Color, points: Int, photoData: Data? = nil) {
+    public init(id: String, label: String, role: String, color: Color, points: Int, photoBlob: Data? = nil) {
         self.id = id
         self.label = label
         self.role = role
         self.color = color
         self.points = points
-        self.photoData = photoData
+        self.photoBlob = photoBlob
     }
 }
 
@@ -117,7 +117,7 @@ public struct CLAvatar: View {
     }
     public var body: some View {
         Group {
-            if let data = member.photoData, let uiImage = UIImage(data: data) {
+            if let data = member.photoBlob, let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()

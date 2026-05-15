@@ -206,7 +206,7 @@ public enum CasalistCottage {
                         .fill(Color(red: 0.12, green: 0.12, blue: 0.18))
                         .frame(width: 56, height: 56)
                         .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
-                    if let data = userMember?.photoData, let ui = UIImage(data: data) {
+                    if let data = userMember?.photoBlob, let ui = UIImage(data: data) {
                         Image(uiImage: ui)
                             .resizable().scaledToFill()
                             .frame(width: 54, height: 54)

@@ -236,7 +236,11 @@ final class CasaCoreDataStack {
             attr("points", .integer64AttributeType, def: 0),
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("roleLevel", .stringAttributeType, def: "standard"),
-            attr("photoData", .binaryDataAttributeType, externalStorage: true),
+            // Inline binary (no external storage / CKAsset) — NSPersistentCloudKitContainer
+            // syncs inline BYTES fields reliably in shared zones, where the
+            // CKAsset path is flaky. 1024px JPEG at ~80% quality stays well
+            // under CloudKit's 1MB per-record limit.
+            attr("photoBlob", .binaryDataAttributeType, externalStorage: false),
         ]
 
         // ------- TaskItem attributes -------

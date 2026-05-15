@@ -67,7 +67,7 @@ struct ProfilePhotoSheet: View {
 
     private var pickerScreen: some View {
         VStack(spacing: 24) {
-            if let data = matchingMember?.photoData, let ui = UIImage(data: data) {
+            if let data = matchingMember?.photoBlob, let ui = UIImage(data: data) {
                 Image(uiImage: ui)
                     .resizable().scaledToFill()
                     .frame(width: 180, height: 180)
@@ -93,7 +93,7 @@ struct ProfilePhotoSheet: View {
             PhotosPicker(selection: $pickerItem, matching: .images, photoLibrary: .shared()) {
                 HStack(spacing: 8) {
                     if loading { ProgressView().tint(.white) }
-                    Label(matchingMember?.photoData != nil ? "Change photo" : "Choose photo",
+                    Label(matchingMember?.photoBlob != nil ? "Change photo" : "Choose photo",
                           systemImage: "photo.on.rectangle.angled")
                         .font(.system(size: 16, weight: .heavy))
                 }
@@ -103,7 +103,7 @@ struct ProfilePhotoSheet: View {
             }
             .disabled(userName.trimmingCharacters(in: .whitespaces).isEmpty || loading)
 
-            if matchingMember?.photoData != nil {
+            if matchingMember?.photoBlob != nil {
                 Button(role: .destructive) { removePhoto() } label: {
                     Label("Remove photo", systemImage: "trash")
                         .font(.system(size: 14, weight: .semibold))
@@ -129,11 +129,11 @@ struct ProfilePhotoSheet: View {
 
     private func savePhoto(_ data: Data) {
         if let existing = matchingMember {
-            existing.photoData = data
+            existing.photoBlob = data
         } else {
             let name = userName.trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { return }
-            let m = FamilyMember(context: moc, name: name, role: "You", photoData: data)
+            let m = FamilyMember(context: moc, name: name, role: "You", photoBlob: data)
             if let h = households.preferredTarget {
                 moc.assign(m, toStoreOf: h)
                 m.household = h
@@ -143,7 +143,7 @@ struct ProfilePhotoSheet: View {
     }
 
     private func removePhoto() {
-        matchingMember?.photoData = nil
+        matchingMember?.photoBlob = nil
         try? moc.save()
     }
 }

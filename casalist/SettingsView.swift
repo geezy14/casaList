@@ -853,7 +853,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func avatar(for m: FamilyMember) -> some View {
-        if let data = m.photoData, let ui = UIImage(data: data) {
+        if let data = m.photoBlob, let ui = UIImage(data: data) {
             Image(uiImage: ui).resizable().scaledToFill()
                 .frame(width: 36, height: 36).clipShape(Circle())
         } else {

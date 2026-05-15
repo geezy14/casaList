@@ -11,7 +11,7 @@ public final class FamilyMember: NSManagedObject {
     @NSManaged public var points: Int64
     @NSManaged public var createdAt: Date
     @NSManaged public var roleLevel: String
-    @NSManaged public var photoData: Data?
+    @NSManaged public var photoBlob: Data?
     @NSManaged public var household: Household?
 
     public override func awakeFromInsert() {
@@ -42,7 +42,7 @@ public final class FamilyMember: NSManagedObject {
     var canDeleteOwnTasks: Bool { level != .kid }
 
     var asCLMember: CLFamilyMember {
-        CLFamilyMember(id: uid.uuidString, label: name, role: role, color: color, points: Int(points), photoData: photoData)
+        CLFamilyMember(id: uid.uuidString, label: name, role: role, color: color, points: Int(points), photoBlob: photoBlob)
     }
 
     /// Convenience initializer that inserts into the given context and applies
@@ -54,7 +54,7 @@ public final class FamilyMember: NSManagedObject {
         role: String = "",
         colorHex: Int = 0xC97357,
         points: Int = 0,
-        photoData: Data? = nil,
+        photoBlob: Data? = nil,
         roleLevel: FamilyRole = .standard
     ) {
         let entity = NSEntityDescription.entity(forEntityName: "FamilyMember", in: context)!
@@ -63,7 +63,7 @@ public final class FamilyMember: NSManagedObject {
         self.role = role
         self.colorHex = Int64(colorHex)
         self.points = Int64(points)
-        self.photoData = photoData
+        self.photoBlob = photoBlob
         self.roleLevel = roleLevel.rawValue
     }
 }
