@@ -904,6 +904,29 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
                 }.buttonStyle(.plain)
+                if iAmAdmin {
+                    divider
+                    Button(role: .destructive) { confirmWipe = true } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "arrow.counterclockwise.circle.fill")
+                                .font(.system(size: 16, weight: .bold)).foregroundStyle(P.coral)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Reset all data").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.coral)
+                                Text("Clears every chore, goal, event, streak, and badge. Family members and household stay.")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(P.textMuted)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                    }.buttonStyle(.plain)
+                }
+                if let wipeMessage {
+                    divider
+                    Text(wipeMessage).font(.caption).foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                }
             }
             .cardBg(P)
         }
@@ -1104,14 +1127,52 @@ struct SettingsView: View {
         wipeMessage = "Seeded — wait ~10s then deploy via Dashboard. Temp member: \(tempName)"
     }
 
+    /// Comprehensive reset — hard-deletes every TaskItem / FamilyGoal /
+    /// FamilyEvent / ChoreTemplate (including soft-deleted "trash"
+    /// records), resets all member points to 0, clears the routine
+    /// templates blob on every household, and wipes the per-device
+    /// UserDefaults caches (streaks, badges, quick-add history, push
+    /// notification dedup sets). The household entity itself and every
+    /// FamilyMember row stay intact so the family structure survives.
     private func wipeAll() {
-        let totalBefore = tasks.count + goals.count + events.count
-        for t in tasks { moc.delete(t) }
-        for g in goals { moc.delete(g) }
-        for e in events { moc.delete(e) }
-        for m in members { m.points = 0 }
+        // Use fetch-everything rather than the bound @FetchRequest lists so
+        // we also catch deletedAt != nil records that the views filter out.
+        let allTasks    = (try? moc.fetch(TaskItem.fetchRequest())) ?? []
+        let allGoals    = (try? moc.fetch(FamilyGoal.fetchRequest())) ?? []
+        let allEvents   = (try? moc.fetch(FamilyEvent.fetchRequest())) ?? []
+        let allChores   = (try? moc.fetch(ChoreTemplate.fetchRequest())) ?? []
+        let totalBefore = allTasks.count + allGoals.count + allEvents.count + allChores.count
+
+        for t in allTasks  { moc.delete(t) }
+        for g in allGoals  { moc.delete(g) }
+        for e in allEvents { moc.delete(e) }
+        for c in allChores { moc.delete(c) }
+
+        // Reset member points + clear routine templates on every household.
+        let allMembers     = (try? moc.fetch(FamilyMember.fetchRequest())) ?? []
+        for m in allMembers { m.points = 0 }
+        let allHouseholds  = (try? moc.fetch(Household.fetchRequest())) ?? []
+        for h in allHouseholds { h.routinesJSON = "" }
+
         try? moc.save()
-        wipeMessage = "Cleared \(totalBefore) records. Family and household preserved."
+
+        // Per-device UserDefaults that mirror Core Data state.
+        let d = UserDefaults.standard
+        d.removeObject(forKey: "streakStateJSON")
+        d.removeObject(forKey: "awardedBadgesJSON")
+        d.removeObject(forKey: "choreRoutinesJSON")
+        d.removeObject(forKey: "quickAddHistoryJSON")
+        d.removeObject(forKey: "notifiedAssignmentUIDs")
+        d.removeObject(forKey: "notifiedRedemptionUIDs")
+        d.removeObject(forKey: "notifiedPendingRequestUIDs")
+
+        // Cancel any due-date or recap notifications scheduled for now-deleted records.
+        Task {
+            await NotificationsManager.cancelAll()
+            await NotificationsManager.cancelWeeklyRecap()
+        }
+
+        wipeMessage = "Cleared \(totalBefore) records + all caches. Family and household preserved."
     }
 
     private func refreshPending() async {
