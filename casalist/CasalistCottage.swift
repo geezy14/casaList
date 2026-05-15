@@ -717,7 +717,7 @@ public enum CasalistCottage {
                         tile(bg: P.sky, emoji: "📅", label: "Schedule", big: "\(scheduleUpcomingCount)", suffix: "upcoming", sub: nextEventTitle)
                     }.buttonStyle(.plain)
                     Button { showFamilyList = true } label: {
-                        tile(bg: P.peach, emoji: "🪴", label: "Family List", big: "\(familyListOpenCount)", suffix: "up for grabs", sub: familyListNextItem)
+                        tile(bg: Color(rgb: 0xE67E22), emoji: "🪴", label: "Family List", big: "\(familyListOpenCount)", suffix: "up for grabs", sub: familyListNextItem)
                     }.buttonStyle(.plain)
                 }
             }
