@@ -640,6 +640,9 @@ public enum CasalistCottage {
             let verb: String
             let target: String
             let when: Date
+            /// Optional " to <name>" suffix when the actor is acting on behalf
+            /// of someone else — e.g. parent assigning a chore to a kid.
+            var recipient: String? = nil
         }
 
         private var activityFeed: [ActivityEntry] {
@@ -655,11 +658,21 @@ public enum CasalistCottage {
                     if let a = t.assignee, !a.isEmpty { return a }
                     return ""
                 }()
+                // For additions, show " to <assignee>" when the creator
+                // assigned it to someone OTHER than themselves. Suppress
+                // self-assignment ("geezy added to geezy" reads silly).
+                let recipient: String? = {
+                    guard !isCompletion else { return nil }
+                    guard let a = t.assignee?.trimmingCharacters(in: .whitespaces), !a.isEmpty else { return nil }
+                    if a.lowercased() == t.createdBy.lowercased() { return nil }
+                    return a
+                }()
                 return ActivityEntry(
                     who: who,
                     verb: isCompletion ? "completed" : "added",
                     target: t.task,
-                    when: isCompletion ? (t.completedAt ?? t.createdAt) : t.createdAt
+                    when: isCompletion ? (t.completedAt ?? t.createdAt) : t.createdAt,
+                    recipient: recipient
                 )
             }
             let redemptionEntries: [ActivityEntry] = allGoals
@@ -718,12 +731,20 @@ public enum CasalistCottage {
                                     return "Casalist"
                                 }()
                                 let nameColor: Color = memberFor(a.who)?.color ?? P.text
-                                (Text(displayName)
+                                let recipientText: Text? = {
+                                    guard let r = a.recipient, !r.isEmpty else { return nil }
+                                    let rName = memberFor(r)?.name ?? r
+                                    let rColor: Color = memberFor(r)?.color ?? P.text
+                                    return Text(" to ").font(.system(size: 13)).foregroundColor(P.textDim)
+                                        + Text(rName).font(.system(size: 13, weight: .heavy)).foregroundColor(rColor)
+                                }()
+                                let base = Text(displayName)
                                     .font(.system(size: 13, weight: .heavy))
                                     .foregroundColor(nameColor)
                                  + Text(" \(a.verb) ").font(.system(size: 13)).foregroundColor(P.textDim)
-                                 + Text(a.target).font(.system(size: 13, weight: .semibold)))
-                                .lineLimit(2)
+                                 + Text(a.target).font(.system(size: 13, weight: .semibold))
+                                (recipientText.map { base + $0 } ?? base)
+                                    .lineLimit(2)
                                 Spacer()
                                 Text(relativeTime(a.when)).font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
                             }.padding(.vertical, 11)
