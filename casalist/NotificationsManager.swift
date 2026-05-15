@@ -274,6 +274,59 @@ enum NotificationsManager {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly-recap"])
     }
 
+    // MARK: – Redemption push notifications
+
+    private static let notifiedRedemptionsKey = "notifiedRedemptionUIDs"
+
+    /// Fire a local notification for every FamilyGoal that's been redeemed
+    /// since the last scan and hasn't been notified about yet on this device.
+    ///
+    /// Called from the .NSPersistentStoreRemoteChange listener — so it only
+    /// runs when the change came from CloudKit (not from a local redeem on
+    /// this device). The redeemer's own device won't see their own action
+    /// here because local changes don't fire the remote-change notification.
+    @MainActor
+    static func detectAndNotifyRedemptions(in context: NSManagedObjectContext) async {
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Only consider redemptions in the last 7 days so a clock-skew
+        // backlog or a freshly synced shared store doesn't dump months of
+        // history into the user's notification center.
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let req: NSFetchRequest<FamilyGoal> = FamilyGoal.fetchRequest()
+        req.predicate = NSPredicate(format: "isRedeemed == YES AND redeemedAt != nil AND redeemedAt > %@ AND deletedAt == nil", cutoff as NSDate)
+        guard let recent = try? context.fetch(req), !recent.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        var notified = Set(defaults.stringArray(forKey: notifiedRedemptionsKey) ?? [])
+
+        for g in recent {
+            let key = g.uid.uuidString
+            if notified.contains(key) { continue }
+            // Skip if the goal has no real owner (still pending) — shouldn't
+            // happen with isRedeemed=YES but defensive.
+            let owner = GoalApproval.realOwnerName(g)
+            guard !owner.isEmpty else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = "🎁 \(owner) redeemed a reward"
+            content.body = "\(g.label) · \(g.targetPoints) pts"
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "redemption-\(key)",
+                content: content,
+                trigger: trigger
+            )
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedRedemptionsKey)
+    }
+
     /// Fires a one-shot test notification in ~5 seconds using the same body
     /// builder as the Sunday recap, so the parent can see exactly what the
     /// weekly notification will look like with real data.

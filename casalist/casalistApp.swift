@@ -182,6 +182,14 @@ struct CasalistApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    // A remote change just landed — check for redemptions
+                    // that were performed on another device and fire a local
+                    // notification for each new one.
+                    if notificationsEnabled {
+                        Task { @MainActor in
+                            await NotificationsManager.detectAndNotifyRedemptions(in: stack.context)
+                        }
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, new in

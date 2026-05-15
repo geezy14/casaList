@@ -643,29 +643,39 @@ public enum CasalistCottage {
         }
 
         private var activityFeed: [ActivityEntry] {
-            // Each task surfaces at most once: completions take priority over
-            // creations. completedAt is preferred for ordering completions,
-            // falling back to createdAt for tasks that haven't been touched.
-            allTodos
-                .sorted { ($0.completedAt ?? $0.createdAt) > ($1.completedAt ?? $1.createdAt) }
-                .prefix(6)
-                .map { t in
-                    let isCompletion = t.isCompleted || t.completedAt != nil
-                    let who: String = {
-                        // For completions, prefer assignee (the doer); for
-                        // additions, the creator.
-                        if isCompletion, let a = t.assignee, !a.isEmpty { return a }
-                        if !t.createdBy.isEmpty { return t.createdBy }
-                        if let a = t.assignee, !a.isEmpty { return a }
-                        return ""
-                    }()
-                    return ActivityEntry(
-                        who: who,
-                        verb: isCompletion ? "completed" : "added",
-                        target: t.task,
-                        when: isCompletion ? (t.completedAt ?? t.createdAt) : t.createdAt
+            // Merge two streams:
+            // - Tasks: most-recent activity, completion (with completedAt)
+            //   takes priority over creation (createdAt) for ordering.
+            // - Goals: redemptions only (isRedeemed && redeemedAt set).
+            let taskEntries: [ActivityEntry] = allTodos.map { t in
+                let isCompletion = t.isCompleted || t.completedAt != nil
+                let who: String = {
+                    if isCompletion, let a = t.assignee, !a.isEmpty { return a }
+                    if !t.createdBy.isEmpty { return t.createdBy }
+                    if let a = t.assignee, !a.isEmpty { return a }
+                    return ""
+                }()
+                return ActivityEntry(
+                    who: who,
+                    verb: isCompletion ? "completed" : "added",
+                    target: t.task,
+                    when: isCompletion ? (t.completedAt ?? t.createdAt) : t.createdAt
+                )
+            }
+            let redemptionEntries: [ActivityEntry] = allGoals
+                .filter { $0.isRedeemed && $0.redeemedAt != nil && !GoalApproval.isPending($0) }
+                .map { g in
+                    ActivityEntry(
+                        who: GoalApproval.realOwnerName(g),
+                        verb: "redeemed 🎁",
+                        target: g.label,
+                        when: g.redeemedAt ?? g.createdAt
                     )
                 }
+            return (taskEntries + redemptionEntries)
+                .sorted { $0.when > $1.when }
+                .prefix(6)
+                .map { $0 }
         }
 
         private func relativeTime(_ d: Date) -> String {
