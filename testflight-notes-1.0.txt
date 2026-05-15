@@ -1,0 +1,65 @@
+Casalist 1.0 (build 1.0) — What's new
+
+The big one: kids can now have their own space.
+
+KID MODE (NEW)
+• Family members marked as Kid get a full-screen, simplified view designed
+  for them — big tap targets, a clear list of "MY STUFF TO DO", a giant
+  points number, a goal shelf showing what they're saving toward, a peek
+  at what the rest of the family is working on, and a "MY WINS" trophy
+  log of recent chore completions + redeemed rewards.
+• "Ask for a reward" — kids can suggest what they want. A parent decides
+  if yes and sets the price at approval time.
+• Confetti + haptic feedback when a chore is checked off.
+
+THEMES (NEW)
+• Settings → Appearance now has a color palette picker. Three themes:
+  Ember (warm coral, default), Vivid (saturated jewel tones), and Anchor
+  (cobalt + carrot orange).
+
+ACTIVITY FEED (UPGRADED)
+• WHAT'S NEW on the dashboard now shows completions and reward
+  redemptions across the family, sorted by when they actually happened
+  (not when the task was created). Format: "Alex completed Make bed · 2m"
+  or "Alex added Trash to Riley · 5m" so it's clear who did what for whom.
+
+NOTIFICATIONS (NEW)
+• "You got a new task" push when someone assigns a chore to you.
+• "Reward requested" push to parents/admins when a kid suggests a reward.
+• "Reward redeemed" push when a family member redeems a goal.
+• Weekly Sunday-evening recap with standings.
+
+GOAL REDESIGN
+• Anyone proposing a goal (non-admin) writes a label + optional "why".
+  Admins set the points price at approval time. Cleaner economy.
+• Goal shelf instead of one-at-a-time: see up to 5 active goals, each
+  with progress.
+
+DASHBOARD POLISH
+• "Home" tile replaces "Maintenance" — bundles home + maintenance chores.
+  A pill toggle inside switches between the two categories.
+• Quick-add chips on Home for one-tap chore creation. Long-press a chip
+  to remove it; menu to clear all.
+• "Schedule" tile now uses sky blue, "Family List" uses warm orange —
+  no two tiles share a color.
+• My To-Do has a Mine/Everyone scope toggle for admins so parents can
+  see all family chores in one place.
+• Pull-to-refresh on every scrollable screen for snappier sync feel.
+• App is back to 2 swipe pages (Home and Rewards). My To-Do and Family
+  List still open from their dashboard tiles.
+
+UNDER THE HOOD
+• New CloudKit schema fields for completion timestamps, reward request
+  notes, and routine templates — deployed to Production.
+• Faster onscreen palette switching.
+
+WHAT TO TEST
+• Kid mode: set a family member's role to Kid and verify their phone
+  switches to the kid view. Add chores assigned to them; check off;
+  watch the confetti, the win, the points bump.
+• Reward requests: as a kid, ask for a reward with a note. As parent,
+  approve with a price.
+• Push notifications: assign a chore to another family member on a
+  different iCloud account; they should get a banner within a minute.
+• Themes: swap palettes in Settings and confirm the entire app re-skins
+  instantly.
