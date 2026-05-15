@@ -940,7 +940,7 @@ public enum CasalistCottage {
                     ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
                         HStack(spacing: 12) {
                             Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 20))
-                            LeveledAvatar(member: m, size: 36)
+                            LeveledAvatar(member: m, size: 36, showEmblem: false)
                             VStack(spacing: 5) {
                                 HStack(spacing: 8) {
                                     Text(m.name).font(.system(size: 14, weight: .heavy))

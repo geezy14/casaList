@@ -75,12 +75,38 @@ enum AvatarLevel: Int, CaseIterable {
 struct LeveledAvatar: View {
     let member: FamilyMember
     let size: CGFloat
+    /// Whether to show the small medal emblem in the corner. Suppressed on
+    /// the standings row because the rank medals on the left already do
+    /// that job and the two compete visually.
+    var showEmblem: Bool = true
 
     private var level: AvatarLevel { AvatarLevel(points: Int(member.points)) }
 
     var body: some View {
-        // Tier rings + emblems disabled for the initial ship. Keeping the
-        // wrapper so callsites don't churn — un-comment the DEBUG branch when
-        // the feature is ready.
+        let ringWidth: CGFloat = max(2, size * 0.07)
+        let emblemSize: CGFloat = max(10, size * 0.32)
+        ZStack {
+            CLAvatar(member.asCLMember, size: size)
+            if level != .rookie {
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(
+                            colors: [level.ringColor, level.ringHighlight, level.ringColor],
+                            center: .center
+                        ),
+                        lineWidth: ringWidth
+                    )
+                    .frame(width: size + ringWidth, height: size + ringWidth)
+                if showEmblem, let e = level.emblem {
+                    Text(e)
+                        .font(.system(size: emblemSize))
+                        .padding(2)
+                        .background(Circle().fill(Color.white))
+                        .overlay(Circle().stroke(level.ringColor, lineWidth: 1))
+                        .offset(x: size * 0.32, y: -size * 0.32)
+                }
+            }
+        }
+        .frame(width: size + ringWidth, height: size + ringWidth)
     }
 }
