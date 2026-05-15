@@ -72,6 +72,7 @@ struct AddTaskView: View {
                 Section("Category") {
                     Picker("Category", selection: $category) {
                         Text("Chores").tag("Chores")
+                        Text("Home").tag("home")
                         Text("Groceries").tag("groceries")
                         Text("Maintenance").tag("Maintenance")
                     }
