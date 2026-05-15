@@ -623,6 +623,9 @@ public enum CasalistCottage {
         @State private var showSettings: Bool = false
         @State private var showInbox: Bool = false
         @State private var redeemTarget: FamilyGoal? = nil
+        @State private var celebrate: Bool = false
+        @State private var celebrateLabel: String = ""
+        @State private var celebrateEmoji: String = "⭐"
         @Environment(\.dismiss) private var dismiss
         @Environment(\.managedObjectContext) private var modelContext
         @AppStorage("userName") private var userName: String = ""
@@ -654,6 +657,7 @@ public enum CasalistCottage {
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
+            .celebration(visible: $celebrate, label: celebrateLabel, emoji: celebrateEmoji)
         }
 
         private var rewardsInboxBadgeCount: Int {
@@ -923,7 +927,14 @@ public enum CasalistCottage {
                                 g.isRedeemed = true
                                 g.redeemedAt = Date()
                                 try? modelContext.save()
+                                let label = g.label
                                 redeemTarget = nil
+                                // Celebrate after dismiss so overlay fires on Rewards page.
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    celebrateLabel = "Redeemed \(label)!"
+                                    celebrateEmoji = "🎉"
+                                    celebrate = true
+                                }
                             } label: {
                                 Text("Redeem").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
                             }
@@ -1090,8 +1101,7 @@ public enum CasalistCottage {
                     .foregroundStyle(.white)
                 if isMineOrIManage {
                     Button {
-                        FamilyPoints.toggle(t, in: members)
-                        try? modelContext.save()
+                        completeEarning(t)
                     } label: {
                         Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy))
                             .frame(width: 30, height: 30)
@@ -1103,6 +1113,19 @@ public enum CasalistCottage {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func completeEarning(_ t: TaskItem) {
+            let wasCompleted = t.isCompleted
+            let isRecurring = !t.effectiveRepeatKind.isEmpty
+            let pts = Int(t.points)
+            FamilyPoints.toggle(t, in: members)
+            try? modelContext.save()
+            let earned = isRecurring || (!wasCompleted && t.isCompleted)
+            if earned && pts > 0 {
+                celebrateLabel = "+\(pts) pts!"
+                celebrate = true
+            }
         }
 
         private func adjustPoints(_ m: FamilyMember, by delta: Int) {
@@ -1126,6 +1149,8 @@ extension CasalistCottage {
         @State private var showAddTodo = false
         @State private var showSettings = false
         @State private var showInbox = false
+        @State private var celebrate: Bool = false
+        @State private var celebrateLabel: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var todos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
@@ -1219,6 +1244,20 @@ extension CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
+            .celebration(visible: $celebrate, label: celebrateLabel)
+        }
+
+        private func completeTask(_ t: TaskItem) {
+            let wasCompleted = t.isCompleted
+            let isRecurring = !t.effectiveRepeatKind.isEmpty
+            let pts = Int(t.points)
+            FamilyPoints.toggle(t, in: members)
+            try? modelContext.save()
+            let earned = isRecurring || (!wasCompleted && t.isCompleted)
+            if earned && pts > 0 {
+                celebrateLabel = "+\(pts) pts!"
+                celebrate = true
+            }
         }
 
         private var inboxBadgeCount: Int {

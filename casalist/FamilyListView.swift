@@ -26,6 +26,8 @@ public struct FamilyListView: View {
     @State private var showAdd: Bool = false
     @State private var showSettings: Bool = false
     @State private var showInbox: Bool = false
+    @State private var celebrate: Bool = false
+    @State private var celebrateLabel: String = ""
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var allGoals: FetchedResults<FamilyGoal>
@@ -56,6 +58,7 @@ public struct FamilyListView: View {
         .sheet(isPresented: $showAdd) { AddFamilyListItemView() }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showInbox) { InboxView() }
+        .celebration(visible: $celebrate, label: celebrateLabel)
     }
 
     private var inboxBadgeCount: Int {
@@ -215,8 +218,13 @@ public struct FamilyListView: View {
         if (t.assignee ?? "").isEmpty {
             t.assignee = userName.trimmingCharacters(in: .whitespaces)
         }
+        let pts = Int(t.points)
         FamilyPoints.toggle(t, in: members)
         try? moc.save()
+        if pts > 0 {
+            celebrateLabel = "+\(pts) pts!"
+            celebrate = true
+        }
     }
 }
 
