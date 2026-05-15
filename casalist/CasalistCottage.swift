@@ -18,11 +18,37 @@ public enum CasalistCottage {
 
         /// The currently-active palette. Swap the return statement to flip
         /// the whole app between themes. Available factories:
-        ///   - `vivid(_:)`   saturated jewel tones (current)
+        ///   - `dodger(_:)`  dodger-blue-forward (current)
+        ///   - `vivid(_:)`   saturated jewel tones
         ///   - `ember(_:)`   coral-forward warm
         ///   - `harbor(_:)`  saturated coastal blue
         static func resolve(_ dark: Bool) -> Palette {
-            vivid(dark)
+            dodger(dark)
+        }
+
+        /// "Dodger" — classic dodger blue (#1E90FF) as the primary. Cool
+        /// blue-leaning surfaces with warm gold + kelly green + royal
+        /// purple accents to balance.
+        ///   peach    → dodger blue       (primary / CTAs)
+        ///   mint     → kelly green       (success / chores)
+        ///   butter   → saturated gold    (highlight / points)
+        ///   lavender → royal purple      (secondary / maintenance)
+        ///   sky      → deeper cobalt     (info / cool secondary)
+        ///   coral    → red-orange        (warning / overdue)
+        static func dodger(_ dark: Bool) -> Palette {
+            dark ? Palette(
+                bg: Color(rgb: 0x05101E), surface: Color(rgb: 0x0F1C2D), surfaceAlt: Color(rgb: 0x1A2D45), surfaceHi: Color(rgb: 0x2A4163),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xEAF1F7), textDim: Color(rgb: 0xEAF1F7).opacity(0.6), textMuted: Color(rgb: 0xEAF1F7).opacity(0.4),
+                peach: Color(rgb: 0x4DA8FF), mint: Color(rgb: 0x4ABF6E), butter: Color(rgb: 0xE8C552),
+                lavender: Color(rgb: 0x9477E2), sky: Color(rgb: 0x4A95E0), coral: Color(rgb: 0xEF6647)
+            ) : Palette(
+                bg: Color(rgb: 0xF5F8FB), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xDDE7F2), surfaceHi: Color(rgb: 0xBED1E5),
+                border: Color(rgb: 0x0A2F5A).opacity(0.12),
+                text: Color(rgb: 0x0A2F5A), textDim: Color(rgb: 0x0A2F5A).opacity(0.6), textMuted: Color(rgb: 0x0A2F5A).opacity(0.4),
+                peach: Color(rgb: 0x1E90FF), mint: Color(rgb: 0x2EAA53), butter: Color(rgb: 0xE6B225),
+                lavender: Color(rgb: 0x6E47C8), sky: Color(rgb: 0x0A6FCC), coral: Color(rgb: 0xE0421A)
+            )
         }
 
         /// "Ember" — coral-forward warm. Confident coral primary, teal
