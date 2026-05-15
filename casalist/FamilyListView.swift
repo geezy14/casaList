@@ -15,11 +15,11 @@ public struct FamilyListView: View {
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("meUid") private var meUid: String = ""
 
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var allTasks: FetchedResults<TaskItem>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
     @State private var darkOverride: Bool? = nil
@@ -27,7 +27,7 @@ public struct FamilyListView: View {
     @State private var showSettings: Bool = false
     @State private var showInbox: Bool = false
 
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var allGoals: FetchedResults<FamilyGoal>
 
     public var onHome: (() -> Void)?
@@ -225,7 +225,7 @@ struct AddFamilyListItemView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
     @State private var label: String = ""

@@ -6,9 +6,9 @@ struct AddTaskView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("meUid") private var meUid: String = ""
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
     private var me: FamilyMember? {

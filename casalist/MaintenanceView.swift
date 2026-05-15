@@ -41,7 +41,7 @@ struct MaintenanceView: View {
     private func deleteItems(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
-                moc.delete(maintenanceTasks[index])
+                maintenanceTasks[index].softDelete()
             }
             try? moc.save()
         }

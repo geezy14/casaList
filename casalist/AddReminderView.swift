@@ -5,7 +5,7 @@ struct AddReminderView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
     private let editing: TaskItem?
@@ -189,7 +189,8 @@ struct AddReminderView: View {
 
     private func deleteReminder() {
         if let editing {
-            moc.delete(editing)
+            editing.softDelete()
+            try? moc.save()
             let ctx = moc
             Task { await NotificationsManager.syncFromContext(ctx) }
             dismiss()

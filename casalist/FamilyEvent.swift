@@ -18,7 +18,10 @@ public final class FamilyEvent: NSManagedObject {
     @NSManaged public var repeatKind: String
     @NSManaged public var createdAt: Date
     @NSManaged public var createdBy: String
+    @NSManaged public var deletedAt: Date?
     @NSManaged public var household: Household?
+
+    var isLive: Bool { deletedAt == nil }
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()

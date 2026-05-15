@@ -49,10 +49,10 @@ public enum CasalistCottage {
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)]) private var allGoals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
@@ -627,9 +627,9 @@ public enum CasalistCottage {
         @Environment(\.managedObjectContext) private var modelContext
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goalsQuery: FetchedResults<FamilyGoal>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var goalsQuery: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
@@ -862,7 +862,7 @@ public enum CasalistCottage {
                     Spacer()
                     if canManagePoints || isViewerOwnerOfGoal(g) {
                         Button {
-                            modelContext.delete(g)
+                            g.softDelete()
                             try? modelContext.save()
                         } label: {
                             Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
@@ -961,7 +961,7 @@ public enum CasalistCottage {
                                     }
                                     if canManagePoints {
                                         Button {
-                                            modelContext.delete(g)
+                                            g.softDelete()
                                             try? modelContext.save()
                                         } label: {
                                             Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(P.textMuted)
@@ -1126,9 +1126,9 @@ extension CasalistCottage {
         @State private var showAddTodo = false
         @State private var showSettings = false
         @State private var showInbox = false
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var todos: FetchedResults<TaskItem>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)]) private var allGoals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var todos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
@@ -1481,8 +1481,8 @@ extension CasalistCottage {
         @State private var showAdd = false
         @State private var newItemByTrip: [String: String] = [:]
         @AppStorage("userName") private var userName: String = ""
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)]) private var allTasks: FetchedResults<TaskItem>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -1643,8 +1643,8 @@ extension CasalistCottage {
                             .foregroundStyle(P.peach)
                     }
                     Button {
-                        for it in tripItems { modelContext.delete(it) }
-                        modelContext.delete(trip)
+                        for it in tripItems { it.softDelete() }
+                        trip.softDelete()
                         try? modelContext.save()
                     } label: {
                         Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
@@ -1668,7 +1668,7 @@ extension CasalistCottage {
                                     .strikethrough(t.isCompleted)
                                     .foregroundStyle(t.isCompleted ? P.textDim : P.text)
                                 Spacer()
-                                Button { modelContext.delete(t); try? modelContext.save() } label: {
+                                Button { t.softDelete(); try? modelContext.save() } label: {
                                     Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
                                 }.buttonStyle(.plain)
                             }.padding(.vertical, 9)
@@ -1769,7 +1769,7 @@ extension CasalistCottage {
                 }.buttonStyle(.plain)
                 Text(t.task).font(.system(size: 14, weight: .heavy))
                 Spacer()
-                Button { modelContext.delete(t); try? modelContext.save() } label: {
+                Button { t.softDelete(); try? modelContext.save() } label: {
                     Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
                 }.buttonStyle(.plain)
             }.padding(.vertical, 12)
@@ -1811,7 +1811,7 @@ extension CasalistCottage {
         }
 
         private func clearBought() {
-            for t in flatBought { modelContext.delete(t) }
+            for t in flatBought { t.softDelete() }
             try? modelContext.save()
         }
     }
@@ -1822,8 +1822,8 @@ extension CasalistCottage {
         @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var showAdd = false
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTasks: FetchedResults<TaskItem>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -1954,7 +1954,7 @@ extension CasalistCottage {
                                     }
                                 }
                                 Spacer()
-                                Button { modelContext.delete(t) } label: {
+                                Button { t.softDelete() } label: {
                                     Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
                                 }.buttonStyle(.plain)
                             }.padding(.vertical, 11)
@@ -1994,7 +1994,7 @@ extension CasalistCottage {
         @State private var editingReminder: TaskItem? = nil
         @State private var expandedHourlyIds: Set<NSManagedObjectID> = []
         @AppStorage("userName") private var userName: String = ""
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)]) private var allTasks: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         public init() {}
@@ -2348,8 +2348,8 @@ extension CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var showAdd: Bool = false
         @State private var editingEvent: FamilyEvent? = nil
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }

@@ -15,7 +15,7 @@ struct TaskDetailView: View {
 
     let task: TaskItem
 
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
 
     @State private var editing: Bool = false
@@ -80,7 +80,7 @@ struct TaskDetailView: View {
             }
             .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
-                    moc.delete(task)
+                    task.softDelete()
                     try? moc.save()
                     dismiss()
                 }

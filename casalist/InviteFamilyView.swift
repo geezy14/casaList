@@ -8,7 +8,7 @@ struct InviteFamilyView: View {
     @Environment(\.managedObjectContext) private var moc
     @AppStorage("householdName") private var householdName: String = "My Household"
 
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
     @State private var accountStatus: CKAccountStatus = .couldNotDetermine

@@ -32,8 +32,8 @@ enum GoalApproval {
         g.ownerName = realOwnerName(g)
     }
 
-    /// Deny: delete the record. Caller saves the context.
+    /// Deny: soft-delete the record (goes to Trash). Caller saves the context.
     static func deny(_ g: FamilyGoal, in context: NSManagedObjectContext) {
-        context.delete(g)
+        g.softDelete()
     }
 }

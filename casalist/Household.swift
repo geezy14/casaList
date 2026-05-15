@@ -6,7 +6,10 @@ public final class Household: NSManagedObject {
     @NSManaged public var uid: UUID
     @NSManaged public var name: String
     @NSManaged public var createdAt: Date
+    @NSManaged public var deletedAt: Date?
     @NSManaged public var members: NSSet?
+
+    var isLive: Bool { deletedAt == nil }
     @NSManaged public var tasks: NSSet?
     @NSManaged public var goals: NSSet?
     @NSManaged public var chores: NSSet?

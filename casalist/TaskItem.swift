@@ -16,7 +16,10 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var repeatKind: String
     @NSManaged public var completionCount: Int64
     @NSManaged public var parentUid: String
+    @NSManaged public var deletedAt: Date?
     @NSManaged public var household: Household?
+
+    var isLive: Bool { deletedAt == nil }
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()

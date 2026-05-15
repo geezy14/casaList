@@ -10,7 +10,10 @@ public final class FamilyGoal: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var isRedeemed: Bool
     @NSManaged public var redeemedAt: Date?
+    @NSManaged public var deletedAt: Date?
     @NSManaged public var household: Household?
+
+    var isLive: Bool { deletedAt == nil }
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()

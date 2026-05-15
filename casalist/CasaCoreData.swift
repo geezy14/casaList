@@ -225,6 +225,7 @@ final class CasaCoreDataStack {
             attr("uid", .UUIDAttributeType),
             attr("name", .stringAttributeType, def: "My Household"),
             attr("createdAt", .dateAttributeType, def: Date()),
+            attr("deletedAt", .dateAttributeType),
         ]
 
         // ------- FamilyMember attributes -------
@@ -241,6 +242,7 @@ final class CasaCoreDataStack {
             // CKAsset path is flaky. 1024px JPEG at ~80% quality stays well
             // under CloudKit's 1MB per-record limit.
             attr("photoBlob", .binaryDataAttributeType, externalStorage: false),
+            attr("deletedAt", .dateAttributeType),
         ]
 
         // ------- TaskItem attributes -------
@@ -258,6 +260,7 @@ final class CasaCoreDataStack {
             attr("repeatKind", .stringAttributeType, def: ""),
             attr("completionCount", .integer64AttributeType, def: 0),
             attr("parentUid", .stringAttributeType, def: ""),
+            attr("deletedAt", .dateAttributeType),
         ]
 
         // ------- FamilyGoal attributes -------
@@ -269,6 +272,7 @@ final class CasaCoreDataStack {
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("isRedeemed", .booleanAttributeType, optional: false, def: false),
             attr("redeemedAt", .dateAttributeType),
+            attr("deletedAt", .dateAttributeType),
         ]
 
         // ------- ChoreTemplate attributes -------
@@ -294,6 +298,7 @@ final class CasaCoreDataStack {
             attr("repeatKind", .stringAttributeType, def: ""),
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("createdBy", .stringAttributeType, def: ""),
+            attr("deletedAt", .dateAttributeType),
         ]
 
         // ------- Relationships (Household is the share root) -------

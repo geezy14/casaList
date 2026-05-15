@@ -12,7 +12,11 @@ public final class FamilyMember: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var roleLevel: String
     @NSManaged public var photoBlob: Data?
+    @NSManaged public var deletedAt: Date?
     @NSManaged public var household: Household?
+
+    /// True if the record is a live (not soft-deleted) member.
+    var isLive: Bool { deletedAt == nil }
 
     public override func awakeFromInsert() {
         super.awakeFromInsert()

@@ -27,17 +27,18 @@ struct SettingsView: View {
     @State private var awardAmount: Int = 5
     @State private var deleteTarget: FamilyMember? = nil
     @State private var showAddMember: Bool = false
+    @State private var showTrash: Bool = false
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
 
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var tasks: FetchedResults<TaskItem>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var goals: FetchedResults<FamilyGoal>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.createdAt, ascending: true)])
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var events: FetchedResults<FamilyEvent>
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
@@ -129,8 +130,9 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { deleteTarget = nil }
         } message: { m in
-            Text("\(m.name) will be removed from this household. Their points (\(m.points)) will be lost. This cannot be undone.")
+            Text("\(m.name) moves to Trash. You have \(Trash.retentionDays) days to restore them from Settings → Data → Trash.")
         }
+        .sheet(isPresented: $showTrash) { TrashView() }
     }
 
     private var topBar: some View {
@@ -159,6 +161,7 @@ struct SettingsView: View {
             familySection
             appearanceSection
             notificationsSection
+            dataSection
             developerSection
             Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
                 .frame(maxWidth: .infinity)
@@ -254,36 +257,41 @@ struct SettingsView: View {
         let isMe = m.uid.uuidString == meUid || m.name.lowercased() == userName.lowercased()
         return HStack(spacing: 12) {
             avatar(for: m)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(m.name).font(.system(size: 14, weight: .heavy))
+                    Text(m.name).font(.system(size: 15, weight: .heavy))
                     if isMe {
-                        Text("YOU").font(.system(size: 9, weight: .heavy))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(P.peach.opacity(0.25)))
+                        Text("YOU").font(.system(size: 8, weight: .heavy))
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(P.peach.opacity(0.22)))
                             .foregroundStyle(P.peach)
                     }
                 }
-                Text("\(m.points) pts").font(.caption).foregroundStyle(P.textMuted)
+                HStack(spacing: 6) {
+                    roleControl(for: m)
+                    Text("·").font(.system(size: 10)).foregroundStyle(P.textMuted)
+                    Text("\(m.points) pts").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                }
             }
             Spacer()
-            roleControl(for: m)
             if iAmAdmin && !isMe {
                 Button { awardTarget = m; awardAmount = 5 } label: {
-                    Image(systemName: "gift").font(.system(size: 13, weight: .bold))
+                    Image(systemName: "gift.fill").font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(P.peach)
                         .frame(width: 30, height: 30)
+                        .background(Circle().fill(P.peach.opacity(0.12)))
                 }.buttonStyle(.plain)
             }
             if canDelete(m, isMe: isMe) {
                 Button { deleteTarget = m } label: {
-                    Image(systemName: "trash").font(.system(size: 12))
+                    Image(systemName: "trash").font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(P.textMuted)
                         .frame(width: 30, height: 30)
+                        .background(Circle().fill(P.textMuted.opacity(0.08)))
                 }.buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 
     private func awardPointsSheet(target: FamilyMember) -> some View {
@@ -385,7 +393,7 @@ struct SettingsView: View {
     }
 
     private func deleteMember(_ m: FamilyMember) {
-        moc.delete(m)
+        m.softDelete()
         try? moc.save()
     }
 
@@ -425,12 +433,10 @@ struct SettingsView: View {
         case .kid:   tint = P.sky
         case .standard: tint = P.textMuted
         }
-        return HStack(spacing: 4) {
-            Image(systemName: r.symbol).font(.system(size: 10, weight: .heavy))
-            Text(r.label).font(.system(size: 11, weight: .heavy))
+        return HStack(spacing: 3) {
+            Image(systemName: r.symbol).font(.system(size: 8, weight: .heavy))
+            Text(r.label.uppercased()).font(.system(size: 9, weight: .heavy)).tracking(0.5)
         }
-        .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(Capsule().fill(tint.opacity(0.18)))
         .foregroundStyle(tint)
     }
 
@@ -690,6 +696,52 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .cardBg(P)
+        }
+    }
+
+    // MARK: Data
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt != nil")
+    ) private var trashedTasks: FetchedResults<TaskItem>
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt != nil")
+    ) private var trashedMembers: FetchedResults<FamilyMember>
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt != nil")
+    ) private var trashedGoals: FetchedResults<FamilyGoal>
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt != nil")
+    ) private var trashedEvents: FetchedResults<FamilyEvent>
+
+    private var trashedCount: Int {
+        trashedTasks.count + trashedMembers.count + trashedGoals.count + trashedEvents.count
+    }
+
+    private var dataSection: some View {
+        section(title: "DATA") {
+            VStack(spacing: 0) {
+                Button { showTrash = true } label: {
+                    HStack {
+                        Image(systemName: "trash").font(.system(size: 13, weight: .semibold)).foregroundStyle(P.coral)
+                        Text("Trash").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.text)
+                        Spacer()
+                        if trashedCount > 0 {
+                            Text("\(trashedCount)").font(.system(size: 11, weight: .heavy))
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Capsule().fill(P.coral.opacity(0.2)))
+                                .foregroundStyle(P.coral)
+                        }
+                        Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                }.buttonStyle(.plain)
             }
             .cardBg(P)
         }

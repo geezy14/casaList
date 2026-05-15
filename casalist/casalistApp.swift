@@ -202,6 +202,7 @@ struct CasalistApp: App {
 ///   (they've already set a userName), create one.
 enum HouseholdProvisioner {
     static func reconcile(in context: NSManagedObjectContext) {
+        Trash.purgeExpired(in: context)
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
 
