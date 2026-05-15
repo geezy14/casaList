@@ -2723,9 +2723,11 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)]) private var households: FetchedResults<Household>
         @State private var redeemTarget: FamilyGoal? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
+        @State private var showSuggest: Bool = false
 
         private var P: Palette { Palette.starfield() }
 
@@ -2745,11 +2747,16 @@ extension CasalistCottage {
             }
         }
         private var myActiveGoals: [FamilyGoal] {
-            goals.filter { !$0.isRedeemed && $0.ownerName.lowercased() == myName.lowercased() }
+            // Includes both approved (ownerName == me) AND pending (ownerName
+            // == "PENDING:me") so the kid sees their own suggestion sitting
+            // in the shelf with a "waiting for parent" badge.
+            let lc = myName.lowercased()
+            return goals.filter { !$0.isRedeemed && GoalApproval.realOwnerName($0).lowercased() == lc && $0.isLive }
                 .sorted { $0.targetPoints < $1.targetPoints }
         }
         private var myRedeemedGoals: [FamilyGoal] {
-            goals.filter { $0.isRedeemed && $0.ownerName.lowercased() == myName.lowercased() }
+            let lc = myName.lowercased()
+            return goals.filter { $0.isRedeemed && GoalApproval.realOwnerName($0).lowercased() == lc }
                 .sorted { ($0.redeemedAt ?? .distantPast) > ($1.redeemedAt ?? .distantPast) }
         }
         private var nextGoal: FamilyGoal? {
@@ -2767,6 +2774,7 @@ extension CasalistCottage {
                         header
                         choresSection
                         pointsSection
+                        familyPeekSection
                         winsSection
                         Spacer(minLength: 30)
                     }
@@ -2778,6 +2786,95 @@ extension CasalistCottage {
             .foregroundStyle(P.text)
             .preferredColorScheme(.dark)
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
+            .sheet(isPresented: $showSuggest) { suggestSheet }
+        }
+
+        // MARK: – Suggest-a-goal (kid)
+
+        @State private var suggestLabel: String = ""
+        @State private var suggestTarget: Int = 50
+
+        private var suggestSheet: some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    VStack(spacing: 18) {
+                        Spacer().frame(height: 8)
+                        Image(systemName: "lightbulb.fill").font(.system(size: 50)).foregroundStyle(P.butter)
+                        Text("Suggest a goal").font(.system(size: 22, weight: .heavy))
+                        Text("A parent will see your idea and decide. They can say yes or no.")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(P.textDim)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("What do you want?").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
+                            TextField("e.g. Sleepover with Sam", text: $suggestLabel)
+                                .textInputAutocapitalization(.sentences)
+                                .padding(12)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                                .foregroundStyle(P.text)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("How many points?").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim)
+                                Spacer()
+                                Text("\(suggestTarget) pts").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.butter)
+                            }
+                            Stepper("\(suggestTarget) pts", value: $suggestTarget, in: 10...2000, step: 10)
+                                .labelsHidden()
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                        }
+
+                        HStack(spacing: 12) {
+                            Button("Cancel") {
+                                suggestLabel = ""; suggestTarget = 50
+                                showSuggest = false
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Capsule().fill(P.surfaceAlt)).foregroundStyle(P.text)
+
+                            Button {
+                                submitSuggestion()
+                            } label: {
+                                Text("Send to parent").font(.system(size: 15, weight: .heavy))
+                                    .foregroundStyle(Color(rgb: 0x1B1E4A))
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Capsule().fill(P.butter))
+                            .disabled(suggestLabel.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        .padding(.horizontal, 20)
+                        Spacer()
+                    }
+                    .padding(20)
+                }
+                .foregroundStyle(P.text)
+            }
+            .presentationDetents([.medium, .large])
+        }
+
+        private func submitSuggestion() {
+            let trimmed = suggestLabel.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return }
+            let g = FamilyGoal(context: moc)
+            g.label = trimmed
+            g.targetPoints = Int64(suggestTarget)
+            // PENDING:<myName> so the parent's inbox surfaces it for approval.
+            g.ownerName = GoalApproval.makePendingOwnerName(myName)
+            if let h = households.preferredTarget {
+                moc.assign(g, toStoreOf: h)
+                g.household = h
+            }
+            try? moc.save()
+            suggestLabel = ""
+            suggestTarget = 50
+            showSuggest = false
+            celebrateLabel = "Sent to parent ✨"
+            celebrate = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { celebrate = false }
         }
 
         private var header: some View {
@@ -2871,11 +2968,24 @@ extension CasalistCottage {
                     }
                     .padding(22)
                 }
-                if let g = nextGoal {
-                    goalCard(g)
-                } else if !myActiveGoals.isEmpty {
-                    Text("All your goals are done!").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textDim)
+                if myActiveGoals.isEmpty {
+                    emptyCard("🎯", title: "No goals yet", subtitle: "Ask a parent to set a goal — or suggest your own.", tint: P.peach)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(Array(myActiveGoals.prefix(5)), id: \.uid) { g in
+                            goalCard(g)
+                        }
+                    }
                 }
+                Button { showSuggest = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lightbulb.fill").font(.system(size: 13, weight: .heavy))
+                        Text("Suggest a goal").font(.system(size: 14, weight: .heavy))
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Capsule().fill(P.surfaceAlt))
+                    .foregroundStyle(P.text)
+                }.buttonStyle(.plain)
             }
         }
 
@@ -2894,28 +3004,54 @@ extension CasalistCottage {
         }
 
         private func goalCard(_ g: FamilyGoal) -> some View {
-            let canRedeem = myPoints >= Int(g.targetPoints)
-            return HStack(spacing: 14) {
-                Text("🎯").font(.system(size: 30))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(g.label).font(.system(size: 15, weight: .heavy))
-                    Text("\(myPoints) / \(g.targetPoints) pts").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+            let target = Int(g.targetPoints)
+            let canRedeem = myPoints >= target
+            let progress = min(1.0, Double(myPoints) / Double(max(target, 1)))
+            let remaining = max(0, target - myPoints)
+            let isPending = GoalApproval.isPending(g)
+            return VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 14) {
+                    Text(isPending ? "⏳" : (canRedeem ? "🎁" : "🔒")).font(.system(size: 26))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(g.label).font(.system(size: 15, weight: .heavy)).lineLimit(1)
+                        Text(isPending
+                             ? "Waiting for a parent to approve · \(target) pts"
+                             : (canRedeem
+                                ? "Ready to redeem · \(target) pts"
+                                : "Need \(remaining) more pts"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isPending ? P.sky : (canRedeem ? P.butter : P.textDim))
+                    }
+                    Spacer()
+                    if canRedeem && !isPending {
+                        Button { redeemTarget = g } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gift.fill").font(.system(size: 12, weight: .heavy))
+                                Text("Redeem").font(.system(size: 13, weight: .heavy))
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(Capsule().fill(P.butter)).foregroundStyle(Color(rgb: 0x1B1E4A))
+                        }.buttonStyle(.plain)
+                    }
                 }
-                Spacer()
-                if canRedeem {
-                    Button { redeemTarget = g } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "gift.fill").font(.system(size: 12, weight: .heavy))
-                            Text("Redeem").font(.system(size: 13, weight: .heavy))
+                if !isPending {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.12)).frame(height: 6)
+                            Capsule()
+                                .fill(canRedeem ? P.butter : P.mint)
+                                .frame(width: geo.size.width * CGFloat(progress), height: 6)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(Capsule().fill(P.butter)).foregroundStyle(Color(rgb: 0x1B1E4A))
-                    }.buttonStyle(.plain)
+                    }.frame(height: 6)
                 }
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            .overlay(RoundedRectangle(cornerRadius: 22)
+                .stroke(isPending ? P.sky.opacity(0.6)
+                        : (canRedeem ? P.butter.opacity(0.6) : P.border),
+                        lineWidth: 1.5))
+            .opacity(isPending ? 0.85 : 1.0)
         }
 
         private func redeemSheet(_ g: FamilyGoal) -> some View {
@@ -2957,38 +3093,155 @@ extension CasalistCottage {
             .presentationDetents([.medium])
         }
 
-        /// Chore completions assigned to me, newest first.
-        private var myCompletedChores: [TaskItem] {
+        // MARK: – Family peek (Phase 3)
+
+        /// Other family members + their nearest goal, so the kid sees what
+        /// the rest of the family is working toward. Subtle, non-competitive.
+        private struct FamilyPeekEntry: Identifiable {
+            let id: String
+            let member: FamilyMember
+            let goalLabel: String?
+            let goalProgress: Double?   // 0...1
+            let pointsToGo: Int?
+        }
+
+        private var familyPeek: [FamilyPeekEntry] {
             let lc = myName.lowercased()
-            return allTodos.filter { t in
+            return members.filter {
+                $0.deletedAt == nil && $0.name.lowercased() != lc && !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
+            }.prefix(4).map { m in
+                // Find their nearest unredeemed approved goal above their points,
+                // or fall back to their highest unredeemed.
+                let theirGoals = goals.filter { g in
+                    !g.isRedeemed
+                    && g.isLive
+                    && !GoalApproval.isPending(g)
+                    && g.ownerName.lowercased() == m.name.lowercased()
+                }.sorted { $0.targetPoints < $1.targetPoints }
+                let nearest = theirGoals.first(where: { Int($0.targetPoints) > Int(m.points) }) ?? theirGoals.last
+                if let g = nearest {
+                    let target = Int(g.targetPoints)
+                    let progress = min(1.0, Double(m.points) / Double(max(target, 1)))
+                    let toGo = max(0, target - Int(m.points))
+                    return FamilyPeekEntry(id: m.uid.uuidString, member: m, goalLabel: g.label, goalProgress: progress, pointsToGo: toGo)
+                } else {
+                    return FamilyPeekEntry(id: m.uid.uuidString, member: m, goalLabel: nil, goalProgress: nil, pointsToGo: nil)
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var familyPeekSection: some View {
+            let entries = familyPeek
+            if !entries.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("MY FAMILY", emoji: "🌟", color: P.mint)
+                    VStack(spacing: 8) {
+                        ForEach(entries) { e in familyPeekRow(e) }
+                    }
+                }
+            }
+        }
+
+        private func familyPeekRow(_ e: FamilyPeekEntry) -> some View {
+            HStack(spacing: 12) {
+                CLAvatar(e.member.asCLMember, size: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(e.member.name).font(.system(size: 14, weight: .heavy))
+                    if let label = e.goalLabel, let toGo = e.pointsToGo {
+                        Text(toGo == 0
+                             ? "Ready to redeem · \(label)"
+                             : "\(toGo) pts from \(label)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(P.textDim).lineLimit(1)
+                    } else {
+                        Text("\(e.member.points) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
+                    }
+                }
+                Spacer()
+                if let progress = e.goalProgress {
+                    ZStack {
+                        Circle().stroke(Color.white.opacity(0.15), lineWidth: 4).frame(width: 32, height: 32)
+                        Circle().trim(from: 0, to: progress)
+                            .stroke(P.mint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .frame(width: 32, height: 32).rotationEffect(.degrees(-90))
+                    }
+                } else {
+                    Text("\(e.member.points)").font(.system(size: 14, weight: .heavy)).foregroundStyle(P.butter)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+        }
+
+        /// A unified entry in My Wins — either a chore completion (🏆) or a
+        /// goal redemption (🎁). Sorted by date desc; cap at 8.
+        private enum WinEntry: Identifiable {
+            case chore(TaskItem)
+            case redemption(FamilyGoal)
+            var id: String {
+                switch self {
+                case .chore(let t): return "c-\(t.uid)-\(t.completedAt?.timeIntervalSince1970 ?? 0)"
+                case .redemption(let g): return "r-\(g.uid)"
+                }
+            }
+            var when: Date {
+                switch self {
+                case .chore(let t): return t.completedAt ?? t.createdAt
+                case .redemption(let g): return g.redeemedAt ?? g.createdAt
+                }
+            }
+        }
+
+        private var myWinEntries: [WinEntry] {
+            let lc = myName.lowercased()
+            let chores: [WinEntry] = allTodos.filter { t in
                 (t.assignee ?? "").lowercased() == lc
                 && t.points > 0
                 && t.completedAt != nil
-            }.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+            }.map { .chore($0) }
+            let redemptions: [WinEntry] = goals.filter { g in
+                g.isRedeemed && g.ownerName.lowercased() == lc
+            }.map { .redemption($0) }
+            return (chores + redemptions).sorted { $0.when > $1.when }
         }
 
         private var winsSection: some View {
             VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("MY WINS", emoji: "🏆", color: P.peach)
-                if myCompletedChores.isEmpty {
+                let entries = myWinEntries
+                if entries.isEmpty {
                     emptyCard("🏅", title: "No wins yet", subtitle: "Check off a chore to start your win streak.", tint: P.lavender)
                 } else {
-                    VStack(spacing: 8) { ForEach(Array(myCompletedChores.prefix(8)), id: \.uid) { winRow($0) } }
+                    VStack(spacing: 8) {
+                        ForEach(entries.prefix(8)) { winRow($0) }
+                    }
                 }
             }
         }
 
-        private func winRow(_ t: TaskItem) -> some View {
+        @ViewBuilder
+        private func winRow(_ entry: WinEntry) -> some View {
+            switch entry {
+            case .chore(let t):
+                winRowCard(emoji: "🏆", title: t.task, when: t.completedAt, pointsLabel: "+\(t.points) pts", pointsColor: P.butter)
+            case .redemption(let g):
+                winRowCard(emoji: "🎁", title: g.label, when: g.redeemedAt, pointsLabel: "Redeemed · \(g.targetPoints) pts", pointsColor: P.peach)
+            }
+        }
+
+        private func winRowCard(emoji: String, title: String, when: Date?, pointsLabel: String, pointsColor: Color) -> some View {
             HStack(spacing: 12) {
-                Text("🏆").font(.system(size: 24))
+                Text(emoji).font(.system(size: 24))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t.task).font(.system(size: 14, weight: .heavy)).lineLimit(1)
-                    if let d = t.completedAt {
+                    Text(title).font(.system(size: 14, weight: .heavy)).lineLimit(1)
+                    if let d = when {
                         Text(d, style: .relative).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
                     }
                 }
                 Spacer()
-                Text("+\(t.points) pts").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.butter)
+                Text(pointsLabel).font(.system(size: 12, weight: .heavy)).foregroundStyle(pointsColor)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
