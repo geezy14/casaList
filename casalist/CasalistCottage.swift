@@ -2241,9 +2241,12 @@ extension CasalistCottage {
         private var emptyCard: some View {
             Button { showAdd = true } label: {
                 VStack(spacing: 8) {
-                    Text("🔧").font(.system(size: 36))
+                    Text(categoryPill == "Maintenance" ? "🔧" : "🏠").font(.system(size: 36))
                     Text("Nothing scheduled").font(.system(size: 14, weight: .heavy))
-                    Text("Tap + to add a maintenance task").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                    Text(categoryPill == "Maintenance"
+                         ? "Tap + to add a maintenance task"
+                         : "Tap + to add a home task")
+                        .font(.system(size: 11, weight: .semibold)).opacity(0.7)
                 }
                 .foregroundStyle(P.text)
                 .frame(maxWidth: .infinity).padding(24)
