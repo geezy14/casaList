@@ -1036,7 +1036,7 @@ public enum CasalistCottage {
                 .padding(.horizontal, 4)
                 VStack(spacing: 6) {
                     ForEach(group.tasks, id: \.uid) { t in
-                        earningRow(t)
+                        earningRow(t, showAvatar: false)
                     }
                 }
             }
@@ -1051,17 +1051,19 @@ public enum CasalistCottage {
                 : "Your family will assign chores you can earn points for."
         }
 
-        private func earningRow(_ t: TaskItem) -> some View {
+        private func earningRow(_ t: TaskItem, showAvatar: Bool = true) -> some View {
             let assignee = members.first(where: { $0.name.lowercased() == (t.assignee ?? "").lowercased() })
             let isMineOrIManage = (myMember?.canManageFamily ?? false) ||
                 ((myMember?.name.lowercased() ?? "") == (t.assignee ?? "").lowercased())
             return HStack(spacing: 12) {
-                if let a = assignee {
-                    CLAvatar(a.asCLMember, size: 32)
-                } else {
-                    ZStack {
-                        Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)
-                        Image(systemName: "person.fill").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                if showAvatar {
+                    if let a = assignee {
+                        CLAvatar(a.asCLMember, size: 32)
+                    } else {
+                        ZStack {
+                            Circle().fill(P.surfaceAlt).frame(width: 32, height: 32)
+                            Image(systemName: "person.fill").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
