@@ -2499,7 +2499,8 @@ extension CasalistCottage {
             TabView(selection: $page) {
                 Home().tag(0)
                 MyToDo(onHome: { page = 0 }).tag(1)
-                Rewards(onHome: { page = 0 }).tag(2)
+                FamilyListView(onHome: { page = 0 }).tag(2)
+                Rewards(onHome: { page = 0 }).tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
