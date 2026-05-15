@@ -206,6 +206,17 @@ public enum CasalistCottage {
                                     .transition(.opacity)
                             }
                             Spacer()
+                            Menu {
+                                Button(role: .destructive) {
+                                    QuickAddHistory.clearAll()
+                                    quickAddTick += 1
+                                } label: { Label("Clear all", systemImage: "trash") }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .foregroundStyle(P.textMuted)
+                                    .frame(width: 22, height: 22)
+                            }
                         }
                         .padding(.leading, 4)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -253,6 +264,10 @@ public enum CasalistCottage {
                     QuickAddHistory.remove(e)
                     quickAddTick += 1
                 } label: { Label("Remove", systemImage: "trash") }
+                Button(role: .destructive) {
+                    QuickAddHistory.clearAll()
+                    quickAddTick += 1
+                } label: { Label("Clear all", systemImage: "trash.fill") }
             }
         }
 
@@ -1326,6 +1341,9 @@ extension CasalistCottage {
         @AppStorage("meUid") private var meUid: String = ""
         @State private var darkOverride: Bool? = nil
         @State private var filter: String = "All"
+        /// Admin-only toggle: "Mine" shows only my assigned chores (default),
+        /// "Everyone" shows all family chores grouped by assignee.
+        @State private var scope: String = "Mine"
         @State private var showAddTodo = false
         @State private var showSettings = false
         @State private var showInbox = false
@@ -1351,8 +1369,15 @@ extension CasalistCottage {
             guard !myName.isEmpty else { return false }
             return (t.assignee ?? "").trimmingCharacters(in: .whitespaces).lowercased() == myName
         }
-        private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && isMine($0) } }
-        private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) && isMine($0) } }
+        private var iAmAdmin: Bool {
+            FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+        }
+        private var scopeAllowsEveryone: Bool { iAmAdmin && scope == "Everyone" }
+        private func passesScope(_ t: TaskItem) -> Bool {
+            scopeAllowsEveryone ? true : isMine(t)
+        }
+        private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0) } }
+        private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) && passesScope($0) } }
         private func isToday(_ d: Date?) -> Bool {
             guard let d else { return false }
             return Calendar.current.isDateInToday(d)
@@ -1493,12 +1518,33 @@ extension CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 progressHero
+                if iAmAdmin { scopeToggle }
                 quickAdd
                 filters
                 byKind
                 forToday
                 recentlyDone
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// Admin-only segmented toggle: see only my chores, or everyone's.
+        private var scopeToggle: some View {
+            HStack(spacing: 8) {
+                ForEach(["Mine", "Everyone"], id: \.self) { opt in
+                    let active = scope == opt
+                    Button { scope = opt } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: opt == "Mine" ? "person.fill" : "person.3.fill")
+                                .font(.system(size: 11, weight: .heavy))
+                            Text(opt).font(.system(size: 13, weight: .heavy))
+                        }
+                        .foregroundStyle(active ? .white : P.textDim)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Capsule().fill(active ? P.coral : P.surfaceAlt))
+                    }.buttonStyle(.plain)
+                }
+                Spacer()
+            }
         }
 
         private var progressHero: some View {
@@ -1515,7 +1561,8 @@ extension CasalistCottage {
                     }
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("MY TO-DO").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    Text(scopeAllowsEveryone ? "FAMILY TO-DO" : "MY TO-DO")
+                        .font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
                     Text("\(todayItems.count) left for today").font(.system(size: 22, weight: .heavy))
                     Text(totalTodayCount == 0 ? "Nothing scheduled" : "\(doneTodayCount) of \(totalTodayCount) done").font(.system(size: 12, weight: .semibold)).opacity(0.85)
                 }

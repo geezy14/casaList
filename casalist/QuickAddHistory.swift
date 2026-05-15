@@ -47,6 +47,12 @@ enum QuickAddHistory {
         save(entries)
     }
 
+    /// Wipe the entire history. Used by the "Clear all" affordance on the
+    /// quick-add chip strip.
+    static func clearAll() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
     /// Spawns a single TaskItem from a saved chip with a due date of today
     /// (preserving assignee, points, category). Used by tap-to-clone.
     @discardableResult
