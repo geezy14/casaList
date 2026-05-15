@@ -856,6 +856,14 @@ public enum CasalistCottage {
                             VStack(spacing: 5) {
                                 HStack(spacing: 8) {
                                     Text(m.name).font(.system(size: 14, weight: .heavy))
+                                    let streak = StreakTracker.effectiveCurrent(for: m.uid)
+                                    if streak > 0 {
+                                        Text("🔥\(streak)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach)
+                                    }
+                                    let badgeCount = AwardedBadgeStore.awarded(for: m.uid).count
+                                    if badgeCount > 0 {
+                                        Text("🎖\(badgeCount)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.lavender)
+                                    }
                                     Spacer()
                                     if canManagePoints {
                                         Button { adjustPoints(m, by: -5) } label: {

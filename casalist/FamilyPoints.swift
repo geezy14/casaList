@@ -46,6 +46,9 @@ enum FamilyPoints {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         member.points += t.points
+        if let ctx = member.managedObjectContext {
+            FamilyProgress.recordCompletion(member: member, context: ctx)
+        }
     }
 
     static func revoke<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
