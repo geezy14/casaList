@@ -44,6 +44,7 @@ public enum CasalistCottage {
         @State private var showReminders = false
         @State private var showMyToDo = false
         @State private var showSchedule = false
+        @State private var showFamilyList = false
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
@@ -83,6 +84,7 @@ public enum CasalistCottage {
             .fullScreenCover(isPresented: $showReminders) { Reminders() }
             .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
+            .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
         }
 
@@ -454,8 +456,18 @@ public enum CasalistCottage {
                     Button { showSchedule = true } label: {
                         tile(bg: P.butter, emoji: "📅", label: "Schedule", big: "\(scheduleUpcomingCount)", suffix: "upcoming", sub: nextEventTitle)
                     }.buttonStyle(.plain)
+                    Button { showFamilyList = true } label: {
+                        tile(bg: P.peach, emoji: "🪴", label: "Family List", big: "\(familyListOpenCount)", suffix: "up for grabs", sub: familyListNextItem)
+                    }.buttonStyle(.plain)
                 }
             }
+        }
+
+        private var familyListOpenCount: Int {
+            allTodos.filter { $0.category.lowercased() == "family" && !$0.isCompleted && ($0.assignee ?? "").isEmpty }.count
+        }
+        private var familyListNextItem: String {
+            allTodos.first(where: { $0.category.lowercased() == "family" && !$0.isCompleted && ($0.assignee ?? "").isEmpty })?.task ?? ""
         }
 
         private var scheduleUpcomingCount: Int {
