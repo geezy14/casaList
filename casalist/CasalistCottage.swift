@@ -37,6 +37,7 @@ public enum CasalistCottage {
         @State private var showAddMember = false
         @State private var showInvite = false
         @State private var showSettings = false
+        @State private var showInbox = false
         @State private var showAddTodo = false
         @State private var showGrocery = false
         @State private var showMaintenance = false
@@ -45,12 +46,21 @@ public enum CasalistCottage {
         @State private var showSchedule = false
         @State private var showProfilePhoto = false
         @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)]) private var allEvents: FetchedResults<FamilyEvent>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)]) private var allGoals: FetchedResults<FamilyGoal>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         private var P: Palette { Palette.resolve(dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
+        private var inboxBadgeCount: Int {
+            let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+            let pending = allGoals.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
+            if me?.canManageFamily == true { return pending.count }
+            let lc = (me?.name.lowercased() ?? userName.lowercased())
+            return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
+        }
         public init() {}
 
         public var body: some View {
@@ -66,6 +76,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddMember) { AddFamilyMemberView() }
             .sheet(isPresented: $showInvite) { InviteFamilyView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showInbox) { InboxView() }
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
@@ -95,10 +106,19 @@ public enum CasalistCottage {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
                 }
-                Button { darkOverride = !dark } label: {
-                    Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.surfaceAlt))
+                Button { showInbox = true } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "envelope.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(P.surfaceAlt))
+                        if inboxBadgeCount > 0 {
+                            Text("\(inboxBadgeCount)")
+                                .font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(P.peach))
+                                .offset(x: 6, y: -2)
+                        }
+                    }
                 }
             }.padding(.horizontal, 20).padding(.bottom, 12)
         }
@@ -630,7 +650,7 @@ public enum CasalistCottage {
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
-        private var activeGoals: [FamilyGoal] { goalsQuery.filter { !$0.isRedeemed } }
+        private var activeGoals: [FamilyGoal] { goalsQuery.filter { !$0.isRedeemed && !GoalApproval.isPending($0) } }
         private var redeemedGoals: [FamilyGoal] {
             goalsQuery.filter { $0.isRedeemed }
                 .sorted { ($0.redeemedAt ?? .distantPast) > ($1.redeemedAt ?? .distantPast) }
@@ -747,14 +767,12 @@ public enum CasalistCottage {
                 HStack {
                     Text("SAVING UP FOR…").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    if canManagePoints {
-                        Button { showAddGoal = true } label: {
-                            Label("Add", systemImage: "plus")
-                                .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
-                        }
+                    Button { showAddGoal = true } label: {
+                        Label("Add", systemImage: "plus")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
                     }
                 }
-                if activeGoals.isEmpty && canManagePoints {
+                if activeGoals.isEmpty {
                     Button { showAddGoal = true } label: {
                         VStack(spacing: 6) {
                             Text("🎯").font(.system(size: 30))
@@ -786,7 +804,7 @@ public enum CasalistCottage {
                     if let m { CLAvatar(m.asCLMember, size: 26) }
                     Text(g.ownerName).font(.system(size: 12, weight: .heavy))
                     Spacer()
-                    if canManagePoints {
+                    if canManagePoints || isViewerOwnerOfGoal(g) {
                         Button {
                             modelContext.delete(g)
                             try? modelContext.save()
@@ -2464,9 +2482,19 @@ extension CasalistCottage {
         @Environment(\.managedObjectContext) private var moc
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
+        @AppStorage("appearancePref") private var appearancePref: String = "system"
         @State private var showNamePrompt: Bool = false
         @State private var pendingName: String = ""
         public init() {}
+
+        private var preferredScheme: ColorScheme? {
+            switch appearancePref {
+            case "light": return .light
+            case "dark":  return .dark
+            default:      return nil
+            }
+        }
+
         public var body: some View {
             TabView(selection: $page) {
                 Home().tag(0)
@@ -2475,6 +2503,7 @@ extension CasalistCottage {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
+            .preferredColorScheme(preferredScheme)
             .task { evaluateNamePrompt() }
             .onChange(of: userName) { _, _ in evaluateNamePrompt() }
             .sheet(isPresented: $showNamePrompt) { namePromptSheet }

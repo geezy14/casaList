@@ -27,6 +27,7 @@ struct SettingsView: View {
     @State private var awardAmount: Int = 5
     @State private var deleteTarget: FamilyMember? = nil
     @State private var showAddMember: Bool = false
+    @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
     private var members: FetchedResults<FamilyMember>
@@ -156,6 +157,7 @@ struct SettingsView: View {
             profileSection
             householdSection
             familySection
+            appearanceSection
             notificationsSection
             developerSection
             Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
@@ -632,6 +634,11 @@ struct SettingsView: View {
         for t in tasks where !t.isCompleted {
             lines.append("• \(t.task) → \(t.assignee ?? "?") [\(storeLabel(for: t))]")
         }
+        lines.append("\nGoals:")
+        for g in goals {
+            let redeemed = g.isRedeemed ? " ✓" : ""
+            lines.append("• \(g.label) for \(g.ownerName) \(g.targetPoints)pt\(redeemed) [\(storeLabel(for: g))]")
+        }
         wipeMessage = lines.joined(separator: "\n")
     }
 
@@ -668,6 +675,23 @@ struct SettingsView: View {
         let trimmed = userName.trimmingCharacters(in: .whitespaces).lowercased()
         if !trimmed.isEmpty, let m = members.first(where: { $0.name.lowercased() == trimmed }) {
             meUid = m.uid.uuidString
+        }
+    }
+
+    // MARK: Appearance
+
+    private var appearanceSection: some View {
+        section(title: "APPEARANCE") {
+            VStack(spacing: 0) {
+                Picker("Theme", selection: $appearancePref) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .cardBg(P)
         }
     }
 
