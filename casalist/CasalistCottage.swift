@@ -8,6 +8,7 @@
 
 import SwiftUI
 import CoreData
+import UIKit
 
 public enum CasalistCottage {
 
@@ -2726,6 +2727,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)]) private var households: FetchedResults<Household>
         @State private var redeemTarget: FamilyGoal? = nil
         @State private var celebrate: Bool = false
+        @State private var confettiFlying: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var showSuggest: Bool = false
 
@@ -2884,9 +2886,7 @@ extension CasalistCottage {
             suggestLabel = ""
             suggestNote = ""
             showSuggest = false
-            celebrateLabel = "Sent to parent ✨"
-            celebrate = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { celebrate = false }
+            triggerCelebrate("Sent to parent ✨")
         }
 
         private var header: some View {
@@ -2964,9 +2964,26 @@ extension CasalistCottage {
             FamilyPoints.toggle(t, in: members)
             try? moc.save()
             if pts > 0 {
-                celebrateLabel = "+\(pts) pts!"
-                celebrate = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { celebrate = false }
+                triggerCelebrate("+\(pts) pts!")
+            }
+        }
+
+        /// Show the overlay, fire haptics, then animate confetti outward on the
+        /// next runloop so the view exists long enough to animate FROM its
+        /// initial state.
+        private func triggerCelebrate(_ label: String) {
+            celebrateLabel = label
+            confettiFlying = false
+            celebrate = true
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                withAnimation(.easeOut(duration: 1.2)) {
+                    confettiFlying = true
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                celebrate = false
+                confettiFlying = false
             }
         }
 
@@ -3110,9 +3127,7 @@ extension CasalistCottage {
                                 g.redeemedAt = Date()
                                 try? moc.save()
                                 redeemTarget = nil
-                                celebrateLabel = "🎉 Redeemed!"
-                                celebrate = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { celebrate = false }
+                                triggerCelebrate("🎉 Redeemed!")
                             } label: {
                                 Text("Redeem").font(.system(size: 15, weight: .heavy)).foregroundStyle(Color(rgb: 0x1B1E4A))
                             }
@@ -3315,12 +3330,11 @@ extension CasalistCottage {
                 ForEach(0..<14, id: \.self) { i in
                     confettiBit(index: i)
                 }
-                VStack(spacing: 10) {
-                    Text("⭐️").font(.system(size: 90))
-                    Text(celebrateLabel).font(.system(size: 28, weight: .heavy)).foregroundStyle(.white)
-                }
-                .padding(40)
-                .background(RoundedRectangle(cornerRadius: 32).fill(P.lavender))
+                Text(celebrateLabel)
+                    .font(.system(size: 32, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 36).padding(.vertical, 22)
+                    .background(Capsule().fill(P.lavender))
                 .scaleEffect(celebrate ? 1.0 : 0.5)
                 .opacity(celebrate ? 1.0 : 0.0)
                 .animation(.spring(response: 0.4, dampingFraction: 0.6), value: celebrate)
@@ -3334,15 +3348,15 @@ extension CasalistCottage {
             // Deterministic-per-index pseudo-random spread so each bit takes
             // a different path without re-randomizing on view rebuilds.
             let angle = Double(index) * (2 * .pi / 14)
-            let distance: Double = 140 + Double((index * 17) % 60)
+            let distance: Double = 160 + Double((index * 17) % 80)
             let dx = cos(angle) * distance
-            let dy = sin(angle) * distance - 40
+            let dy = sin(angle) * distance - 50
             return Text(emoji)
-                .font(.system(size: 28))
-                .offset(x: celebrate ? dx : 0, y: celebrate ? dy : 0)
-                .opacity(celebrate ? 0.0 : 1.0)
-                .scaleEffect(celebrate ? 0.6 : 1.2)
-                .animation(.easeOut(duration: 1.2).delay(Double(index % 4) * 0.04), value: celebrate)
+                .font(.system(size: 32))
+                .offset(x: confettiFlying ? dx : 0, y: confettiFlying ? dy : 0)
+                .opacity(confettiFlying ? 0.0 : 1.0)
+                .scaleEffect(confettiFlying ? 0.4 : 1.4)
+                .rotationEffect(.degrees(confettiFlying ? Double(index) * 30 : 0))
         }
     }
 
