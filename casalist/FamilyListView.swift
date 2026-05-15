@@ -221,10 +221,8 @@ public struct FamilyListView: View {
         let pts = Int(t.points)
         FamilyPoints.toggle(t, in: members)
         try? moc.save()
-        if pts > 0 {
-            celebrateLabel = "+\(pts) pts!"
-            celebrate = true
-        }
+        celebrateLabel = pts > 0 ? "+\(pts) pts!" : "Done!"
+        celebrate = true
     }
 }
 
