@@ -1,0 +1,42 @@
+Casalist 1 (3.9) — first TestFlight build 🏡
+
+What is this?
+Casalist is a private family household app. Two adults + two kids in one household, sharing chores, points, goals, schedule, and a shared family list. Everything syncs across iCloud accounts via Apple's CloudKit.
+
+How to get started
+1. Open the app. Type your name when prompted — that's how the family knows who you are.
+2. If you're the household creator: tap the person+badge icon (top-right of the dashboard) and share the invite with the other adults' / kids' iCloud accounts via iMessage.
+3. If you got an invite: open the iMessage, tap the share link, then come back and finish the name prompt. You'll appear in the family list within ~30s.
+
+Who's who
+- Owner: the household creator. Crown badge. Can do everything.
+- Admin: a trusted adult. Can invite, manage chores, adjust points.
+- Standard: regular adult. Can claim, complete, and propose goals.
+- Kid: simplified view; can submit goals for parent approval, complete their own chores, redeem rewards.
+
+What's in this build
+- 4 swipe tabs: Home dashboard / My To-Do / Family List / Family Leaderboard.
+- Around the House tiles: Grocery, Maintenance, My To-Do, Reminders, Schedule, Family List — tap any to dive in.
+- Schedule events with **map-backed locations** — pick a place, see a mini-map.
+- Family List ("the family wall") — drop a chore anyone can Claim or Mark Done.
+- Approval inbox (tray icon) — kids submit goals; parents approve or deny.
+- Quick-add chips on Home — re-spawn recent chores with one tap (parent-only).
+- Trash (Settings → Data → Trash) — deleted things linger 30 days; tap Restore.
+- iCloud Drive auto-backup (Settings → Backup) — daily JSON snapshot of everything.
+- Profile photos sync across devices (you can finally see Mom's face on Dad's phone).
+
+What to poke / report
+- Onboarding: does the share-link → name prompt → "I see them on the leaderboard" flow work cleanly?
+- Two-account sync: does completing a chore on one phone update points on the other phone within ~30s?
+- Photos: set a profile photo on one device — does it appear on the other?
+- Goal approval: as a kid, submit a goal → as a parent, check the inbox (tray icon, top-right) → Approve or Deny.
+- Location picker: add a Schedule event → tap "Pick a location" → search → confirm the mini-map shows the pin.
+- Trash: delete a task or member → Settings → Data → Trash → Restore.
+- Backup: Settings → Backup → "Back up now" → check Files app → iCloud Drive → Casalist → Backups for the .casabackup file.
+
+Known limitations
+- Older redeemed denials in the inbox don't persist — only currently-pending submissions are shown.
+- If you flip a member's role from Kid back to Standard, the device they're on may need a foreground/relaunch to update its UI.
+- The "Restore" backup is additive — it imports anything missing but doesn't overwrite existing records. If you want a clean rewind, use Trash for individual records.
+
+Have fun. Send weird bugs.

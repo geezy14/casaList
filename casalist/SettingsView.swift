@@ -183,7 +183,9 @@ struct SettingsView: View {
             notificationsSection
             backupSection
             dataSection
+            #if DEBUG
             developerSection
+            #endif
             Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
                 .frame(maxWidth: .infinity)
         }
