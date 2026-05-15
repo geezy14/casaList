@@ -420,17 +420,37 @@ struct SettingsView: View {
     /// share joiner can't delete members from the inviter's household (those
     /// records live in the joiner's *shared* store).
     private func canDelete(_ m: FamilyMember, isMe: Bool) -> Bool {
-        // Only protect the *actual* claimed-me record (uid match). Stale members
-        // that merely share the current userName are deletable so old test
-        // identities can be cleaned out.
-        if !meUid.isEmpty, m.uid.uuidString == meUid { return false }
+        // Normally we protect the claimed-me record from deletion. BUT if
+        // there's a duplicate same-name member alongside it (the
+        // fresh-install + CloudKit-sync race), the user must be able to
+        // remove the wrong copy — even if "the wrong copy" happens to be
+        // the one currently claimed as me. deleteMember handles re-claiming
+        // the survivor.
+        if !meUid.isEmpty, m.uid.uuidString == meUid {
+            let lc = m.name.lowercased()
+            let dupeCount = members.filter { $0.name.lowercased() == lc }.count
+            if dupeCount > 1 { return true }
+            return false
+        }
         guard let store = m.objectID.persistentStore else { return true }
         return store == CasaCoreDataStack.shared.privateStore
     }
 
     private func deleteMember(_ m: FamilyMember) {
+        let wasMe = !meUid.isEmpty && m.uid.uuidString == meUid
+        let lc = m.name.lowercased()
         m.softDelete()
         try? moc.save()
+        // If the deleted record was the claimed-me, re-claim a surviving
+        // same-name member so the user keeps their identity. Prefer the
+        // OLDEST surviving record — that's typically the original with the
+        // photo + history, vs the local placeholder we just removed.
+        if wasMe {
+            let survivor = members
+                .filter { $0.name.lowercased() == lc && $0.deletedAt == nil }
+                .min(by: { $0.createdAt < $1.createdAt })
+            meUid = survivor?.uid.uuidString ?? ""
+        }
     }
 
     @ViewBuilder
