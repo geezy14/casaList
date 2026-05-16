@@ -205,6 +205,7 @@ struct SettingsView: View {
             familySection
             appearanceSection
             NotificationsSettingsSection()
+            PrivacySettingsSection()
             notificationsSection
             backupSection
             dataSection

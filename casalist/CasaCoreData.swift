@@ -257,6 +257,16 @@ final class CasaCoreDataStack {
             // those records get backfilled on next foreground via
             // FamilyIdentity.backfillSelf. Schema deploy required.
             attr("cloudKitUserID", .stringAttributeType, def: ""),
+            // Live location share. Default off; opt-in via Settings →
+            // Privacy. lat/lng/timestamp only populated when the user
+            // actively shares. Stored on FamilyMember (in the shared
+            // store on joiner devices, private on owner) so it syncs
+            // through CloudKit like every other family-wide field.
+            // Schema deploy required before this syncs in Production.
+            attr("latitude", .doubleAttributeType, optional: false, def: 0.0),
+            attr("longitude", .doubleAttributeType, optional: false, def: 0.0),
+            attr("locationUpdatedAt", .dateAttributeType),
+            attr("isSharingLocation", .booleanAttributeType, optional: false, def: false),
         ]
 
         // ------- TaskItem attributes -------

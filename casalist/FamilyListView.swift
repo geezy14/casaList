@@ -27,6 +27,7 @@ public struct FamilyListView: View {
     @State private var showSettings: Bool = false
     @State private var showInbox: Bool = false
     @State private var showStatusPing: Bool = false
+    @State private var showFamilyMap: Bool = false
     @State private var celebrate: Bool = false
     @State private var celebrateLabel: String = ""
 
@@ -60,6 +61,7 @@ public struct FamilyListView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showInbox) { InboxView() }
         .sheet(isPresented: $showStatusPing) { StatusPingSheet() }
+        .sheet(isPresented: $showFamilyMap) { FamilyMapView() }
         .celebration(visible: $celebrate, label: celebrateLabel)
     }
 
@@ -72,24 +74,28 @@ public struct FamilyListView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             Button { if let onHome { onHome() } else { dismiss() } } label: {
                 Image(systemName: "house.fill").font(.system(size: 14, weight: .bold)).foregroundStyle(P.text)
-                    .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
             }
             Spacer()
             Button { showStatusPing = true } label: {
                 Image(systemName: "megaphone.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                    .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
+            }
+            Button { showFamilyMap = true } label: {
+                Image(systemName: "mappin.and.ellipse").font(.system(size: 14)).foregroundStyle(P.text)
+                    .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
             }
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                    .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
             }
             Button { showInbox = true } label: {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                        .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
                     if inboxBadgeCount > 0 {
                         Text("\(inboxBadgeCount)").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
                             .padding(.horizontal, 5).padding(.vertical, 1)
@@ -98,8 +104,8 @@ public struct FamilyListView: View {
                 }
             }
             Button { showAdd = true } label: {
-                Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
+                Image(systemName: "plus").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
                     .background(Circle().fill(P.peach))
                     .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
             }

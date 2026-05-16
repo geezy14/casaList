@@ -570,6 +570,7 @@ struct CasalistApp: App {
                 .environment(\.managedObjectContext, stack.context)
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    LocationSharingService.shared.resumeIfPreviouslySharing()
                     // If this device has no household (fresh install on a
                     // previous share-joiner), try silently re-accepting the
                     // last-known share URL from iCloud KV. Restores the

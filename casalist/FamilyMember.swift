@@ -17,6 +17,13 @@ public final class FamilyMember: NSManagedObject {
     /// or empty when not yet stamped. Always read via `userID` which
     /// flattens nil → "" for predicate / comparison safety.
     @NSManaged public var cloudKitUserID: String?
+    /// Last-known GPS coordinates if the user opted into location share.
+    /// 0.0/0.0 when not sharing — check `locationUpdatedAt != nil` to
+    /// differentiate "off" from "at the equator off Africa."
+    @NSManaged public var latitude: Double
+    @NSManaged public var longitude: Double
+    @NSManaged public var locationUpdatedAt: Date?
+    @NSManaged public var isSharingLocation: Bool
     @NSManaged public var household: Household?
 
     /// Non-optional read accessor. Use everywhere we need to compare or
