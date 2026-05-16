@@ -41,7 +41,7 @@ enum FamilyIdentity {
     /// once the field is set.
     @MainActor
     static func stampOwnIdentity(on member: FamilyMember, in context: NSManagedObjectContext) async {
-        guard member.cloudKitUserID.isEmpty else { return }
+        guard member.userID.isEmpty else { return }
         guard let id = await currentUserID() else { return }
         member.cloudKitUserID = id
         try? context.save()
@@ -56,17 +56,25 @@ enum FamilyIdentity {
     static func stampJoinerIdentity(on member: FamilyMember,
                                     from metadata: CKShare.Metadata,
                                     in context: NSManagedObjectContext) {
-        guard member.cloudKitUserID.isEmpty else { return }
-        // The joiner's own record ID is on the share's currentUserParticipant.
-        guard let id = metadata.share.currentUserParticipant?.userIdentity.userRecordID?.recordName,
-              !id.isEmpty else {
-            CasalistAppDelegate.appendShareLog("FamilyIdentity: stampJoinerIdentity — no currentUserParticipant on \(member.name)")
+        guard member.userID.isEmpty else { return }
+        // Try the metadata path first. Per Apple Forum reports, the
+        // `userIdentity` properties on `currentUserParticipant` can be
+        // incomplete at the exact moment of share-accept (nameComponents
+        // and userRecordID both observed empty even when accountStatus is
+        // .available). Fall back to CKContainer.userRecordID() which is
+        // always reliable for the current user.
+        if let id = metadata.share.currentUserParticipant?.userIdentity.userRecordID?.recordName,
+           !id.isEmpty {
+            member.cloudKitUserID = id
+            cachedUserID = id
+            try? context.save()
+            CasalistAppDelegate.appendShareLog("FamilyIdentity: stamped joiner ID on \(member.name) via metadata")
             return
         }
-        member.cloudKitUserID = id
-        cachedUserID = id  // we now know our own ID without an API call
-        try? context.save()
-        CasalistAppDelegate.appendShareLog("FamilyIdentity: stamped joiner ID on \(member.name)")
+        CasalistAppDelegate.appendShareLog("FamilyIdentity: metadata path empty — falling back to container.userRecordID()")
+        Task { @MainActor in
+            await stampOwnIdentity(on: member, in: context)
+        }
     }
 
     /// Backfill: assign the current iCloud user's ID to whichever
@@ -90,7 +98,7 @@ enum FamilyIdentity {
     static func findSelf(in context: NSManagedObjectContext) async -> FamilyMember? {
         if let id = await currentUserID() {
             let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
-            req.predicate = NSPredicate(format: "cloudKitUserID == %@ AND deletedAt == nil", id)
+            req.predicate = NSPredicate(format: "cloudKitUserID == %@ AND deletedAt == nil AND cloudKitUserID != nil", id)
             if let live = (try? context.fetch(req))?.first { return live }
         }
         // Legacy fallback: match by meUid.

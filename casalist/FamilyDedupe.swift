@@ -23,12 +23,12 @@ enum FamilyDedupe {
     @discardableResult
     static func mergeByCloudKitUserID(in context: NSManagedObjectContext) -> Int {
         let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
-        req.predicate = NSPredicate(format: "deletedAt == nil AND cloudKitUserID != ''")
+        req.predicate = NSPredicate(format: "deletedAt == nil AND cloudKitUserID != nil AND cloudKitUserID != ''")
         let all = (try? context.fetch(req)) ?? []
 
         var groups: [String: [FamilyMember]] = [:]
-        for m in all {
-            groups[m.cloudKitUserID, default: []].append(m)
+        for m in all where !m.userID.isEmpty {
+            groups[m.userID, default: []].append(m)
         }
 
         let sharedStore = CasaCoreDataStack.shared.sharedStore
@@ -58,6 +58,57 @@ enum FamilyDedupe {
         return removed
     }
 
+    /// Merges same-name members in the same household when AT LEAST ONE
+    /// has a stamped cloudKitUserID. Bridge for mixed-state data: legacy
+    /// records (empty cloudKitUserID) that sync down after a reinstall
+    /// would otherwise sit alongside the fresh stamped record forever
+    /// because mergeByCloudKitUserID treats empty and stamped IDs as
+    /// different identities. This collapses them, keeping the stamped
+    /// one as survivor (which is the live "me" record).
+    /// NON-DESTRUCTIVE bridge. For each same-name + same-household pair
+    /// where exactly one record has a stamped cloudKitUserID, COPY the
+    /// stamped ID onto the legacy record. This unifies their identity
+    /// without soft-deleting either one. The next `mergeByCloudKitUserID`
+    /// pass will then see them as the same person and collapse them
+    /// deterministically — same survivor on every device, no soft-delete
+    /// cycle where Device A delete syncs to Device B which restores it
+    /// which syncs back to Device A.
+    @discardableResult
+    static func mergeLegacyNameDupes(in context: NSManagedObjectContext) -> Int {
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        let all = (try? context.fetch(req)) ?? []
+
+        var groups: [String: [FamilyMember]] = [:]
+        for m in all {
+            let hid = m.household?.uid.uuidString ?? "_none"
+            let key = "\(hid)|\(m.name.trimmingCharacters(in: .whitespaces).lowercased())"
+            groups[key, default: []].append(m)
+        }
+
+        var stamped = 0
+        for (_, group) in groups where group.count > 1 {
+            let withId = group.filter { !$0.userID.isEmpty }
+            let withoutId = group.filter { $0.userID.isEmpty }
+            // Need at least one stamped to know what ID to assign. If all
+            // unstamped, leave alone — possibly truly different people we
+            // can't disambiguate yet.
+            guard let first = withId.first, !first.userID.isEmpty, !withoutId.isEmpty else { continue }
+            let id = first.userID
+            for m in withoutId {
+                m.cloudKitUserID = id
+                stamped += 1
+            }
+            CasalistAppDelegate.appendShareLog("mergeLegacyNameDupes: name=\(group.first?.name ?? "?") stamped \(withoutId.count) legacy record(s) with id=\(id.prefix(12))…")
+        }
+        if stamped > 0 {
+            try? context.save()
+            // Now that legacy records have IDs, deterministic merge collapses them.
+            mergeByCloudKitUserID(in: context)
+        }
+        return stamped
+    }
+
     /// LEGACY fallback. Same as before — merges same-name dupes for the
     /// current user's typed name when at least one record matches the
     /// legacy `meUid` UserDefaults claim. Only fires for records that
@@ -69,7 +120,7 @@ enum FamilyDedupe {
         let lc = trimmed.lowercased()
 
         let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
-        req.predicate = NSPredicate(format: "name LIKE[c] %@ AND deletedAt == nil AND cloudKitUserID == ''", lc)
+        req.predicate = NSPredicate(format: "name LIKE[c] %@ AND deletedAt == nil AND (cloudKitUserID == nil OR cloudKitUserID == '')", lc)
         let matches = (try? context.fetch(req)) ?? []
         guard matches.count > 1 else { return 0 }
 

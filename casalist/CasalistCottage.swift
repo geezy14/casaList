@@ -4059,6 +4059,7 @@ extension CasalistCottage {
                 Task { @MainActor in
                     await FamilyIdentity.backfillSelf(in: moc)
                     FamilyDedupe.mergeByCloudKitUserID(in: moc)
+                    FamilyDedupe.mergeLegacyNameDupes(in: moc)
                     FamilyDedupe.mergeDuplicateMeRecords(in: moc, userName: trimmed)
                 }
             }

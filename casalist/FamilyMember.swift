@@ -13,10 +13,16 @@ public final class FamilyMember: NSManagedObject {
     @NSManaged public var roleLevel: String
     @NSManaged public var photoBlob: Data?
     @NSManaged public var deletedAt: Date?
-    /// CloudKit user record ID (stable across reinstall/device-change). Empty
-    /// string when not yet stamped. See CasaCoreData.swift for full doc.
-    @NSManaged public var cloudKitUserID: String
+    /// CloudKit user record ID (stable across reinstall/device-change). Nil
+    /// or empty when not yet stamped. Always read via `userID` which
+    /// flattens nil → "" for predicate / comparison safety.
+    @NSManaged public var cloudKitUserID: String?
     @NSManaged public var household: Household?
+
+    /// Non-optional read accessor. Use everywhere we need to compare or
+    /// pass the ID — keeps callers from each having to do their own
+    /// nil-coalesce. Writers can assign directly to `cloudKitUserID`.
+    var userID: String { cloudKitUserID ?? "" }
 
     /// True if the record is a live (not soft-deleted) member.
     var isLive: Bool { deletedAt == nil }

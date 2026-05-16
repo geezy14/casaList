@@ -208,8 +208,12 @@ struct SettingsView: View {
             backupSection
             dataSection
             aboutSection
+            // Developer tools live in a separate View struct so the heavy
+            // generic TupleView doesn't bloat SettingsView's body type.
+            // Inlining them caused a Swift metadata demangler stack
+            // overflow on iOS 26 (crash log 2026-05-15 21:48:44).
             #if DEBUG
-            developerSection
+            DeveloperSettingsSection()
             #endif
             Text("Casalist").font(.caption).foregroundStyle(P.textMuted)
                 .frame(maxWidth: .infinity)
@@ -609,6 +613,37 @@ struct SettingsView: View {
     /// non-owner with read-only permission to read-write so their writes
     /// actually flow back to the owner. Saves the modified share via
     /// CKModifyRecordsOperation on the private DB.
+    /// HARD-deletes every household, member, task, goal, event, chore on
+    /// this device (including soft-deleted ones) and clears the local
+    /// UserDefaults state that tracks identity. The user gets a true
+    /// blank-slate. CloudKit data on the user's iCloud account is NOT
+    /// touched — but on next foreground, only records this device
+    /// genuinely has access to will sync back in. Use to escape wedged
+    /// states from cumulative test cycles.
+    private func nukeAllLocalData() {
+        let entities = ["FamilyMember", "TaskItem", "FamilyGoal", "FamilyEvent",
+                        "ChoreTemplate", "Household"]
+        var totalDeleted = 0
+        for name in entities {
+            let req = NSFetchRequest<NSManagedObject>(entityName: name)
+            if let objs = try? moc.fetch(req) {
+                for o in objs { moc.delete(o) }
+                totalDeleted += objs.count
+            }
+        }
+        try? moc.save()
+        // Clear identity-tracking UserDefaults so we re-onboard cleanly.
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "meUid")
+        defaults.removeObject(forKey: "failedShareRecordIDs")
+        // Also clear the iCloud KV share URL so auto-rejoin doesn't pull
+        // us back into a wedged share.
+        let kv = NSUbiquitousKeyValueStore.default
+        kv.removeObject(forKey: CasalistAppDelegate.lastShareURLKey)
+        kv.synchronize()
+        wipeMessage = "Hard-deleted \(totalDeleted) records. Force-quit and reopen to start fresh."
+    }
+
     /// Writes a complete state snapshot to share-log.txt — every household
     /// (with store + deletedAt + member count), every FamilyMember (store,
     /// role, deletedAt, uid, household uid, meUid match), and the persisted
@@ -963,9 +998,20 @@ struct SettingsView: View {
             return
         }
         let url = docs.appendingPathComponent("share-log.txt")
-        guard let data = try? Data(contentsOf: url),
-              let text = String(data: data, encoding: .utf8) else {
+        // Read only the TAIL of the file via seeking — loading multi-MB
+        // logs into a single String can freeze the UI on busy sessions.
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
             wipeMessage = "No sync log yet — relaunch the app to start recording events."
+            return
+        }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let tailBytes: UInt64 = 20_000  // ~20 KB → plenty for the last 30 events
+        let offset = size > tailBytes ? size - tailBytes : 0
+        try? handle.seek(toOffset: offset)
+        let data = (try? handle.readToEnd()) ?? Data()
+        guard let text = String(data: data, encoding: .utf8) else {
+            wipeMessage = "Couldn't decode sync log."
             return
         }
         let lines = text.split(separator: "\n").suffix(30)
@@ -1226,48 +1272,6 @@ struct SettingsView: View {
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .tint(P.peach)
                 divider
-                Toggle("Daily morning briefing", isOn: $dailyBriefingEnabled)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .tint(P.peach)
-                if dailyBriefingEnabled {
-                    divider
-                    HStack {
-                        Text("Time").font(.system(size: 14, weight: .semibold))
-                        Spacer()
-                        Picker("", selection: $dailyBriefingHour) {
-                            ForEach(0..<24, id: \.self) { h in
-                                Text(hourLabel(h)).tag(h)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(P.peach)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                }
-                divider
-                Toggle("Grocery list activity", isOn: $groceryActivityPush)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .tint(P.peach)
-                divider
-                Toggle("Quiet hours", isOn: $quietHoursEnabled)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .tint(P.peach)
-                if quietHoursEnabled {
-                    divider
-                    HStack {
-                        Text("From").font(.system(size: 14, weight: .semibold))
-                        Spacer()
-                        Picker("", selection: $quietHoursStart) {
-                            ForEach(0..<24, id: \.self) { h in Text(hourLabel(h)).tag(h) }
-                        }.pickerStyle(.menu).tint(P.peach)
-                        Text("to").font(.system(size: 14, weight: .semibold)).padding(.leading, 8)
-                        Picker("", selection: $quietHoursEnd) {
-                            ForEach(0..<24, id: \.self) { h in Text(hourLabel(h)).tag(h) }
-                        }.pickerStyle(.menu).tint(P.peach)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                }
-                divider
                 infoRow("System permission", value: notifStatus)
                 divider
                 infoRow("Pending notifications", value: "\(pendingCount)")
@@ -1319,91 +1323,141 @@ struct SettingsView: View {
     private var developerSection: some View {
         section(title: "DEVELOPER") {
             VStack(spacing: 0) {
-                infoRow("Family members", value: "\(members.count)")
-                divider
-                infoRow("Tasks", value: "\(tasks.count)")
-                divider
-                infoRow("Households", value: "\(households.count)")
-                divider
-                actionButton("Seed schema records") { seedSchemaRecords() }
-                divider
-                actionButton("Init CloudKit schema (dev)") {
-                    Task {
-                        do {
-                            try CasaCoreDataStack.shared.initializeCloudKitSchemaForDevelopment()
-                            await MainActor.run { wipeMessage = "Schema initialized in Dev. Diff + deploy via Dashboard." }
-                        } catch {
-                            let ns = error as NSError
-                            let full = "\(ns)\n\nUserInfo:\n\(ns.userInfo as AnyObject)"
-                            // Write to a file we can read later with devicectl device info files
-                            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                                let url = docs.appendingPathComponent("init-error.txt")
-                                try? full.data(using: .utf8)?.write(to: url)
-                            }
-                            NSLog("Casa initializeCloudKitSchema FULL ERROR: \(full)")
-                            await MainActor.run { wipeMessage = "init failed (full error written to docs/init-error.txt): \(ns.localizedDescription)" }
-                        }
-                    }
-                }
-                divider
-                actionButton("Remove test members") {
-                    removeSchemaSeedMembers()
-                    wipeMessage = "Removed any Schema-* test members."
-                }
-                divider
-                if households.contains(where: { $0.objectID.persistentStore == CasaCoreDataStack.shared.sharedStore }) {
-                    actionButton("Leave shared household") { leaveSharedHouseholds() }
-                    divider
-                }
-                actionButton("Inspect & fix share permissions") { inspectAndFixShare() }
-                divider
-                actionButton("Inspect local store assignments") { inspectStoreAssignments() }
-                divider
-                actionButton("View sync log (last 30)") { loadRecentSyncLog() }
-                divider
-                actionButton("Clear stuck share invitation") {
-                    let kv = NSUbiquitousKeyValueStore.default
-                    kv.removeObject(forKey: CasalistAppDelegate.lastShareURLKey)
-                    kv.synchronize()
-                    CasalistAppDelegate.clearBadShareList()
-                    wipeMessage = "Cleared saved share URL + bad-share cache. Restart the app."
-                }
-                divider
-                actionButton("Reset share (owner) — delete existing CKShare") {
-                    resetOwnerShare()
-                }
-                divider
-                actionButton("Merge duplicate households") {
-                    mergeDuplicateHouseholds()
-                }
-                divider
-                actionButton("Dump state to share log") {
-                    dumpStateToShareLog()
-                }
-                divider
-                actionButton("Move me into shared store") {
-                    moveMeIntoSharedStore()
-                }
-                divider
-                actionButton("Demote me to standard") {
-                    demoteMeToStandard()
-                }
-                divider
-                Button(role: .destructive) { confirmWipe = true } label: {
-                    HStack {
-                        Image(systemName: "trash").font(.system(size: 14, weight: .bold))
-                        Text("Clear all data").font(.system(size: 14, weight: .heavy))
-                        Spacer()
-                    }
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 16).padding(.vertical, 12)
-                }
-                if let wipeMessage {
-                    divider
-                    Text(wipeMessage).font(.caption).foregroundStyle(P.textMuted)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                }
+                developerStats
+                developerSchemaTools
+                developerShareInspect
+                developerShareReset
+                developerNukeTools
+                developerOwnerTools
+                developerWipe
             }.cardBg(P)
+        }
+    }
+
+    private var developerStats: some View {
+        Group {
+            infoRow("Family members", value: "\(members.count)")
+            divider
+            infoRow("Tasks", value: "\(tasks.count)")
+            divider
+            infoRow("Households", value: "\(households.count)")
+            divider
+        }
+    }
+
+    private var developerSchemaTools: some View {
+        Group {
+            actionButton("Seed schema records") { seedSchemaRecords() }
+            divider
+            actionButton("Init CloudKit schema (dev)") {
+                Task {
+                    do {
+                        try CasaCoreDataStack.shared.initializeCloudKitSchemaForDevelopment()
+                        await MainActor.run { wipeMessage = "Schema initialized in Dev. Diff + deploy via Dashboard." }
+                    } catch {
+                        let ns = error as NSError
+                        let full = "\(ns)\n\nUserInfo:\n\(ns.userInfo as AnyObject)"
+                        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                            let url = docs.appendingPathComponent("init-error.txt")
+                            try? full.data(using: .utf8)?.write(to: url)
+                        }
+                        NSLog("Casa initializeCloudKitSchema FULL ERROR: \(full)")
+                        await MainActor.run { wipeMessage = "init failed (full error written to docs/init-error.txt): \(ns.localizedDescription)" }
+                    }
+                }
+            }
+            divider
+            actionButton("Remove test members") {
+                removeSchemaSeedMembers()
+                wipeMessage = "Removed any Schema-* test members."
+            }
+            divider
+        }
+    }
+
+    private var developerLeaveShared: some View {
+        Button {
+            if households.contains(where: { $0.objectID.persistentStore == CasaCoreDataStack.shared.sharedStore }) {
+                leaveSharedHouseholds()
+            } else {
+                wipeMessage = "No shared household to leave."
+            }
+        } label: {
+            HStack {
+                Text("Leave shared household").font(.system(size: 14, weight: .heavy))
+                Spacer()
+            }
+            .foregroundStyle(P.text)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
+    }
+
+    private var developerShareInspect: some View {
+        Group {
+            developerLeaveShared
+            divider
+            actionButton("Inspect & fix share permissions") { inspectAndFixShare() }
+            divider
+            actionButton("Inspect local store assignments") { inspectStoreAssignments() }
+            divider
+            actionButton("View sync log (last 30)") { loadRecentSyncLog() }
+            divider
+        }
+    }
+
+    private var developerShareReset: some View {
+        Group {
+            actionButton("Clear stuck share invitation") {
+                let kv = NSUbiquitousKeyValueStore.default
+                kv.removeObject(forKey: CasalistAppDelegate.lastShareURLKey)
+                kv.synchronize()
+                CasalistAppDelegate.clearBadShareList()
+                wipeMessage = "Cleared saved share URL + bad-share cache. Restart the app."
+            }
+            divider
+            actionButton("Reset share (owner) — delete existing CKShare") { resetOwnerShare() }
+            divider
+        }
+    }
+
+    private var developerNukeTools: some View {
+        Group {
+            actionButton("Merge duplicate households") { mergeDuplicateHouseholds() }
+            divider
+            actionButton("Dump state to share log") { dumpStateToShareLog() }
+            divider
+            actionButton("Nuke ALL local data (hard delete)") { nukeAllLocalData() }
+            divider
+        }
+    }
+
+    private var developerOwnerTools: some View {
+        Group {
+            actionButton("Move me into shared store") { moveMeIntoSharedStore() }
+            divider
+            actionButton("Demote me to standard") { demoteMeToStandard() }
+            divider
+        }
+    }
+
+    private var developerWipe: some View {
+        Group {
+            Button(role: .destructive) { confirmWipe = true } label: {
+                HStack {
+                    Image(systemName: "trash").font(.system(size: 14, weight: .bold))
+                    Text("Clear all data").font(.system(size: 14, weight: .heavy))
+                    Spacer()
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            Text(wipeMessage ?? "")
+                .font(.caption)
+                .foregroundStyle(P.textMuted)
+                .padding(.horizontal, 16)
+                .padding(.vertical, (wipeMessage?.isEmpty == false) ? 8 : 0)
+                .frame(maxHeight: (wipeMessage?.isEmpty == false) ? .infinity : 0)
+                .clipped()
         }
     }
 

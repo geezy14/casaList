@@ -55,6 +55,117 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         UserDefaults.standard.removeObject(forKey: badShareKey)
     }
 
+    /// Runs the dedupe + self-heal pipeline on a BACKGROUND context. The
+    /// main reason this exists: doing context.save() on the main context
+    /// can synchronously trigger a SQLite WAL checkpoint that competes
+    /// with CloudKit's own writes on the shared store's SQLQueue. When
+    /// that contention exceeds 10 seconds, iOS's scene-update watchdog
+    /// kills the app (FRONTBOARD 0x8BADF00D). Pushing the work off-main
+    /// lets the watchdog see a responsive UI thread and keeps the merge
+    /// from blocking the queue that CloudKit needs.
+    static func runDedupePipeline(userName: String) {
+        let stack = CasaCoreDataStack.shared
+        let bg = stack.container.newBackgroundContext()
+        bg.automaticallyMergesChangesFromParent = true
+        bg.perform {
+            // Dedupe pipeline on a private-queue context. All saves go
+            // through bg.perform, NOT the main thread — so the SQLite WAL
+            // checkpoint can't deadlock the scene-update watchdog.
+            // Stamping the user's own cloudKitUserID is async (needs
+            // CKContainer.userRecordID), so we kick that off in parallel
+            // and let it complete on its own.
+            FamilyDedupe.mergeByCloudKitUserID(in: bg)
+            FamilyDedupe.mergeLegacyNameDupes(in: bg)
+            FamilyDedupe.mergeDuplicateMeRecords(in: bg, userName: userName)
+            ensureMeInHouseholdOnBackground(userName: userName, context: bg)
+        }
+        // Fire stamping separately — it's async + main-actor-bound and
+        // touches the main context. Done after the background dedupe so
+        // it doesn't race for the SQLite queue.
+        Task { @MainActor in
+            await FamilyIdentity.backfillSelf(in: stack.context)
+        }
+    }
+
+    /// Background-context version of ensureMeInSharedHousehold. Same
+    /// logic, just doesn't touch the main context.
+    static func ensureMeInHouseholdOnBackground(userName: String, context: NSManagedObjectContext) {
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let stack = CasaCoreDataStack.shared
+        let households = (try? context.fetch(Household.fetchRequest())) ?? []
+        let target: Household
+        let isJoiner: Bool
+        if let shared = households.first(where: { $0.objectID.persistentStore === stack.sharedStore }) {
+            target = shared; isJoiner = true
+        } else if let priv = households.first(where: {
+            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+        }) {
+            target = priv; isJoiner = false
+        } else {
+            return
+        }
+        if isJoiner {
+            let privateHouseholds = households.filter {
+                $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+            }
+            for ph in privateHouseholds {
+                for member in (ph.members as? Set<FamilyMember>) ?? [] where member.deletedAtValue == nil {
+                    member.softDelete()
+                }
+                ph.softDelete()
+            }
+        }
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "household == %@ AND name ==[c] %@", target, trimmed)
+        let matches = (try? context.fetch(req)) ?? []
+        if let live = matches.first(where: { $0.deletedAtValue == nil }) {
+            UserDefaults.standard.set(live.uid.uuidString, forKey: "meUid")
+            try? context.save()
+            return
+        }
+        if let dead = matches.min(by: { $0.createdAt < $1.createdAt }) {
+            dead.restore()
+            dead.roleLevel = FamilyRole.standard.rawValue
+            UserDefaults.standard.set(dead.uid.uuidString, forKey: "meUid")
+            try? context.save()
+            return
+        }
+        let assignedRole: FamilyRole = isJoiner ? .standard : .owner
+        let m = FamilyMember(context: context, name: trimmed, role: assignedRole.label, colorHex: 0x7AB97D, roleLevel: assignedRole)
+        context.assign(m, toStoreOf: target)
+        m.household = target
+        try? context.save()
+        UserDefaults.standard.set(m.uid.uuidString, forKey: "meUid")
+    }
+
+    /// Should the saved share URL be cleared from iCloud KV after a fetch
+    /// error? Default is "no" — only clear when CloudKit explicitly says
+    /// the share is permanently unreachable from this account. Transient
+    /// failures (network, rate limit, account temporarily unavailable,
+    /// not authenticated) must preserve the URL so the next online launch
+    /// can rejoin without needing a re-invite. Born from session in which
+    /// a single bad-wifi launch permanently bricked the auto-rejoin path.
+    static func shouldClearSavedShareURL(after error: NSError) -> Bool {
+        guard error.domain == CKError.errorDomain,
+              let code = CKError.Code(rawValue: error.code) else {
+            return false
+        }
+        switch code {
+        case .unknownItem, .permissionFailure, .participantMayNeedVerification,
+             .invalidArguments, .badContainer:
+            return true
+        case .networkUnavailable, .networkFailure, .serviceUnavailable,
+             .requestRateLimited, .zoneBusy, .notAuthenticated,
+             .accountTemporarilyUnavailable:
+            return false
+        default:
+            // Unknown CloudKit error → assume transient, keep the URL.
+            // Safer to retry on next launch than to brick rejoin.
+            return false
+        }
+    }
+
     /// NSUbiquitousKeyValueStore key — persists the share URL the user last
     /// accepted. Lives at the iCloud account level, NOT the app sandbox, so
     /// it SURVIVES app deletion. Used to auto-rejoin the family on a fresh
@@ -150,14 +261,14 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         container.fetchShareMetadata(with: url) { metadata, error in
             if let error {
                 appendShareLog("auto-rejoin fetchShareMetadata FAILED: \(error)")
-                // Almost any error here means the share is no longer
-                // accept-able from this device: revoked, owner deleted it,
-                // permission failure, etc. Be aggressive about clearing the
-                // saved URL so we don't loop forever. If it succeeds later
-                // via a manual re-accept, the URL re-saves automatically.
-                kv.removeObject(forKey: lastShareURLKey)
-                kv.synchronize()
-                appendShareLog("auto-rejoin cleared share URL from iCloud KV after fetch failure")
+                let ns = error as NSError
+                if shouldClearSavedShareURL(after: ns) {
+                    kv.removeObject(forKey: lastShareURLKey)
+                    kv.synchronize()
+                    appendShareLog("auto-rejoin cleared share URL — permanent failure (code=\(ns.code))")
+                } else {
+                    appendShareLog("auto-rejoin keeping share URL — transient failure (code=\(ns.code))")
+                }
                 return
             }
             guard let metadata else { return }
@@ -172,11 +283,16 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
     /// household for the recipient so the inviter sees them immediately. Pulls
     /// the name from the user's `userName` AppStorage; falls back to "New
     /// member" if not set yet.
-    /// Idempotent foreground self-heal. If the device has accepted a share
-    /// (shared household present) but no live FamilyMember for the user
-    /// exists in it, restore a soft-deleted one or create a fresh one in
-    /// the shared store. Fixes the "I joined but my name doesn't show up
-    /// in the family list" case after an owner deletes the joiner.
+    /// Idempotent foreground self-heal. If the device has any household
+    /// (private OR shared) but no live FamilyMember matching userName, create
+    /// one in the appropriate household and stamp it with this device's
+    /// cloudKitUserID. Handles three cases:
+    ///   • Joiner: shared household present, no me-record → create in shared
+    ///   • Owner who had their record wiped: private household present, no
+    ///     me-record (because welcome screen got skipped due to existing
+    ///     CloudKit-synced household) → create in private
+    ///   • User whose record was soft-deleted on another device → restore +
+    ///     re-stamp
     static func ensureMeInSharedHousehold(userName: String) {
         let stack = CasaCoreDataStack.shared
         let context = stack.context
@@ -186,38 +302,63 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         let households = (try? context.fetch(Household.fetchRequest())) ?? []
         let sharedCount = households.filter { $0.objectID.persistentStore === stack.sharedStore }.count
         let privCount = households.filter { $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil }.count
-        guard let shared = households.first(where: { $0.objectID.persistentStore === stack.sharedStore }) else {
-            appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: no shared household (priv=\(privCount), shared=\(sharedCount)) — bail")
+
+        // Target household: shared if we joined one (we're a participant),
+        // otherwise the live private one (we're the owner). Bail only if
+        // neither exists — then there's no household to attach to anyway.
+        let target: Household
+        let isJoiner: Bool
+        if let shared = households.first(where: { $0.objectID.persistentStore === stack.sharedStore }) {
+            target = shared
+            isJoiner = true
+        } else if let priv = households.first(where: {
+            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+        }) {
+            target = priv
+            isJoiner = false
+        } else {
+            appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: no household at all (priv=\(privCount), shared=\(sharedCount)) — bail")
             return
         }
-        appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: ENTER priv=\(privCount) shared=\(sharedCount)")
+        appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: ENTER priv=\(privCount) shared=\(sharedCount) target=\(isJoiner ? "shared" : "private")")
+        // Alias for legacy code below that refers to `shared` by name.
+        let shared = target
 
-        // Retire any leftover pre-share private households on this device.
-        // Once joined to a real shared household, the local solo placeholder
-        // is obsolete and its members shouldn't keep appearing in the family
-        // list. Safe to re-run — soft-deleted records stay soft-deleted.
-        let privateHouseholds = households.filter {
-            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
-        }
-        var retired = false
-        for ph in privateHouseholds {
-            let memberCount = ((ph.members as? Set<FamilyMember>) ?? []).filter { $0.deletedAtValue == nil }.count
-            for member in (ph.members as? Set<FamilyMember>) ?? [] where member.deletedAtValue == nil {
-                member.softDelete()
+        // Retire any leftover pre-share private households on this device,
+        // BUT only for joiners. An owner's "private household" is their own
+        // legitimate household — retiring it would wipe their data.
+        if isJoiner {
+            let privateHouseholds = households.filter {
+                $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
             }
-            ph.softDelete()
-            retired = true
-            appendShareLog("ensureMeInSharedHousehold: retired private household '\(ph.name)' (had \(memberCount) live members)")
-        }
-        if retired {
-            try? context.save()
+            var retired = false
+            for ph in privateHouseholds {
+                let memberCount = ((ph.members as? Set<FamilyMember>) ?? []).filter { $0.deletedAtValue == nil }.count
+                for member in (ph.members as? Set<FamilyMember>) ?? [] where member.deletedAtValue == nil {
+                    member.softDelete()
+                }
+                ph.softDelete()
+                retired = true
+                appendShareLog("ensureMeInSharedHousehold: retired private household '\(ph.name)' (had \(memberCount) live members)")
+            }
+            if retired { try? context.save() }
         }
 
         let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
         req.predicate = NSPredicate(format: "household == %@ AND name ==[c] %@", shared, trimmed)
         let matches = (try? context.fetch(req)) ?? []
-        if matches.contains(where: { $0.deletedAtValue == nil }) {
-            appendShareLog("ensureMeInSharedHousehold: live \(trimmed) already in shared — no action")
+        if let live = matches.first(where: { $0.deletedAtValue == nil }) {
+            // Found my record in the shared household. Make sure it's
+            // stamped with this device's cloudKitUserID — otherwise other
+            // devices see it as "legacy" and dedupe-loop with their stamped
+            // record. Also re-claim meUid onto it.
+            UserDefaults.standard.set(live.uid.uuidString, forKey: "meUid")
+            if live.userID.isEmpty {
+                Task { @MainActor in
+                    await FamilyIdentity.stampOwnIdentity(on: live, in: context)
+                }
+            }
+            appendShareLog("ensureMeInSharedHousehold: live \(trimmed) found in shared — meUid claimed, ID \(live.userID.isEmpty ? "stamp scheduled" : "already stamped")")
             return
         }
         if let dead = matches.min(by: { $0.createdAt < $1.createdAt }) {
@@ -228,8 +369,10 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             appendShareLog("ensureMeInSharedHousehold: restored soft-deleted \(trimmed)")
             return
         }
-        // No record exists at all — create one in the shared store.
-        let m = FamilyMember(context: context, name: trimmed, role: "Member", colorHex: 0x7AB97D, roleLevel: .standard)
+        // No record exists at all — create one in the target store.
+        // Owners get .owner, joiners get .standard.
+        let assignedRole: FamilyRole = isJoiner ? .standard : .owner
+        let m = FamilyMember(context: context, name: trimmed, role: assignedRole.label, colorHex: 0x7AB97D, roleLevel: assignedRole)
         context.assign(m, toStoreOf: shared)
         m.household = shared
         do {
@@ -280,7 +423,7 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             }
             target.roleLevel = FamilyRole.standard.rawValue
             UserDefaults.standard.set(target.uid.uuidString, forKey: "meUid")
-            if let metadata, target.cloudKitUserID.isEmpty {
+            if let metadata, target.userID.isEmpty {
                 Task { @MainActor in
                     FamilyIdentity.stampJoinerIdentity(on: target, from: metadata, in: context)
                 }
@@ -350,6 +493,19 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             let url = docs.appendingPathComponent("share-log.txt")
             if let data = line.data(using: .utf8) {
                 if FileManager.default.fileExists(atPath: url.path) {
+                    // Rotate when the file exceeds 100KB. Otherwise hours of
+                    // heavy instrumentation builds a multi-MB file which can
+                    // freeze the Settings sync-log reader.
+                    if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                       let size = attrs[.size] as? Int, size > 100_000 {
+                        // Keep the most recent ~40KB; rewrite atomically.
+                        if let existing = try? Data(contentsOf: url) {
+                            let keepFrom = max(0, existing.count - 40_000)
+                            let kept = existing.subdata(in: keepFrom..<existing.count)
+                            try? (kept + data).write(to: url)
+                            return
+                        }
+                    }
                     if let handle = try? FileHandle(forWritingTo: url) {
                         handle.seekToEndOfFile()
                         handle.write(data)
@@ -431,17 +587,9 @@ struct CasalistApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
-                    // The shared household may have just landed (or a synced
-                    // delete of "me" arrived). Re-run the self-heal + dedupe
-                    // so leftover private placeholder data gets retired and
-                    // any same-name dupes collapse.
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(500))
-                        await FamilyIdentity.backfillSelf(in: stack.context)
-                        FamilyDedupe.mergeByCloudKitUserID(in: stack.context)
-                        FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
-                        CasalistAppDelegate.ensureMeInSharedHousehold(userName: userName)
-                    }
+                    // Dedupe + self-heal off-main (background context) to
+                    // avoid blocking the SQLite shared queue → watchdog kill.
+                    CasalistAppDelegate.runDedupePipeline(userName: userName)
                     // A remote change just landed — check for redemptions
                     // and new assignments performed on another device.
                     if notificationsEnabled {
@@ -467,14 +615,11 @@ struct CasalistApp: App {
                 // to land remote changes, run the dedupe pass. Catches the
                 // reinstall-race "two me" pattern.
                 try? await Task.sleep(for: .milliseconds(1500))
-                await FamilyIdentity.backfillSelf(in: stack.context)
-                FamilyDedupe.mergeByCloudKitUserID(in: stack.context)
-                FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
-                // Joiner self-heal: if we're in a shared household but our
-                // own FamilyMember isn't there (got soft-deleted on the owner
-                // side, or never created in the shared store), restore /
-                // create it so we stay visible in the family list.
-                CasalistAppDelegate.ensureMeInSharedHousehold(userName: userName)
+                // Dedupe + self-heal off-main (background context) so
+                // SQLite WAL checkpoint doesn't block main thread → watchdog
+                // kill (FRONTBOARD 0x8BADF00D). Runs the full pipeline on
+                // a private-queue context.
+                CasalistAppDelegate.runDedupePipeline(userName: userName)
             }
             if notificationsEnabled {
                 Task {
@@ -484,10 +629,15 @@ struct CasalistApp: App {
                 }
             }
             // Auto-snapshot to iCloud Drive if enabled and a day has passed.
+            // CRITICAL: don't use stack.context (main-thread-bound) from a
+            // background queue. NSManagedObjectContext is thread-affine —
+            // using it off-thread can corrupt state or crash. Spin up a
+            // proper background context off the container instead.
             let backupOn = UserDefaults.standard.object(forKey: "backupEnabled") as? Bool ?? true
             if backupOn && CloudBackup.isAvailable && CloudBackup.isDue {
-                DispatchQueue.global(qos: .utility).async {
-                    _ = CloudBackup.snapshot(in: stack.context)
+                let bgContext = stack.container.newBackgroundContext()
+                bgContext.perform {
+                    _ = CloudBackup.snapshot(in: bgContext)
                 }
             }
         }

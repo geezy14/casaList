@@ -357,6 +357,81 @@ enum NotificationsManager {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily-briefing"])
     }
 
+    // MARK: – FamilyEvent push notifications
+
+    /// Identifier prefix for event notifications.
+    private static let eventIdPrefix = "event-"
+
+    /// Schedule (or reschedule) a local push for a FamilyEvent. Honors
+    /// `repeatKind` so daily/weekly/monthly/yearly events use a repeating
+    /// calendar trigger. Idempotent — cancels any prior schedule for this
+    /// event before re-adding.
+    static func scheduleEvent(for event: FamilyEvent) async {
+        let id = eventIdPrefix + event.uid.uuidString
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+
+        guard event.deletedAt == nil else { return }
+        // Don't schedule events in the past unless they're recurring.
+        if event.startDate < Date() && event.repeatKind.isEmpty { return }
+
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "📅 \(event.title)"
+        var bodyParts: [String] = []
+        if event.isAllDay {
+            bodyParts.append("All day")
+        } else {
+            let f = DateFormatter()
+            f.dateStyle = .none
+            f.timeStyle = .short
+            bodyParts.append(f.string(from: event.startDate))
+        }
+        if !event.location.isEmpty { bodyParts.append(event.location) }
+        if !event.attendees.isEmpty { bodyParts.append("with \(event.attendees)") }
+        content.body = bodyParts.joined(separator: " · ")
+        content.sound = .default
+
+        let cal = Calendar.current
+        var dc: DateComponents
+        let repeats = !event.repeatKind.isEmpty
+        switch event.repeatKind {
+        case "daily":
+            dc = cal.dateComponents([.hour, .minute], from: event.startDate)
+        case "weekly":
+            dc = cal.dateComponents([.weekday, .hour, .minute], from: event.startDate)
+        case "monthly":
+            dc = cal.dateComponents([.day, .hour, .minute], from: event.startDate)
+        case "yearly":
+            dc = cal.dateComponents([.month, .day, .hour, .minute], from: event.startDate)
+        default:
+            dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: event.startDate)
+        }
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: repeats)
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        try? await center.add(request)
+    }
+
+    static func cancelEvent(uid: String) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [eventIdPrefix + uid]
+        )
+    }
+
+    /// Re-schedule push notifications for every live FamilyEvent. Called on
+    /// app launch / foreground so events that synced down from another
+    /// device get their notifications registered on THIS device too.
+    static func syncEventsFromContext(_ context: NSManagedObjectContext) async {
+        let req: NSFetchRequest<FamilyEvent> = FamilyEvent.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        let events = (try? context.fetch(req)) ?? []
+        for event in events {
+            await scheduleEvent(for: event)
+        }
+    }
+
     // MARK: – Quiet hours
 
     /// Returns true if `date` falls inside the user's configured quiet

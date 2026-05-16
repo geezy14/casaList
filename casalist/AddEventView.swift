@@ -181,11 +181,20 @@ struct AddEventView: View {
             }
         }
         try? moc.save()
+        // Schedule (or reschedule) the local push notification for this
+        // event. Honors repeatKind so weekly events fire weekly, etc.
+        let target = editing ?? households.preferredTarget?.events?.allObjects
+            .compactMap { $0 as? FamilyEvent }
+            .first { $0.title == trimmedTitle && $0.startDate == startDate }
+        if let target {
+            Task { await NotificationsManager.scheduleEvent(for: target) }
+        }
         dismiss()
     }
 
     private func delete() {
         if let editing {
+            Task { await NotificationsManager.cancelEvent(uid: editing.uid.uuidString) }
             editing.softDelete()
             try? moc.save()
             dismiss()
