@@ -51,6 +51,14 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         stack.container.acceptShareInvitations(from: [metadata], into: sharedStore) { results, error in
             if let error {
                 appendShareLog("FAILED: \(error)")
+                // Acceptance failed — most likely the share is gone (owner
+                // stopped sharing, revoked, household deleted, etc.). Purge
+                // the saved URL so we don't loop into Apple's "Item
+                // Unavailable" alert on every launch.
+                let kv = NSUbiquitousKeyValueStore.default
+                kv.removeObject(forKey: lastShareURLKey)
+                kv.synchronize()
+                appendShareLog("cleared stale share URL from iCloud KV after acceptance failure")
             } else {
                 appendShareLog("SUCCEEDED: \(results?.count ?? 0) shares accepted")
                 // Persist the share URL to NSUbiquitousKeyValueStore so a
@@ -99,14 +107,14 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         container.fetchShareMetadata(with: url) { metadata, error in
             if let error {
                 appendShareLog("auto-rejoin fetchShareMetadata FAILED: \(error)")
-                // If Apple says the share is gone (revoked / expired), purge
-                // the stale URL so we don't keep retrying.
-                if let ckError = error as? CKError,
-                   ckError.code == .unknownItem || ckError.code == .invalidArguments {
-                    kv.removeObject(forKey: lastShareURLKey)
-                    kv.synchronize()
-                    appendShareLog("auto-rejoin cleared invalid share URL from iCloud KV")
-                }
+                // Almost any error here means the share is no longer
+                // accept-able from this device: revoked, owner deleted it,
+                // permission failure, etc. Be aggressive about clearing the
+                // saved URL so we don't loop forever. If it succeeds later
+                // via a manual re-accept, the URL re-saves automatically.
+                kv.removeObject(forKey: lastShareURLKey)
+                kv.synchronize()
+                appendShareLog("auto-rejoin cleared share URL from iCloud KV after fetch failure")
                 return
             }
             guard let metadata else { return }

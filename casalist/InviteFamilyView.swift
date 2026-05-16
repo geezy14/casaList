@@ -15,6 +15,10 @@ struct InviteFamilyView: View {
     @State private var statusMessage: String = "Checking iCloud…"
     @State private var preparingShare: Bool = false
     @State private var errorMessage: String? = nil
+    /// When set, the next prepareAndShare presents the AirDrop-only sheet
+    /// instead of the full activity sheet. Lets us route the same share
+    /// flow to either button without two parallel async paths.
+    @State private var nextShareIsAirDropOnly: Bool = false
 
     private let stack = CasaCoreDataStack.shared
 
@@ -29,18 +33,43 @@ struct InviteFamilyView: View {
                     howItWorks
                     Spacer(minLength: 8)
 
-                    Button { Task { await prepareAndShare() } } label: {
-                        HStack(spacing: 8) {
-                            if preparingShare { ProgressView().tint(.white) }
-                            Label(preparingShare ? "Preparing…" : "Send invite",
-                                  systemImage: "person.crop.circle.badge.plus")
-                                .font(.system(size: 17, weight: .heavy))
+                    VStack(spacing: 10) {
+                        Button {
+                            nextShareIsAirDropOnly = true
+                            Task { await prepareAndShare() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if preparingShare && nextShareIsAirDropOnly { ProgressView().tint(.white) }
+                                Label("Drop to nearby phone", systemImage: "dot.radiowaves.left.and.right")
+                                    .font(.system(size: 17, weight: .heavy))
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Capsule().fill(accountStatus == .available && !preparingShare ? Color.accentColor : Color.gray.opacity(0.5)))
+                            .foregroundStyle(.white)
                         }
-                        .frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .background(Capsule().fill(accountStatus == .available && !preparingShare ? Color.accentColor : Color.gray.opacity(0.5)))
-                        .foregroundStyle(.white)
+                        .disabled(accountStatus != .available || preparingShare || householdName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                        Button {
+                            nextShareIsAirDropOnly = false
+                            Task { await prepareAndShare() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if preparingShare && !nextShareIsAirDropOnly { ProgressView() }
+                                Label("Send invite via Messages / Mail / link",
+                                      systemImage: "person.crop.circle.badge.plus")
+                                    .font(.system(size: 14, weight: .heavy))
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Capsule().fill(Color(.secondarySystemBackground)))
+                            .foregroundStyle(Color.accentColor)
+                        }
+                        .disabled(accountStatus != .available || preparingShare || householdName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                        Text("AirDrop tip: bring the other phone close once the share sheet opens — the slick animation kicks in automatically.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
                     }
-                    .disabled(accountStatus != .available || preparingShare || householdName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .padding(20)
             }
@@ -225,6 +254,7 @@ struct InviteFamilyView: View {
     private func presentShareSheet(for share: CKShare, container: CKContainer) {
         // share.url is populated by NSPersistentCloudKitContainer.share()
         // after the server save. Poll briefly in the rare case it's still nil.
+        let airDropOnly = nextShareIsAirDropOnly
         Task { @MainActor in
             for _ in 0..<10 {
                 if share.url != nil { break }
@@ -235,14 +265,25 @@ struct InviteFamilyView: View {
                 return
             }
             let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            if airDropOnly {
+                // Hide every share destination except AirDrop. iOS opens the
+                // sheet directly into AirDrop's nearby-device scanner — the
+                // sender just brings the other phone close and the animation
+                // takes over.
+                activity.excludedActivityTypes = [
+                    .message, .mail, .copyToPasteboard, .markupAsPDF,
+                    .addToReadingList, .assignToContact, .openInIBooks,
+                    .postToFacebook, .postToFlickr, .postToTencentWeibo,
+                    .postToTwitter, .postToVimeo, .postToWeibo,
+                    .print, .saveToCameraRoll, .sharePlay
+                ]
+            }
 
             guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
                   let window = scene.windows.first(where: { $0.isKeyWindow }),
                   let root = window.rootViewController else { return }
             var top = root
             while let presented = top.presentedViewController { top = presented }
-            // For iPad: anchor the popover near the top center so it doesn't
-            // crash on iPad layouts.
             if let popover = activity.popoverPresentationController {
                 popover.sourceView = top.view
                 popover.sourceRect = CGRect(x: top.view.bounds.midX, y: 60, width: 0, height: 0)
