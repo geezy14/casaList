@@ -756,7 +756,21 @@ When Geezy says "testflight it" (or similar):
    ```
 7. (Optional) Set the "What to Test" notes on the build via the API. Write a small Python script using PyJWT to call the App Store Connect API and PATCH the build's `betaBuildLocalizations` with the contents of `testflight-notes-<build>.txt`. See casaBills2 history for a working `set_testflight_notes.py` template — the auth flow is identical, just swap the bundle ID filter to `com.gbrown10.casalist`.
 
-   **Keep `testflight-notes-*.txt` ASCII-only.** Apple's App Store Connect API rejects certain emoji glyphs in the `whatsNew` field with `409 ENTITY_ERROR.ATTRIBUTE.INVALID.INVALID_TEXT`. The filter is inconsistent — some emojis pass, others don't — so the safe move is no emojis at all. Use `-` bullets and plain headers. Burned on this for 1.6: ⭐ 🌅 🙋 🌙 🍎 📍 📣 📢 🛒 🏡 all rejected. (The 1.6 ipa upload itself was fine; only the notes PATCH 409'd.)
+   **Keep `testflight-notes-*.txt` PURE ASCII.** Apple's App Store Connect API rejects certain glyphs in the `whatsNew` field with `409 ENTITY_ERROR.ATTRIBUTE.INVALID.INVALID_TEXT`. The filter is inconsistent — some emojis pass, others don't — so the safe rule is `ord(c) <= 127` for every char. Concrete substitutions when writing notes (these are the ones I personally keep typing on autopilot):
+
+   - em dash `—` (U+2014) → `--`
+   - en dash `–` (U+2013) → `-`
+   - right arrow `→` (U+2192) → `->`
+   - curly quotes `‘ ’ “ ”` → `' ' " "`
+   - ellipsis `…` → `...`
+   - any emoji → drop it or describe it ("warning:" instead of a sign emoji)
+
+   Quick verifier (run before uploading notes):
+   ```bash
+   python3 -c "p='testflight-notes-1.7.txt'; t=open(p).read(); bad=[(i,c,hex(ord(c))) for i,c in enumerate(t) if ord(c)>127]; print('OK' if not bad else f'FAIL {len(bad)}: {bad[:5]}')"
+   ```
+
+   Burned on this for 1.6 (emojis): ⭐ 🌅 🙋 🌙 🍎 📍 📣 📢 🛒 🏡 all rejected. And again on 1.7 prep (em dashes / arrows — Apple may or may not have rejected these but the ASCII-only rule applies regardless). The IPA upload itself is fine in both cases; only the notes PATCH 409s.
 
 ### ExportOptions.plist
 

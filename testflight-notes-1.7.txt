@@ -1,9 +1,9 @@
-Casalist 1.7 — Reminder rebuild + Apple Reminders link
+Casalist 1.7 -- Reminder rebuild + Apple Reminders link
 
 The Reminders surface got a complete rebuild this release. The biggest changes:
 
 Apple Reminders link
-- Settings → REMINDERS lets you pick an Apple Reminders list. Casalist reminders mirror into that list automatically.
+- Settings -> REMINDERS lets you pick an Apple Reminders list. Casalist reminders mirror into that list automatically.
 - That list's non-Casalist items show up at the bottom of the Reminders screen in a "FROM YOUR APPLE REMINDERS" section (read-only).
 
 New reminder authoring sheet
@@ -21,10 +21,10 @@ Per-family-member reminders
 
 Location-based reminders
 - "Trigger at a location" toggle in the reminder sheet. Pick a place, choose Arriving or Leaving, set the radius (100 ft to 1 mile). Mini-map shows the geofence.
-- Settings → SAVED LOCATIONS lets you save Home / Work / School once and use them as quick-pick chips.
+- Settings -> SAVED LOCATIONS lets you save Home / Work / School once and use them as quick-pick chips.
 
 Photo attachments
-- Camera chip on the reminder sheet attaches a photo from your library. Shows as a thumbnail on the pinned card. Device-local — photos do not sync to other family members.
+- Camera chip on the reminder sheet attaches a photo from your library. Shows as a thumbnail on the pinned card. Device-local -- photos do not sync to other family members.
 
 Reminder history
 - Clock icon on the Reminders top bar opens a "what fired / what I marked done / what I snoozed" log, sectioned by Today / Yesterday / This week / Older.
@@ -42,7 +42,7 @@ Streak heatmap
 - For daily/weekly/monthly/yearly reminders, the edit sheet shows a 30-day heatmap of completions, plus current and best streak.
 
 Daily recap
-- Settings → Notifications → "Daily reminder recap" fires one summary push at your chosen hour (default 9 PM): X done, Y fired, Z snoozed today.
+- Settings -> Notifications -> "Daily reminder recap" fires one summary push at your chosen hour (default 9 PM): X done, Y fired, Z snoozed today.
 
 Sound on/off per reminder
 - Speaker chip in the reminder sheet flips between sound-on (default) and silent for that specific reminder.
@@ -55,7 +55,7 @@ Title autocomplete
 
 Other fixes and polish
 - Household name now syncs across devices. Setting it in Settings used to only save locally; now writes to the shared Household record.
-- Mute a family member's pushes: bell icon in Settings → FAMILY, durations of 1 hour / 4 hours / until tomorrow. Per-device. Honors status pings + grocery activity.
+- Mute a family member's pushes: bell icon in Settings -> FAMILY, durations of 1 hour / 4 hours / until tomorrow. Per-device. Honors status pings + grocery activity.
 - Location radius now displayed in feet and miles (US units).
 
 What to test
