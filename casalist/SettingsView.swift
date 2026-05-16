@@ -1069,6 +1069,13 @@ struct SettingsView: View {
                 divider
                 actionButton("View sync log (last 30)") { loadRecentSyncLog() }
                 divider
+                actionButton("Clear stuck share invitation") {
+                    let kv = NSUbiquitousKeyValueStore.default
+                    kv.removeObject(forKey: CasalistAppDelegate.lastShareURLKey)
+                    kv.synchronize()
+                    wipeMessage = "Cleared saved share URL. Restart the app — the 'Item Unavailable' loop should be gone."
+                }
+                divider
                 Button(role: .destructive) { confirmWipe = true } label: {
                     HStack {
                         Image(systemName: "trash").font(.system(size: 14, weight: .bold))

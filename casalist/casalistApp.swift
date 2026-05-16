@@ -80,11 +80,22 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         }
     }
 
+    /// Session-scoped guard so auto-rejoin only runs once per app launch.
+    /// Without this, scenePhase = .active firings can re-trigger it after
+    /// a failed attempt, looping the user into Apple's "Item Unavailable"
+    /// alert on every launch / foreground.
+    private static var didAttemptAutoRejoinThisSession = false
+
     /// Called on fresh-install launch when the local store has no household
     /// records. Looks up the previously-saved share URL from iCloud KV and
     /// silently re-accepts the share, restoring access to the family.
     /// No-op if no URL is saved or if a household already exists locally.
     static func attemptAutoRejoinSavedShare() {
+        guard !didAttemptAutoRejoinThisSession else {
+            appendShareLog("attemptAutoRejoinSavedShare: already tried this session, skipping")
+            return
+        }
+        didAttemptAutoRejoinThisSession = true
         let stack = CasaCoreDataStack.shared
 
         let req = Household.fetchRequest()
