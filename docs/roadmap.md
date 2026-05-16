@@ -36,6 +36,15 @@ Detailed in [`docs/v2-backlog.md`](v2-backlog.md):
 - **App-icon badge count** — Pending-reminder count on the home-screen icon.
 - **Photo sync verification** — Re-test cross-account FamilyMember.photoBlob sync now that schema is in Prod.
 
+### Tab refinement pass
+
+Designed-up overhaul of the four primary tabs in some v2 build. Each gets the same icon-strip / inline-panel treatment we already gave the reminder authoring sheet in 1.7, plus the Casa Glass design language applied consistently.
+
+- **Home tab** — dashboard layout, tile grid, greeting card, leaderboard mini
+- **My To-Do** — task list ergonomics, sectioning, swipe actions, filter chips
+- **Grocery** — list grouping, trip headers, inline-add UX, completed/active split
+- **Schedule** — see 1.9 7-day grid as the calendar surface; v2 refines the event card visuals + section layout to match Casa Glass
+
 ### v2 candidates from original sketch notes
 
 - **AI chat** — Natural-language task creation ("remind me to take the trash out Tuesday at 8") and family Q&A ("when's soccer practice next?"). Probably its own version line within v2, or a feature flag inside 2.0.
