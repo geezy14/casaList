@@ -38,6 +38,10 @@
 	<string>Share your location with your household so family members can see where you are.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Keep your location updated in your household map even when Casalist is in the background.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Mirror Casalist events into your chosen Apple calendar and show that calendar's events in Casalist's Schedule.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Read events from your linked Apple calendar to show them in Casalist's Schedule.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

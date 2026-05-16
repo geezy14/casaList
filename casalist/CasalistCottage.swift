@@ -9,6 +9,7 @@
 import SwiftUI
 import CoreData
 import UIKit
+import EventKit
 
 public enum CasalistCottage {
 
@@ -3037,6 +3038,7 @@ extension CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var showAdd: Bool = false
         @State private var editingEvent: FamilyEvent? = nil
+        @State private var linkedEvents: [EKEvent] = []
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @AppStorage("userName") private var userName: String = ""
@@ -3094,6 +3096,21 @@ extension CasalistCottage {
             .sheet(isPresented: $showAdd) { AddEventView() }
             .sheet(item: $editingEvent) { event in AddEventView(editing: event) }
             .swipeToDismiss()
+            .onAppear { refreshLinkedEvents() }
+            .onChange(of: allEvents.count) { _, _ in refreshLinkedEvents() }
+        }
+
+        /// Pull EKEvents from the user's linked Apple Calendar for the
+        /// next 30 days. Filtered to drop our own mirror events so we
+        /// don't show them twice. Empty when no calendar is linked.
+        private func refreshLinkedEvents() {
+            let svc = CalendarLinkService.shared
+            let start = Calendar.current.startOfDay(for: Date())
+            let end = Calendar.current.date(byAdding: .day, value: 30, to: start) ?? start
+            let fetched = svc.fetchEvents(from: start, to: end)
+            linkedEvents = fetched.filter { ek in
+                !(ek.notes ?? "").hasPrefix("Casalist:")
+            }
         }
 
         private var topBar: some View {
@@ -3128,7 +3145,70 @@ extension CasalistCottage {
                     section("UPCOMING", events: laterEvents, color: P.sky)
                     section("PAST", events: past.prefix(10).map { $0 }, color: P.textMuted, isPast: true)
                 }
+                if !linkedEvents.isEmpty {
+                    linkedSection
+                }
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var linkedSection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("FROM YOUR APPLE CALENDAR 🍎")
+                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                        .foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(linkedEvents.count)")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                VStack(spacing: 0) {
+                    ForEach(linkedEvents, id: \.eventIdentifier) { ek in
+                        linkedEventRow(ek)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            }
+        }
+
+        private func linkedEventRow(_ ek: EKEvent) -> some View {
+            HStack(spacing: 12) {
+                VStack(spacing: 2) {
+                    Text(dayLabel(ek.startDate))
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(P.textDim).tracking(0.5)
+                    Text(monthLabel(ek.startDate))
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundStyle(Color(cgColor: ek.calendar.cgColor))
+                }
+                .frame(width: 44).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(cgColor: ek.calendar.cgColor).opacity(0.18)))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(ek.title ?? "Untitled")
+                        .font(.system(size: 15, weight: .heavy))
+                    Text(linkedSubtitle(ek))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(P.textDim)
+                }
+                Spacer()
+                Image(systemName: "calendar")
+                    .font(.system(size: 11))
+                    .foregroundStyle(P.textMuted)
+            }
+            .padding(.vertical, 10)
+        }
+
+        private func linkedSubtitle(_ ek: EKEvent) -> String {
+            let f = DateFormatter()
+            if ek.isAllDay {
+                f.dateFormat = "EEE MMM d 'all day'"
+            } else {
+                f.dateFormat = "EEE MMM d 'at' h:mm a"
+            }
+            return f.string(from: ek.startDate)
         }
 
         private var hero: some View {

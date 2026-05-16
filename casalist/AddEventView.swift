@@ -215,6 +215,11 @@ struct AddEventView: View {
             .first { $0.title == trimmedTitle && $0.startDate == startDate }
         if let target {
             Task { await NotificationsManager.scheduleEvent(for: target) }
+            // Mirror into the user's linked Apple Calendar (no-op when
+            // nothing is linked or access wasn't granted). Per-device:
+            // each device decides whether to mirror based on its own
+            // CalendarLinkService.linkedCalendarID.
+            CalendarLinkService.shared.mirror(target)
         }
         dismiss()
     }
@@ -222,6 +227,7 @@ struct AddEventView: View {
     private func delete() {
         if let editing {
             Task { await NotificationsManager.cancelEvent(uid: editing.uid.uuidString) }
+            CalendarLinkService.shared.unmirror(uid: editing.uid)
             editing.softDelete()
             try? moc.save()
             dismiss()
