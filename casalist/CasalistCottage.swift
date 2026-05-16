@@ -2072,6 +2072,7 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
@@ -2196,7 +2197,13 @@ extension CasalistCottage {
                 points: 0,
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
-            if let h = allTasks.first?.household {
+            // BUG FIX: previously used allTasks.first?.household which
+            // returned nil for a household with zero existing tasks,
+            // leaving the new grocery item orphaned (no household =
+            // doesn't sync to the share). Use households.preferredTarget
+            // which falls through to the shared store (joiner) or the
+            // private/share-root household (owner).
+            if let h = households.preferredTarget {
                 modelContext.assign(it, toStoreOf: h)
                 it.household = h
             }

@@ -20,6 +20,14 @@ struct AddReminderView: View {
     @State private var hasStopTime: Bool
     @State private var stopDate: Date
     @State private var confirmDelete: Bool = false
+    @State private var showCustomRepeat: Bool = false
+
+    private var customRepeatRowLabel: String {
+        if let rule = RepeatRule.decode(repeatKind) {
+            return "Custom: \(rule.label)"
+        }
+        return "Custom…"
+    }
 
     init(editing: TaskItem? = nil) {
         self.editing = editing
@@ -93,6 +101,15 @@ struct AddReminderView: View {
                         ForEach(repeatOptions, id: \.kind) { o in
                             Text(o.label).tag(o.kind)
                         }
+                        if let rule = RepeatRule.decode(repeatKind) {
+                            Text(rule.label).tag(repeatKind)
+                        }
+                    }
+                    Button {
+                        showCustomRepeat = true
+                    } label: {
+                        Label(customRepeatRowLabel, systemImage: "slider.horizontal.3")
+                            .foregroundStyle(.primary)
                     }
                     if repeatKind.isEmpty {
                         Toggle("Schedule a time", isOn: $hasFireDate)
@@ -135,6 +152,9 @@ struct AddReminderView: View {
             }
             .navigationTitle(editing == nil ? "New reminder" : "Edit reminder")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showCustomRepeat) {
+                CustomRepeatPicker(encoded: $repeatKind)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

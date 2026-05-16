@@ -125,6 +125,52 @@ enum NotificationsManager {
 
     private static func computeTriggers(kind: String, dueDate: Date?, now: Date, endMinutes: Int64 = 0) -> [(String, UNNotificationTrigger)] {
         let cal = Calendar.current
+        // Custom rule path. Hour/minute intervals → time-interval trigger.
+        // Day/Week/Month → one calendar trigger. "Every other Friday"
+        // schedules the next instance as a one-shot; foreground sync
+        // reschedules after fire.
+        if let rule = RepeatRule.decode(kind) {
+            switch rule.unit {
+            case .minute:
+                let s = max(60, TimeInterval(rule.interval) * 60)
+                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: s, repeats: true))]
+            case .hour:
+                let s = max(3600, TimeInterval(rule.interval) * 3600)
+                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: s, repeats: true))]
+            case .day:
+                guard let due = dueDate else { return [] }
+                if rule.interval == 1 {
+                    let c = cal.dateComponents([.hour, .minute], from: due)
+                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+                }
+                let next = cal.date(byAdding: .day, value: rule.interval, to: max(due, now)) ?? due
+                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
+            case .week:
+                guard let due = dueDate else { return [] }
+                if rule.interval == 1, let wd = rule.weekday {
+                    var c = cal.dateComponents([.hour, .minute], from: due)
+                    c.weekday = wd
+                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+                }
+                if rule.interval == 1 {
+                    let c = cal.dateComponents([.weekday, .hour, .minute], from: due)
+                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+                }
+                let next = cal.date(byAdding: .weekOfYear, value: rule.interval, to: max(due, now)) ?? due
+                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
+            case .month:
+                guard let due = dueDate else { return [] }
+                if rule.interval == 1 {
+                    let c = cal.dateComponents([.day, .hour, .minute], from: due)
+                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+                }
+                let next = cal.date(byAdding: .month, value: rule.interval, to: max(due, now)) ?? due
+                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
+            }
+        }
         switch kind {
         case "hourly", "every2h", "every4h", "every8h", "every12h":
             let step: Int = {
@@ -378,8 +424,12 @@ enum NotificationsManager {
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
 
+        // Empty attendees → household-wide broadcast. Different prefix +
+        // body so users can distinguish "trash night" reminders from
+        // personal events with specific attendees.
+        let isBroadcast = event.attendees.trimmingCharacters(in: .whitespaces).isEmpty
         let content = UNMutableNotificationContent()
-        content.title = "📅 \(event.title)"
+        content.title = isBroadcast ? "📢 \(event.title)" : "📅 \(event.title)"
         var bodyParts: [String] = []
         if event.isAllDay {
             bodyParts.append("All day")
@@ -390,26 +440,87 @@ enum NotificationsManager {
             bodyParts.append(f.string(from: event.startDate))
         }
         if !event.location.isEmpty { bodyParts.append(event.location) }
-        if !event.attendees.isEmpty { bodyParts.append("with \(event.attendees)") }
+        if isBroadcast {
+            bodyParts.append("Family-wide reminder")
+        } else {
+            bodyParts.append("with \(event.attendees)")
+        }
         content.body = bodyParts.joined(separator: " · ")
         content.sound = .default
 
         let cal = Calendar.current
-        var dc: DateComponents
-        let repeats = !event.repeatKind.isEmpty
-        switch event.repeatKind {
-        case "daily":
-            dc = cal.dateComponents([.hour, .minute], from: event.startDate)
-        case "weekly":
-            dc = cal.dateComponents([.weekday, .hour, .minute], from: event.startDate)
-        case "monthly":
-            dc = cal.dateComponents([.day, .hour, .minute], from: event.startDate)
-        case "yearly":
-            dc = cal.dateComponents([.month, .day, .hour, .minute], from: event.startDate)
-        default:
-            dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: event.startDate)
+        let trigger: UNNotificationTrigger
+
+        if let rule = RepeatRule.decode(event.repeatKind) {
+            // Custom rule. Hours/minutes use UNTimeIntervalNotificationTrigger
+            // (calendar trigger has no "every N hours" form). Days/Weeks/
+            // Months use a calendar trigger with the right component mask.
+            switch rule.unit {
+            case .minute:
+                let seconds = max(60, TimeInterval(rule.interval) * 60)
+                trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: true)
+            case .hour:
+                let seconds = max(3600, TimeInterval(rule.interval) * 3600)
+                trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: true)
+            case .day:
+                // "Every N days" — repeating exact time-of-day triggers can
+                // only do "every day," not every N. Fall back: schedule one
+                // future date, non-repeating. The foreground sync will
+                // reschedule the next occurrence after it fires.
+                if rule.interval == 1 {
+                    let dc = cal.dateComponents([.hour, .minute], from: event.startDate)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                } else {
+                    let next = cal.date(byAdding: .day, value: rule.interval, to: max(event.startDate, Date())) ?? event.startDate
+                    let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+                }
+            case .week:
+                // "Every Friday" → weekly weekday trigger. "Every other
+                // Friday" → weekly trigger that fires every Friday, but we
+                // skip alternates at delivery time? Hard. Cheap fix: every
+                // 2nd week, fire as one-shot N days out.
+                if rule.interval == 1, let wd = rule.weekday {
+                    var dc = cal.dateComponents([.hour, .minute], from: event.startDate)
+                    dc.weekday = wd
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                } else if rule.interval == 1 {
+                    let dc = cal.dateComponents([.weekday, .hour, .minute], from: event.startDate)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                } else {
+                    let weeks = rule.interval
+                    let next = cal.date(byAdding: .weekOfYear, value: weeks, to: max(event.startDate, Date())) ?? event.startDate
+                    let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+                }
+            case .month:
+                if rule.interval == 1 {
+                    let dc = cal.dateComponents([.day, .hour, .minute], from: event.startDate)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                } else {
+                    let next = cal.date(byAdding: .month, value: rule.interval, to: max(event.startDate, Date())) ?? event.startDate
+                    let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+                }
+            }
+        } else {
+            // Legacy kind strings.
+            var dc: DateComponents
+            let repeats = !event.repeatKind.isEmpty
+            switch event.repeatKind {
+            case "daily":
+                dc = cal.dateComponents([.hour, .minute], from: event.startDate)
+            case "weekly":
+                dc = cal.dateComponents([.weekday, .hour, .minute], from: event.startDate)
+            case "monthly":
+                dc = cal.dateComponents([.day, .hour, .minute], from: event.startDate)
+            case "yearly":
+                dc = cal.dateComponents([.month, .day, .hour, .minute], from: event.startDate)
+            default:
+                dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: event.startDate)
+            }
+            trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: repeats)
         }
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: repeats)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         try? await center.add(request)
     }
@@ -509,6 +620,105 @@ enum NotificationsManager {
         }
 
         defaults.set(Array(notified), forKey: notifiedAssignmentsKey)
+    }
+
+    // MARK: – Status ping push (manual family broadcast)
+
+    private static let notifiedPingsKey = "notifiedStatusPingUIDs"
+
+    /// Fire a push for every new status ping that landed on this device
+    /// from another device. Pings are TaskItem records with
+    /// `category == StatusPing.category`. Quiet hours suppress.
+    @MainActor
+    static func detectAndNotifyStatusPings(in context: NSManagedObjectContext, userName: String) async {
+        if isWithinQuietHours() { return }
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
+        let req: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "category == %@ AND deletedAt == nil AND createdAt > %@",
+            StatusPing.category, cutoff as NSDate
+        )
+        guard let pings = try? context.fetch(req), !pings.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        var notified = Set(defaults.stringArray(forKey: notifiedPingsKey) ?? [])
+
+        for ping in pings {
+            let key = ping.uid
+            if notified.contains(key) { continue }
+            if ping.createdBy.lowercased() == trimmed.lowercased() {
+                notified.insert(key)
+                continue
+            }
+            let sender = ping.createdBy.isEmpty ? "Someone" : ping.createdBy
+            let content = UNMutableNotificationContent()
+            content.title = "📣 \(sender)"
+            content.body = ping.task
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(identifier: "ping-\(key)", content: content, trigger: trigger)
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedPingsKey)
+    }
+
+    // MARK: – Grocery list activity push
+
+    private static let notifiedGroceryKey = "notifiedGroceryUIDs"
+
+    /// Fire a push when a new grocery item lands on this device from
+    /// another device. Light social signal so the household knows the
+    /// list has changed. Honors `groceryActivityPush` AppStorage and
+    /// quiet hours. Skips items this device created itself (we already
+    /// know what we typed). Skips trip headers (parent grocery tasks
+    /// with a dueDate — they're trip titles, not shopping items).
+    @MainActor
+    static func detectAndNotifyGroceryActivity(in context: NSManagedObjectContext, userName: String) async {
+        if isWithinQuietHours() { return }
+        let defaults = UserDefaults.standard
+        let enabled = defaults.object(forKey: "groceryActivityPush") as? Bool ?? true
+        guard enabled else { return }
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let req: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "category == %@ AND deletedAt == nil AND isCompleted == NO AND createdAt > %@ AND dueDate == nil",
+            "groceries", cutoff as NSDate
+        )
+        guard let items = try? context.fetch(req), !items.isEmpty else { return }
+
+        var notified = Set(defaults.stringArray(forKey: notifiedGroceryKey) ?? [])
+
+        for item in items {
+            let key = item.uid
+            if notified.contains(key) { continue }
+            // Skip items this device's user created — they already know.
+            if item.createdBy.lowercased() == trimmed.lowercased() {
+                notified.insert(key)
+                continue
+            }
+            let actor = item.createdBy.isEmpty ? "Someone" : item.createdBy
+            let content = UNMutableNotificationContent()
+            content.title = "🛒 \(actor) added to the grocery list"
+            content.body = item.task
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(identifier: "grocery-\(key)", content: content, trigger: trigger)
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedGroceryKey)
     }
 
     // MARK: – Reward-request push notifications

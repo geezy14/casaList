@@ -26,6 +26,8 @@ struct TaskDetailView: View {
     @State private var editDueDate: Date = Date()
     @State private var editHasDueDate: Bool = true
     @State private var confirmDelete: Bool = false
+    @State private var celebrate: Bool = false
+    @State private var celebrateLabel: String = ""
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
 
@@ -78,6 +80,7 @@ struct TaskDetailView: View {
                     }
                 }
             }
+            .celebration(visible: $celebrate, label: celebrateLabel)
             .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     task.softDelete()
@@ -97,16 +100,44 @@ struct TaskDetailView: View {
         VStack(spacing: 8) {
             Text(categoryEmoji(task.category)).font(.system(size: 40))
             Text(task.task).font(.system(size: 22, weight: .heavy)).multilineTextAlignment(.center)
-            if task.points > 0 {
-                Text("⭐ \(task.points) pts")
-                    .font(.system(size: 12, weight: .heavy))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(P.butter))
-                    .foregroundStyle(.white)
+            HStack(spacing: 8) {
+                if task.points > 0 {
+                    Text("⭐ \(task.points) pts")
+                        .font(.system(size: 12, weight: .heavy))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(P.butter))
+                        .foregroundStyle(.white)
+                }
+                if canClaim {
+                    Button(action: claim) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "hand.raised.fill").font(.system(size: 10, weight: .heavy))
+                            Text("Claim").font(.system(size: 12, weight: .heavy))
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(P.mint))
+                        .foregroundStyle(.white)
+                    }.buttonStyle(.plain)
+                }
             }
         }
         .frame(maxWidth: .infinity).padding(24)
         .background(RoundedRectangle(cornerRadius: 24).fill(P.surfaceAlt))
+    }
+
+    /// True when the task is unassigned (or assigned to nobody) AND the
+    /// current user has a FamilyMember record to claim it for.
+    private var canClaim: Bool {
+        guard !task.isCompleted else { return false }
+        let isUnassigned = (task.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        guard isUnassigned else { return false }
+        return FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid) != nil
+    }
+
+    private func claim() {
+        guard let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid) else { return }
+        task.assignee = me.name
+        try? moc.save()
     }
 
     private var infoCard: some View {
@@ -160,9 +191,20 @@ struct TaskDetailView: View {
         VStack(spacing: 10) {
             if isMine || iAmAdmin {
                 Button {
+                    let willComplete = !task.isCompleted
+                    let pts = Int(task.points)
                     FamilyPoints.toggle(task, in: members)
                     try? moc.save()
-                    dismiss()
+                    if willComplete {
+                        celebrateLabel = pts > 0 ? "+\(pts) pts!" : "Done!"
+                        celebrate = true
+                        // Let the burst play before dismissing the sheet.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                            dismiss()
+                        }
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: task.isCompleted ? "arrow.uturn.backward" : "checkmark")

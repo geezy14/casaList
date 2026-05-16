@@ -24,6 +24,14 @@ struct AddEventView: View {
     @State private var repeatKind: String
     @State private var confirmDelete: Bool = false
     @State private var showLocationPicker: Bool = false
+    @State private var showCustomRepeat: Bool = false
+
+    private var customRepeatRowLabel: String {
+        if let rule = RepeatRule.decode(repeatKind) {
+            return "Custom: \(rule.label)"
+        }
+        return "Custom…"
+    }
 
     init(editing: FamilyEvent? = nil) {
         self.editing = editing
@@ -68,6 +76,15 @@ struct AddEventView: View {
                         ForEach(repeatOptions, id: \.kind) { o in
                             Text(o.label).tag(o.kind)
                         }
+                        if let rule = RepeatRule.decode(repeatKind) {
+                            Text(rule.label).tag(repeatKind)
+                        }
+                    }
+                    Button {
+                        showCustomRepeat = true
+                    } label: {
+                        Label(customRepeatRowLabel, systemImage: "slider.horizontal.3")
+                            .foregroundStyle(.primary)
                     }
                 }
                 Section("Where") {
@@ -106,12 +123,19 @@ struct AddEventView: View {
                     if members.isEmpty {
                         TextField("Whose event? (optional)", text: $attendees)
                     } else {
-                        Picker("Attendees", selection: $attendees) {
-                            Text("Everyone").tag("")
+                        Picker(selection: $attendees) {
+                            Label("Everyone", systemImage: "house.fill").tag("")
                             ForEach(members, id: \.uid) { m in
-                                Text(m.name).tag(m.name)
+                                Label(m.name, systemImage: "person.fill").tag(m.name)
                             }
+                        } label: {
+                            Label("Attendees", systemImage: attendees.isEmpty ? "house.fill" : "person.fill")
                         }
+                    }
+                    if attendees.isEmpty {
+                        Label("Notifies the whole household", systemImage: "megaphone.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Section("Notes") {
@@ -145,6 +169,9 @@ struct AddEventView: View {
                     latitude = picked.latitude
                     longitude = picked.longitude
                 }
+            }
+            .sheet(isPresented: $showCustomRepeat) {
+                CustomRepeatPicker(encoded: $repeatKind)
             }
         }
     }

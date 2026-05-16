@@ -10,26 +10,60 @@ struct CelebrationOverlay: View {
     let emoji: String
     @Binding var visible: Bool
 
+    /// Drives the confetti spread independent of `visible`. We need the
+    /// overlay to mount FIRST (visible=true) then animate the confetti
+    /// outward — if we tie both to the same flag the view renders in its
+    /// final state and you never see the burst.
+    @State private var flying: Bool = false
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.15).ignoresSafeArea()
-            VStack(spacing: 8) {
-                Text(emoji).font(.system(size: 96))
-                if !label.isEmpty {
-                    Text(label).font(.system(size: 22, weight: .heavy)).foregroundStyle(.white)
-                }
+            // No dim. The pill is gone — only the stars matter. Keeping
+            // the overlay transparent so it doesn't darken the underlying
+            // task detail card the user just completed.
+            Color.clear.ignoresSafeArea()
+
+            // Spinning, expanding stars. They start at center, spin one
+            // full rotation while flying outward, and fade as they go.
+            // 20 stars at staggered angles so they form a dense burst.
+            ForEach(0..<20, id: \.self) { i in
+                star(index: i)
             }
-            .padding(.horizontal, 36).padding(.vertical, 28)
-            .background(
-                RoundedRectangle(cornerRadius: 28)
-                    .fill(LinearGradient(colors: [Color(rgb: 0xFF9E7C), Color(rgb: 0xE8B040)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .shadow(color: .black.opacity(0.3), radius: 18, y: 6)
-            )
-            .scaleEffect(visible ? 1.0 : 0.4)
-            .opacity(visible ? 1.0 : 0.0)
-            .animation(.spring(response: 0.4, dampingFraction: 0.55), value: visible)
         }
         .allowsHitTesting(false)
+        .onAppear {
+            // The overlay mounts when visible flips true, so .onAppear is
+            // the right hook — .onChange(of: visible) never fires because
+            // the value doesn't change DURING this view's lifetime
+            // (parent wraps us in `if visible { ... }`). Kick the
+            // animation one frame after mount so SwiftUI sees the
+            // initial state and animates from there.
+            flying = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                withAnimation(.easeOut(duration: 1.0)) {
+                    flying = true
+                }
+            }
+        }
+    }
+
+    private func star(index: Int) -> some View {
+        // Even angular distribution + index-based distance so each star
+        // takes a different path. Deterministic so SwiftUI doesn't reroll
+        // positions on every render.
+        let angle = Double(index) * (2 * .pi / 20)
+        let distance: Double = 180 + Double((index * 23) % 100)
+        let dx = cos(angle) * distance
+        let dy = sin(angle) * distance - 30
+        // Each star spins a different amount based on its index so the
+        // burst doesn't look mechanically uniform.
+        let spin = 360.0 + Double(index % 3) * 180.0
+        return Text("⭐️")
+            .font(.system(size: 36))
+            .offset(x: flying ? dx : 0, y: flying ? dy : 0)
+            .opacity(flying ? 0.0 : 1.0)
+            .scaleEffect(flying ? 0.4 : 1.2)
+            .rotationEffect(.degrees(flying ? spin : 0))
     }
 }
 

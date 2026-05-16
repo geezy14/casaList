@@ -26,6 +26,7 @@ public struct FamilyListView: View {
     @State private var showAdd: Bool = false
     @State private var showSettings: Bool = false
     @State private var showInbox: Bool = false
+    @State private var showStatusPing: Bool = false
     @State private var celebrate: Bool = false
     @State private var celebrateLabel: String = ""
 
@@ -58,6 +59,7 @@ public struct FamilyListView: View {
         .sheet(isPresented: $showAdd) { AddFamilyListItemView() }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showInbox) { InboxView() }
+        .sheet(isPresented: $showStatusPing) { StatusPingSheet() }
         .celebration(visible: $celebrate, label: celebrateLabel)
     }
 
@@ -76,6 +78,10 @@ public struct FamilyListView: View {
                     .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
             }
             Spacer()
+            Button { showStatusPing = true } label: {
+                Image(systemName: "megaphone.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                    .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+            }
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                     .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))

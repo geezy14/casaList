@@ -583,6 +583,7 @@ struct CasalistApp: App {
                         await NotificationsManager.syncFromContext(stack.context)
                         await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
                         await NotificationsManager.scheduleDailyBriefing(in: stack.context)
+                        await NotificationsManager.syncEventsFromContext(stack.context)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
@@ -597,6 +598,9 @@ struct CasalistApp: App {
                             await NotificationsManager.detectAndNotifyRedemptions(in: stack.context)
                             await NotificationsManager.detectAndNotifyAssignments(in: stack.context, userName: userName)
                             await NotificationsManager.detectAndNotifyPendingRequests(in: stack.context, userName: userName)
+                            await NotificationsManager.detectAndNotifyGroceryActivity(in: stack.context, userName: userName)
+                            await NotificationsManager.detectAndNotifyStatusPings(in: stack.context, userName: userName)
+                            await NotificationsManager.syncEventsFromContext(stack.context)
                         }
                     }
                 }

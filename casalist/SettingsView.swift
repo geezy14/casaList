@@ -204,6 +204,7 @@ struct SettingsView: View {
             householdSection
             familySection
             appearanceSection
+            NotificationsSettingsSection()
             notificationsSection
             backupSection
             dataSection
@@ -1266,12 +1267,8 @@ struct SettingsView: View {
     // MARK: Notifications
 
     private var notificationsSection: some View {
-        section(title: "NOTIFICATIONS") {
+        section(title: "NOTIFICATION DIAGNOSTICS") {
             VStack(spacing: 0) {
-                Toggle("Due-date reminders", isOn: $notificationsEnabled)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .tint(P.peach)
-                divider
                 infoRow("System permission", value: notifStatus)
                 divider
                 infoRow("Pending notifications", value: "\(pendingCount)")
