@@ -13,6 +13,18 @@ struct SettingsView: View {
     @AppStorage("householdName") private var householdName: String = "My Household"
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
     @AppStorage("meUid") private var meUid: String = ""
+    /// Daily morning briefing — one push at the configured hour with a
+    /// roll-up of today's chores, events, and pending requests.
+    @AppStorage("dailyBriefingEnabled") private var dailyBriefingEnabled: Bool = true
+    /// Hour-of-day for the daily briefing (0-23). Defaults to 7am.
+    @AppStorage("dailyBriefingHour") private var dailyBriefingHour: Int = 7
+    /// Quiet hours — non-critical pushes are silenced during this window.
+    @AppStorage("quietHoursEnabled") private var quietHoursEnabled: Bool = false
+    @AppStorage("quietHoursStart") private var quietHoursStart: Int = 21  // 9pm
+    @AppStorage("quietHoursEnd") private var quietHoursEnd: Int = 7        // 7am
+    /// Push when a family member adds/checks an item on the shared
+    /// grocery list. Light social signal, can be muted independently.
+    @AppStorage("groceryActivityPush") private var groceryActivityPush: Bool = true
 
     @State private var notifStatus: String = "Checking…"
     @State private var pendingCount: Int = 0
@@ -1214,6 +1226,48 @@ struct SettingsView: View {
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .tint(P.peach)
                 divider
+                Toggle("Daily morning briefing", isOn: $dailyBriefingEnabled)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .tint(P.peach)
+                if dailyBriefingEnabled {
+                    divider
+                    HStack {
+                        Text("Time").font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        Picker("", selection: $dailyBriefingHour) {
+                            ForEach(0..<24, id: \.self) { h in
+                                Text(hourLabel(h)).tag(h)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(P.peach)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                }
+                divider
+                Toggle("Grocery list activity", isOn: $groceryActivityPush)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .tint(P.peach)
+                divider
+                Toggle("Quiet hours", isOn: $quietHoursEnabled)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .tint(P.peach)
+                if quietHoursEnabled {
+                    divider
+                    HStack {
+                        Text("From").font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        Picker("", selection: $quietHoursStart) {
+                            ForEach(0..<24, id: \.self) { h in Text(hourLabel(h)).tag(h) }
+                        }.pickerStyle(.menu).tint(P.peach)
+                        Text("to").font(.system(size: 14, weight: .semibold)).padding(.leading, 8)
+                        Picker("", selection: $quietHoursEnd) {
+                            ForEach(0..<24, id: \.self) { h in Text(hourLabel(h)).tag(h) }
+                        }.pickerStyle(.menu).tint(P.peach)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                }
+                divider
                 infoRow("System permission", value: notifStatus)
                 divider
                 infoRow("Pending notifications", value: "\(pendingCount)")
@@ -1505,6 +1559,13 @@ struct SettingsView: View {
             pendingCount = pending.count
             pendingList = lines
         }
+    }
+
+    private func hourLabel(_ h: Int) -> String {
+        var c = DateComponents(); c.hour = h; c.minute = 0
+        let d = Calendar.current.date(from: c) ?? Date()
+        let f = DateFormatter(); f.dateFormat = "h a"
+        return f.string(from: d)
     }
 
     private func sendTestNotification(delay: TimeInterval = 5) async {

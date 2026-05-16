@@ -426,6 +426,7 @@ struct CasalistApp: App {
                         _ = await NotificationsManager.requestAuth()
                         await NotificationsManager.syncFromContext(stack.context)
                         await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
+                        await NotificationsManager.scheduleDailyBriefing(in: stack.context)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
@@ -479,6 +480,7 @@ struct CasalistApp: App {
                 Task {
                     await NotificationsManager.syncFromContext(stack.context)
                     await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
+                        await NotificationsManager.scheduleDailyBriefing(in: stack.context)
                 }
             }
             // Auto-snapshot to iCloud Drive if enabled and a day has passed.

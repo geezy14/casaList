@@ -277,6 +277,103 @@ enum NotificationsManager {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly-recap"])
     }
 
+    // MARK: – Daily morning briefing
+
+    /// Roll-up push fired once a day at the user's chosen hour. Aggregates
+    /// today's open chores, scheduled events, and pending reward requests
+    /// into a single notification so the household isn't drowned in
+    /// individual pings first thing in the morning.
+    static func scheduleDailyBriefing(in context: NSManagedObjectContext) async {
+        let briefingId = "daily-briefing"
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [briefingId])
+
+        let defaults = UserDefaults.standard
+        let enabled = defaults.object(forKey: "dailyBriefingEnabled") as? Bool ?? true
+        guard enabled else { return }
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Repeats daily at the configured hour. Body is computed at trigger
+        // time? No — Apple only delivers a static body for repeating
+        // calendar triggers. We rebuild + reschedule on every foreground
+        // (via the scenePhase active handler) so the body reflects today.
+        let hour = defaults.object(forKey: "dailyBriefingHour") as? Int ?? 7
+
+        // Count today's open tasks.
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: Date())
+        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) ?? Date()
+        let openReq: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        openReq.predicate = NSPredicate(
+            format: "isCompleted == NO AND deletedAt == nil AND ((dueDate == nil) OR (dueDate >= %@ AND dueDate < %@))",
+            startOfDay as NSDate, endOfDay as NSDate
+        )
+        let openToday = (try? context.count(for: openReq)) ?? 0
+
+        // Count today's events.
+        let eventReq: NSFetchRequest<FamilyEvent> = FamilyEvent.fetchRequest()
+        eventReq.predicate = NSPredicate(
+            format: "deletedAt == nil AND startDate >= %@ AND startDate < %@",
+            startOfDay as NSDate, endOfDay as NSDate
+        )
+        let eventsToday = (try? context.count(for: eventReq)) ?? 0
+
+        // Pending reward requests.
+        let pendingReq: NSFetchRequest<FamilyGoal> = FamilyGoal.fetchRequest()
+        pendingReq.predicate = NSPredicate(
+            format: "ownerName BEGINSWITH %@ AND isRedeemed == NO AND deletedAt == nil",
+            GoalApproval.pendingPrefix
+        )
+        let pending = (try? context.count(for: pendingReq)) ?? 0
+
+        var parts: [String] = []
+        if openToday > 0 { parts.append("\(openToday) chore\(openToday == 1 ? "" : "s")") }
+        if eventsToday > 0 { parts.append("\(eventsToday) event\(eventsToday == 1 ? "" : "s")") }
+        if pending > 0 { parts.append("\(pending) reward request\(pending == 1 ? "" : "s")") }
+
+        let body: String
+        if parts.isEmpty {
+            body = "Nothing on the family schedule today. Enjoy the breather."
+        } else {
+            body = "Today: \(parts.joined(separator: " · "))"
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Casalist morning briefing ☀️"
+        content.body = body
+        content.sound = .default
+
+        var dc = DateComponents()
+        dc.hour = hour
+        dc.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        let request = UNNotificationRequest(identifier: briefingId, content: content, trigger: trigger)
+        try? await center.add(request)
+    }
+
+    @MainActor
+    static func cancelDailyBriefing() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily-briefing"])
+    }
+
+    // MARK: – Quiet hours
+
+    /// Returns true if `date` falls inside the user's configured quiet
+    /// hours window. Used to suppress non-critical pushes (assignment,
+    /// grocery activity, etc.). Per-task due-date reminders bypass this.
+    static func isWithinQuietHours(_ date: Date = Date()) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "quietHoursEnabled") else { return false }
+        let start = defaults.object(forKey: "quietHoursStart") as? Int ?? 21
+        let end = defaults.object(forKey: "quietHoursEnd") as? Int ?? 7
+        let hour = Calendar.current.component(.hour, from: date)
+        if start == end { return false }
+        if start < end { return hour >= start && hour < end }
+        // Window crosses midnight (e.g. 21 → 7).
+        return hour >= start || hour < end
+    }
+
     // MARK: – Assignment push notifications
 
     private static let notifiedAssignmentsKey = "notifiedAssignmentUIDs"
@@ -288,6 +385,7 @@ enum NotificationsManager {
     /// tasks that came in from another device.
     @MainActor
     static func detectAndNotifyAssignments(in context: NSManagedObjectContext, userName: String) async {
+        if isWithinQuietHours() { return }
         let trimmed = userName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         let status = await currentStatus()
@@ -348,6 +446,7 @@ enum NotificationsManager {
     /// need to know about other people's requests.
     @MainActor
     static func detectAndNotifyPendingRequests(in context: NSManagedObjectContext, userName: String) async {
+        if isWithinQuietHours() { return }
         let trimmed = userName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         let status = await currentStatus()
@@ -409,6 +508,7 @@ enum NotificationsManager {
     /// here because local changes don't fire the remote-change notification.
     @MainActor
     static func detectAndNotifyRedemptions(in context: NSManagedObjectContext) async {
+        if isWithinQuietHours() { return }
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
 
