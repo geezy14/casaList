@@ -711,6 +711,8 @@ When Geezy says "testflight it" (or similar):
    ```
 7. (Optional) Set the "What to Test" notes on the build via the API. Write a small Python script using PyJWT to call the App Store Connect API and PATCH the build's `betaBuildLocalizations` with the contents of `testflight-notes-<build>.txt`. See casaBills2 history for a working `set_testflight_notes.py` template — the auth flow is identical, just swap the bundle ID filter to `com.gbrown10.casalist`.
 
+   **Keep `testflight-notes-*.txt` ASCII-only.** Apple's App Store Connect API rejects certain emoji glyphs in the `whatsNew` field with `409 ENTITY_ERROR.ATTRIBUTE.INVALID.INVALID_TEXT`. The filter is inconsistent — some emojis pass, others don't — so the safe move is no emojis at all. Use `-` bullets and plain headers. Burned on this for 1.6: ⭐ 🌅 🙋 🌙 🍎 📍 📣 📢 🛒 🏡 all rejected. (The 1.6 ipa upload itself was fine; only the notes PATCH 409'd.)
+
 ### ExportOptions.plist
 
 Should live at the project root. Required contents:

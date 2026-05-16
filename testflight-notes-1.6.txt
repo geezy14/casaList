@@ -1,0 +1,25 @@
+Casalist 1.6 — Family tab overhaul, live location, Apple Calendar link
+
+What's new
+- Live location sharing — turn it on in Settings → Privacy and family members can see each other on the new map (tap the pin icon on the Family tab). Continuous GPS while sharing is on, throttled writes so battery + sync stay light.
+- Apple Calendar link — pick a calendar in Settings → Schedule. Casalist events mirror into it automatically, and that calendar's other events show up in Casalist's Schedule view (read-only).
+- Status pings — new megaphone button on the Family tab. Quick-send presets ("On my way", "At the store") + custom messages. Family members get a push.
+- Announcements with expiry — make a "custom" status ping and pick how long it sticks. While active it shows as a big peach banner at the top of every household member's Family tab. The sender can edit or delete it.
+- Custom repeat picker — events and reminders now support "every 2 weeks on Friday", "every 3 hours", "every other Tuesday", etc. Tap Custom on the repeat picker to build any cadence.
+- Daily morning briefing — one push at your chosen hour summarizing today's chores + events + pending reward requests.
+- Quiet hours — set a window in Settings → Notifications and non-critical pushes will hold their tongue. Per-task due-date reminders and the daily briefing still come through.
+- Grocery activity push — when another device adds an item, you get a notification with who added what.
+- Claim chores — unclaimed family chores get a "Claim" pill in their detail sheet; one tap assigns it to you.
+- Celebration overlay — marking a chore done bursts a quick star animation.
+- Family tab overhaul — agenda tiles like the dashboard, inline quick-add, "Outings" (a parent task that nests sub-items), and tap-anywhere to edit.
+
+What to test
+- Two-account share still works end-to-end (existing households should keep functioning normally).
+- Live location: turn the toggle on, walk around with the app closed for a while, then open the map on another device — your pin should update.
+- Apple Calendar: create an event in Casalist, check it appears in iOS Calendar in the linked calendar. Add an event in iOS Calendar — confirm it appears in Casalist's "FROM YOUR APPLE CALENDAR" section.
+- Status pings + announcements: tap the megaphone, send a quick-pick + a custom message with an expiry, confirm everyone gets the push and the banner shows up.
+- Custom repeats: create a reminder with "every 2 days at 9am", let it fire, confirm the next fire reschedules correctly.
+
+Known gotchas
+- If you previously had the app installed and just upgraded, you may need to grant location permission again when you turn on Live location.
+- Apple Calendar mirroring is one-way (Casalist to Apple). Deleting an event from iOS Calendar does NOT delete it from Casalist — by design.
