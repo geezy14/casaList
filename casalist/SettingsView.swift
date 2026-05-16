@@ -597,6 +597,95 @@ struct SettingsView: View {
     /// non-owner with read-only permission to read-write so their writes
     /// actually flow back to the owner. Saves the modified share via
     /// CKModifyRecordsOperation on the private DB.
+    /// Writes a complete state snapshot to share-log.txt — every household
+    /// (with store + deletedAt + member count), every FamilyMember (store,
+    /// role, deletedAt, uid, household uid, meUid match), and the persisted
+    /// CKShare metadata. Use after each test step to read ground truth
+    /// rather than guessing from UI behavior.
+    private func dumpStateToShareLog() {
+        let stack = CasaCoreDataStack.shared
+        let meUid = UserDefaults.standard.string(forKey: "meUid") ?? ""
+        var out = "\n===== STATE DUMP @ \(Date()) =====\n"
+        out += "userName=\(userName)  meUid=\(meUid)\n"
+        out += "privateStore=\(stack.privateStore?.identifier ?? "nil")\n"
+        out += "sharedStore=\(stack.sharedStore?.identifier ?? "nil")\n\n"
+
+        // Households (all, including deleted)
+        let hReq: NSFetchRequest<Household> = Household.fetchRequest()
+        let allH = (try? moc.fetch(hReq)) ?? []
+        out += "HOUSEHOLDS (\(allH.count)):\n"
+        for h in allH {
+            let storeLabel: String
+            if h.objectID.persistentStore === stack.sharedStore { storeLabel = "SHARED" }
+            else if h.objectID.persistentStore === stack.privateStore { storeLabel = "PRIVATE" }
+            else { storeLabel = "OTHER" }
+            let liveMembers = ((h.members as? Set<FamilyMember>) ?? []).filter { $0.deletedAtValue == nil }.count
+            let allMembers = ((h.members as? Set<FamilyMember>) ?? []).count
+            let del = h.deletedAtValue == nil ? "live" : "DEL"
+            out += "  [\(storeLabel)] \(h.name) uid=\(h.uid.uuidString.prefix(8)) \(del) members=\(liveMembers)/\(allMembers)\n"
+        }
+
+        // FamilyMembers (all)
+        let mReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        let allM = (try? moc.fetch(mReq)) ?? []
+        out += "\nFAMILYMEMBERS (\(allM.count)):\n"
+        for m in allM {
+            let storeLabel: String
+            if m.objectID.persistentStore === stack.sharedStore { storeLabel = "SHARED" }
+            else if m.objectID.persistentStore === stack.privateStore { storeLabel = "PRIVATE" }
+            else { storeLabel = "OTHER" }
+            let del = m.deletedAtValue == nil ? "live" : "DEL"
+            let isMe = m.uid.uuidString == meUid ? " ← ME" : ""
+            let hUid = m.household?.uid.uuidString.prefix(8) ?? "nil"
+            out += "  [\(storeLabel)] \(m.name) role=\(m.roleLevel) \(del) uid=\(m.uid.uuidString.prefix(8)) h=\(hUid)\(isMe)\n"
+        }
+
+        // Persisted CKShares
+        out += "\nPERSISTED CKSHARES:\n"
+        let priv = allH.first(where: { $0.objectID.persistentStore === stack.privateStore })
+        if let priv {
+            do {
+                let map = try stack.container.fetchShares(matching: [priv.objectID])
+                if let s = map[priv.objectID] {
+                    out += "  privateHousehold \(priv.name) → CKShare\n"
+                    out += "    publicPermission=\(s.publicPermission.rawValue) participants=\(s.participants.count)\n"
+                    for p in s.participants {
+                        let role = p.role == .owner ? "owner" : "participant"
+                        let accept: String
+                        switch p.acceptanceStatus {
+                        case .accepted: accept = "accepted"
+                        case .pending: accept = "pending"
+                        case .removed: accept = "removed"
+                        case .unknown: accept = "unknown"
+                        @unknown default: accept = "?"
+                        }
+                        let perm: String
+                        switch p.permission {
+                        case .readWrite: perm = "rw"
+                        case .readOnly: perm = "ro"
+                        case .none: perm = "none"
+                        case .unknown: perm = "?"
+                        @unknown default: perm = "?"
+                        }
+                        let email = p.userIdentity.lookupInfo?.emailAddress ?? "?"
+                        out += "      • \(role) \(accept) \(perm) <\(email)>\n"
+                    }
+                } else {
+                    out += "  privateHousehold \(priv.name) → not shared\n"
+                }
+            } catch {
+                out += "  fetchShares failed: \(error.localizedDescription)\n"
+            }
+        }
+        if let sh = allH.first(where: { $0.objectID.persistentStore === stack.sharedStore }) {
+            out += "  sharedHousehold \(sh.name) is acceptor-side share\n"
+        }
+
+        out += "===== END STATE DUMP =====\n"
+        CasalistAppDelegate.appendShareLog(out)
+        wipeMessage = "State dumped to share-log.txt (View sync log button)."
+    }
+
     /// Force the current user's FamilyMember role to standard. Used when
     /// a joiner imported "owner" role from their pre-share local record.
     private func demoteMeToStandard() {
@@ -1232,6 +1321,10 @@ struct SettingsView: View {
                 divider
                 actionButton("Merge duplicate households") {
                     mergeDuplicateHouseholds()
+                }
+                divider
+                actionButton("Dump state to share log") {
+                    dumpStateToShareLog()
                 }
                 divider
                 actionButton("Move me into shared store") {

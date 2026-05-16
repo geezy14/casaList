@@ -248,6 +248,15 @@ final class CasaCoreDataStack {
             // under CloudKit's 1MB per-record limit.
             attr("photoBlob", .binaryDataAttributeType, externalStorage: false),
             attr("deletedAt", .dateAttributeType),
+            // CloudKit user record ID (string form, e.g. "_abc123…"). The
+            // STABLE identity key for a person — survives app reinstall,
+            // device change, and name changes. Set on creation via
+            // CKContainer.userRecordID for owner-side records, or via
+            // CKShare.Metadata.participantUserID for joiner-side records.
+            // Empty for legacy records created before this field existed;
+            // those records get backfilled on next foreground via
+            // FamilyIdentity.backfillSelf. Schema deploy required.
+            attr("cloudKitUserID", .stringAttributeType, def: ""),
         ]
 
         // ------- TaskItem attributes -------

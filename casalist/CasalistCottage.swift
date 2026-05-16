@@ -4043,13 +4043,24 @@ extension CasalistCottage {
                 me.household = household
                 meUid = me.uid.uuidString
                 try? moc.save()
+                // Stamp this device's iCloud user ID onto the new
+                // FamilyMember so we can dedupe by stable identity from
+                // here on out. Async — runs in the background and saves
+                // when the userRecordID lookup returns.
+                Task { @MainActor in
+                    await FamilyIdentity.stampOwnIdentity(on: me, in: moc)
+                }
             }
             showNamePrompt = false
-            // Schedule a follow-up dedupe pass — if CloudKit syncs an
-            // original same-name record after this commit, it'll merge
-            // back onto whichever is older.
+            // Follow-up dedupe pass — if CloudKit syncs an original
+            // same-userID record after this commit, the cloudKitUserID-keyed
+            // merge collapses them automatically.
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                FamilyDedupe.mergeDuplicateMeRecords(in: moc, userName: trimmed)
+                Task { @MainActor in
+                    await FamilyIdentity.backfillSelf(in: moc)
+                    FamilyDedupe.mergeByCloudKitUserID(in: moc)
+                    FamilyDedupe.mergeDuplicateMeRecords(in: moc, userName: trimmed)
+                }
             }
         }
     }

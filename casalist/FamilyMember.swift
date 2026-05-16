@@ -13,6 +13,9 @@ public final class FamilyMember: NSManagedObject {
     @NSManaged public var roleLevel: String
     @NSManaged public var photoBlob: Data?
     @NSManaged public var deletedAt: Date?
+    /// CloudKit user record ID (stable across reinstall/device-change). Empty
+    /// string when not yet stamped. See CasaCoreData.swift for full doc.
+    @NSManaged public var cloudKitUserID: String
     @NSManaged public var household: Household?
 
     /// True if the record is a live (not soft-deleted) member.

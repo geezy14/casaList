@@ -106,7 +106,7 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
                 // Give CloudKit a moment to sync down the shared household so we
                 // can attach a FamilyMember for the joiner.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    addJoinerAsFamilyMember()
+                    addJoinerAsFamilyMember(metadata: metadata)
                 }
             }
         }
@@ -184,15 +184,41 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         guard !trimmed.isEmpty else { return }
 
         let households = (try? context.fetch(Household.fetchRequest())) ?? []
+        let sharedCount = households.filter { $0.objectID.persistentStore === stack.sharedStore }.count
+        let privCount = households.filter { $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil }.count
         guard let shared = households.first(where: { $0.objectID.persistentStore === stack.sharedStore }) else {
-            return  // not joined to anything
+            appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: no shared household (priv=\(privCount), shared=\(sharedCount)) — bail")
+            return
+        }
+        appendShareLog("ensureMeInSharedHousehold[\(trimmed)]: ENTER priv=\(privCount) shared=\(sharedCount)")
+
+        // Retire any leftover pre-share private households on this device.
+        // Once joined to a real shared household, the local solo placeholder
+        // is obsolete and its members shouldn't keep appearing in the family
+        // list. Safe to re-run — soft-deleted records stay soft-deleted.
+        let privateHouseholds = households.filter {
+            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+        }
+        var retired = false
+        for ph in privateHouseholds {
+            let memberCount = ((ph.members as? Set<FamilyMember>) ?? []).filter { $0.deletedAtValue == nil }.count
+            for member in (ph.members as? Set<FamilyMember>) ?? [] where member.deletedAtValue == nil {
+                member.softDelete()
+            }
+            ph.softDelete()
+            retired = true
+            appendShareLog("ensureMeInSharedHousehold: retired private household '\(ph.name)' (had \(memberCount) live members)")
+        }
+        if retired {
+            try? context.save()
         }
 
         let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
         req.predicate = NSPredicate(format: "household == %@ AND name ==[c] %@", shared, trimmed)
         let matches = (try? context.fetch(req)) ?? []
         if matches.contains(where: { $0.deletedAtValue == nil }) {
-            return  // already present
+            appendShareLog("ensureMeInSharedHousehold: live \(trimmed) already in shared — no action")
+            return
         }
         if let dead = matches.min(by: { $0.createdAt < $1.createdAt }) {
             dead.restore()
@@ -215,9 +241,10 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         }
     }
 
-    static func addJoinerAsFamilyMember() {
+    static func addJoinerAsFamilyMember(metadata: CKShare.Metadata? = nil) {
         let stack = CasaCoreDataStack.shared
         let context = stack.context
+        appendShareLog("addJoinerAsFamilyMember: ENTER userName=\(UserDefaults.standard.string(forKey: "userName") ?? "")")
 
         // Find the shared household that just came in.
         let req = Household.fetchRequest()
@@ -228,7 +255,7 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         }) else {
             appendShareLog("addJoinerAsFamilyMember: no shared household yet, retrying in 2s")
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                addJoinerAsFamilyMember()
+                addJoinerAsFamilyMember(metadata: metadata)
             }
             return
         }
@@ -253,6 +280,11 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             }
             target.roleLevel = FamilyRole.standard.rawValue
             UserDefaults.standard.set(target.uid.uuidString, forKey: "meUid")
+            if let metadata, target.cloudKitUserID.isEmpty {
+                Task { @MainActor in
+                    FamilyIdentity.stampJoinerIdentity(on: target, from: metadata, in: context)
+                }
+            }
             try? context.save()
             return
         }
@@ -264,12 +296,39 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         context.assign(m, toStoreOf: shared)
         m.household = shared
 
+        // Stamp the joiner's iCloud user ID from the share metadata so the
+        // record has a stable identity from creation. If no metadata (e.g.
+        // called from a foreground self-heal path), the foreground task
+        // will backfill via FamilyIdentity.stampOwnIdentity.
+        if let metadata {
+            Task { @MainActor in
+                FamilyIdentity.stampJoinerIdentity(on: m, from: metadata, in: context)
+            }
+        } else {
+            Task { @MainActor in
+                await FamilyIdentity.stampOwnIdentity(on: m, in: context)
+            }
+        }
+
         // Demote any pre-existing same-name FamilyMember records on this
         // device so they can't reintroduce the owner role through dedupe.
         let priorReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
         priorReq.predicate = NSPredicate(format: "name ==[c] %@ AND deletedAt == nil AND SELF != %@", displayName, m)
         for prior in (try? context.fetch(priorReq)) ?? [] {
             prior.roleLevel = FamilyRole.standard.rawValue
+        }
+
+        // Retire the joiner's pre-share private household. It's a placeholder
+        // from before they joined a real household and would otherwise leave
+        // ghost FamilyMembers (their old "Dakoda owner" record) hanging around
+        // in the family list alongside the new shared-store one.
+        let privateHouseholds = households.filter { $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil }
+        for ph in privateHouseholds {
+            for member in (ph.members as? Set<FamilyMember>) ?? [] where member.deletedAtValue == nil {
+                member.softDelete()
+            }
+            ph.softDelete()
+            appendShareLog("addJoinerAsFamilyMember: retired private household \(ph.name)")
         }
 
         do {
@@ -371,6 +430,17 @@ struct CasalistApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    // The shared household may have just landed (or a synced
+                    // delete of "me" arrived). Re-run the self-heal + dedupe
+                    // so leftover private placeholder data gets retired and
+                    // any same-name dupes collapse.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        await FamilyIdentity.backfillSelf(in: stack.context)
+                        FamilyDedupe.mergeByCloudKitUserID(in: stack.context)
+                        FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
+                        CasalistAppDelegate.ensureMeInSharedHousehold(userName: userName)
+                    }
                     // A remote change just landed — check for redemptions
                     // and new assignments performed on another device.
                     if notificationsEnabled {
@@ -382,8 +452,8 @@ struct CasalistApp: App {
                     }
                 }
         }
-        .onChange(of: scenePhase) { _, new in
-            guard new == .active else { return }
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active else { return }
             // Foregrounding: invalidate the row cache so the next read pulls
             // any changes that synced while the app was backgrounded.
             // NSPersistentCloudKitContainer already fetches automatically on
@@ -396,8 +466,9 @@ struct CasalistApp: App {
                 // to land remote changes, run the dedupe pass. Catches the
                 // reinstall-race "two me" pattern.
                 try? await Task.sleep(for: .milliseconds(1500))
+                await FamilyIdentity.backfillSelf(in: stack.context)
+                FamilyDedupe.mergeByCloudKitUserID(in: stack.context)
                 FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
-                FamilyDedupe.mergeSameNameDupesInHousehold(in: stack.context)
                 // Joiner self-heal: if we're in a shared household but our
                 // own FamilyMember isn't there (got soft-deleted on the owner
                 // side, or never created in the shared store), restore /
@@ -446,6 +517,7 @@ enum HouseholdProvisioner {
         Trash.purgeExpired(in: context)
         let req = Household.fetchRequest()
         let households = (try? context.fetch(req)) ?? []
+        let stack = CasaCoreDataStack.shared
 
         if firstReconcileAt == nil { firstReconcileAt = Date() }
         let cloudKitWarm = (Date().timeIntervalSince(firstReconcileAt!) >= cloudKitGrace)
@@ -465,15 +537,39 @@ enum HouseholdProvisioner {
             _ = ensureHouseholdExists(in: context)
         }
 
-        // Auto-deletion is DISABLED. The previous version deleted "stray"
-        // private households whenever CloudKit hadn't fetched a household's
-        // members yet — turned a routine reinstall into a family-wide data
-        // loss event. If the user accumulates duplicate households (rare),
-        // they can clean up manually in Settings → Data.
-        //
-        // Keeping the function shape (and the cloudKitWarm guard above) so
-        // the contract for callers doesn't change.
-        _ = cloudKitWarm  // silence unused-warning if we re-enable later
+        // Merge duplicate private households. Race condition root cause:
+        // on reinstall, the user's old household syncs down from CloudKit
+        // moments after `ensureHouseholdExists` already created a fresh
+        // local one. We end up with two private households parented to the
+        // same user. Merge them by moving children to the survivor (oldest
+        // createdAt, with most live members) and soft-deleting the rest.
+        // Safe because soft-delete preserves the records for trash recovery
+        // and we never touch the shared store.
+        let privates = households.filter {
+            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+        }
+        if privates.count > 1 {
+            func liveMembers(_ h: Household) -> Int {
+                ((h.members as? Set<FamilyMember>) ?? []).filter { $0.deletedAtValue == nil }.count
+            }
+            let survivor = privates.max(by: { a, b in
+                let am = liveMembers(a), bm = liveMembers(b)
+                if am != bm { return am < bm }
+                return a.createdAt > b.createdAt  // older wins
+            })!
+            var moved = 0
+            for h in privates where h !== survivor {
+                for m in (h.members as? Set<FamilyMember>) ?? [] { m.household = survivor; moved += 1 }
+                for t in (h.tasks as? Set<TaskItem>) ?? [] { t.household = survivor; moved += 1 }
+                for g in (h.goals as? Set<FamilyGoal>) ?? [] { g.household = survivor; moved += 1 }
+                for e in (h.events as? Set<FamilyEvent>) ?? [] { e.household = survivor; moved += 1 }
+                h.softDelete()
+            }
+            try? context.save()
+            CasalistAppDelegate.appendShareLog("reconcile: merged \(privates.count) private households into 1 (\(moved) children moved)")
+        }
+
+        _ = cloudKitWarm  // silence unused-warning
     }
 
     /// True if this household has no members, tasks, goals, chores, or events.
@@ -550,8 +646,15 @@ enum HouseholdProvisioner {
     /// about to need one (e.g. adding their first family member).
     @discardableResult
     static func ensureHouseholdExists(in context: NSManagedObjectContext) -> Household? {
+        let stack = CasaCoreDataStack.shared
         let req = Household.fetchRequest()
-        if let existing = try? context.fetch(req).first { return existing }
+        let all = (try? context.fetch(req)) ?? []
+        // Prefer a live private-store household. Falling back to any household
+        // covers the not-yet-synced shared-store-only case.
+        let existing = all.first(where: {
+            $0.objectID.persistentStore === stack.privateStore && $0.deletedAtValue == nil
+        }) ?? all.first(where: { $0.deletedAtValue == nil })
+        if let existing { return existing }
         guard let entity = NSEntityDescription.entity(forEntityName: "Household", in: context) else {
             NSLog("Casa: Household entity not found in model — Core Data probably failed to load")
             return nil

@@ -232,23 +232,25 @@ struct InviteFamilyView: View {
                 // invites where we don't pre-add the recipient as a participant.
                 // Without this CloudKit returns "Item Unavailable" on accept.
                 share.publicPermission = .readWrite
-                // Persist publicPermission + title back to the server. share()
-                // saved the initial CKShare but our subsequent mutations need
-                // an explicit modify-records call or recipients see the old
-                // locked-down version.
+                // Per Apple's docs: "Whenever changing a share using CloudKit
+                // APIs, call persistUpdatedShare(_:in:completion:) so Core
+                // Data persists the change to the store and synchronizes it
+                // with CloudKit." Earlier this used CKModifyRecordsOperation
+                // directly which doesn't update Core Data's local copy and
+                // can be silently overwritten by the next container sync.
                 do {
-                    let op = CKModifyRecordsOperation(recordsToSave: [share], recordIDsToDelete: nil)
-                    op.qualityOfService = .userInitiated
-                    op.savePolicy = .changedKeys
-                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                        op.modifyRecordsResultBlock = { result in
-                            switch result {
-                            case .success: cont.resume()
-                            case .failure(let err): cont.resume(throwing: err)
-                            }
-                        }
-                        ckContainer.privateCloudDatabase.add(op)
+                    guard let privateStore = stack.privateStore else {
+                        preparingShare = false
+                        errorMessage = "Private store unavailable."
+                        return
                     }
+                    _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<CKShare, Error>) in
+                        stack.container.persistUpdatedShare(share, in: privateStore) { updated, error in
+                            if let error { cont.resume(throwing: error); return }
+                            cont.resume(returning: updated ?? share)
+                        }
+                    }
+                    _ = ckContainer  // silence unused-warning
                 } catch {
                     preparingShare = false
                     errorMessage = "Could not save share permission: \(error.localizedDescription)"
