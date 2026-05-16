@@ -24,9 +24,22 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
-### 2026-05-16 — 1.7 staged + 1.6 shipped to TF + schema deployed
-Long second session of the day on the Reminders surface, capped by
-the 1.6 TestFlight push and the Production CloudKit schema deploy.
+### 2026-05-16 — 1.6 + 1.7 both shipped to TF, schema deployed, 1.8 foundation laid
+Marathon all-day session. Shipped TWO TestFlight builds in one day
+(1.6 mid-session, 1.7 end-of-session) plus the Production CloudKit
+schema deploy that unblocks them, started 1.8 foundation work, and
+set up the dual-bundle (Casalist + Casalist Dev) dev workflow.
+
+**1.7 shipped to TestFlight** at end of session. Bumped
+CURRENT_PROJECT_VERSION 1.6 → 1.7 → 1.8 (1.8 already set for the
+next iteration). Archive + export + altool upload all clean
+(Delivery UUID `fadda394-07ba-4774-ab32-2c4dc6428080`). Notes PATCH
+hit a 409 — second time today — but this time
+`ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG` (Apple caps `whatsNew`
+at ~4000 chars; my draft was 4673). Trimmed to 3114 chars and the
+PATCH cleared. Both gotchas now documented in CLAUDE.md (emojis and
+length cap). `staged-1.7` branch refreshed to current main as a
+safety net.
 
 **1.6 shipped to TestFlight** at the end of the session. Bumped
 CURRENT_PROJECT_VERSION 1.5 → 1.6 on a temporary rollback of `main`
@@ -771,6 +784,8 @@ When Geezy says "testflight it" (or similar):
    ```
 
    Burned on this for 1.6 (emojis): ⭐ 🌅 🙋 🌙 🍎 📍 📣 📢 🛒 🏡 all rejected. And again on 1.7 prep (em dashes / arrows — Apple may or may not have rejected these but the ASCII-only rule applies regardless). The IPA upload itself is fine in both cases; only the notes PATCH 409s.
+
+   **Length cap too: keep `whatsNew` under ~4000 chars.** Apple's API returns `409 ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG` when the field is too long. 1.7's initial notes hit this at 4673 chars; trimming to 3114 cleared it. Safe target: < 3500 chars. Use the `wc -c testflight-notes-*.txt` check before uploading.
 
 ### ExportOptions.plist
 

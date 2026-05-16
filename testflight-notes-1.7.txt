@@ -1,74 +1,63 @@
 Casalist 1.7 -- Reminder rebuild + Apple Reminders link
 
-The Reminders surface got a complete rebuild this release. The biggest changes:
+What's new
 
 Apple Reminders link
-- Settings -> REMINDERS lets you pick an Apple Reminders list. Casalist reminders mirror into that list automatically.
-- That list's non-Casalist items show up at the bottom of the Reminders screen in a "FROM YOUR APPLE REMINDERS" section (read-only).
+- Settings -> REMINDERS picks an Apple Reminders list. Casalist reminders mirror there automatically. That list's non-Casalist items appear in Casalist's Reminders screen (read-only).
 
-New reminder authoring sheet
-- Apple Reminders style: title field, row of chip buttons (When / Repeats / Notify / Location / Photo / Tag / Sound / Stop time), tap a chip to expand its picker inline.
-- When you open an existing reminder to edit, every populated chip is auto-expanded so you see everything at once.
+New authoring sheet for reminders
+- Apple Reminders style: title field, row of chip buttons (When / Repeats / Notify / Location / Photo / Tag / Sound / Stop time), tap a chip to expand its picker inline. Editing auto-expands every populated chip.
 
 Unified Repeat picker
-- One sheet for everything. Don't repeat / quick-pick chips (Hourly, Daily, Weekly, etc.) / custom builder for "every 2 weeks on Friday" style cadences.
+- One sheet for everything: Don't repeat / quick-pick chips (Hourly, Daily, Weekly, etc.) / builder for custom cadences like "every 2 weeks on Friday".
 
 Lock-screen actions
 - Long-press a reminder push: Mark done / Snooze 15 min / Snooze 1 hour / Snooze until tomorrow.
 
 Per-family-member reminders
-- "Notify" picker lets you pick which family member's phone fires the reminder. Default is everyone.
+- "Notify" picker assigns a reminder to one family member; only their phone fires.
 
 Location-based reminders
-- "Trigger at a location" toggle in the reminder sheet. Pick a place, choose Arriving or Leaving, set the radius (100 ft to 1 mile). Mini-map shows the geofence.
-- Settings -> SAVED LOCATIONS lets you save Home / Work / School once and use them as quick-pick chips.
+- "Trigger at a location" toggle. Pick a place, Arriving or Leaving, radius 100 ft to 1 mile. Settings -> SAVED LOCATIONS saves Home / Work / School once for quick-pick.
 
 Photo attachments
-- Camera chip on the reminder sheet attaches a photo from your library. Shows as a thumbnail on the pinned card. Device-local -- photos do not sync to other family members.
+- Camera chip attaches a photo from your library. Thumbnail shows on the pinned card. Device-local -- doesn't sync to other family members.
 
 Reminder history
-- Clock icon on the Reminders top bar opens a "what fired / what I marked done / what I snoozed" log, sectioned by Today / Yesterday / This week / Older.
+- Clock icon on the Reminders top bar opens a sectioned log of what fired, what you marked done, what you snoozed.
 
 Templates
-- "Save as template" button in the reminder sheet saves the cadence + assignee + location + stop time as a reusable starting point. Stacked-squares icon on the Reminders top bar opens the template picker.
+- "Save as template" persists cadence + assignee + location + stop time. Stacked-squares icon opens the picker.
 
 Color tags
-- Tag chip in the reminder sheet picks one of 7 colors. Shows as a stripe on the left edge of the pinned card.
+- Tag chip picks one of 7 colors. Shows as a stripe on the left edge of the pinned card.
 
-Drag-to-reorder
-- Long-press a pinned reminder for context menu options: Pin to top / Send to bottom / Duplicate.
+Drag-to-reorder + Duplicate
+- Long-press a pinned reminder for Pin to top / Send to bottom / Duplicate.
 
 Streak heatmap
-- For daily/weekly/monthly/yearly reminders, the edit sheet shows a 30-day heatmap of completions, plus current and best streak.
+- Daily/weekly/monthly/yearly reminders show a 30-day completion heatmap in the edit sheet.
 
 Daily recap
-- Settings -> Notifications -> "Daily reminder recap" fires one summary push at your chosen hour (default 9 PM): X done, Y fired, Z snoozed today.
+- Settings -> Notifications -> "Daily reminder recap" fires one push at your chosen hour (default 9 PM): X done, Y fired, Z snoozed today.
 
-Sound on/off per reminder
-- Speaker chip in the reminder sheet flips between sound-on (default) and silent for that specific reminder.
-
-Notification grouping
-- Multiple reminder pushes firing close together get threaded in Notification Center.
+Sound on/off per reminder + notification grouping
+- Speaker chip flips sound on or off per reminder. Multiple reminder pushes firing close together thread in Notification Center.
 
 Title autocomplete
-- Start typing a reminder title, see recent matching titles as chips. Tap to fill.
+- Type a prefix, see recent matching titles as chips. Tap to fill.
 
 Other fixes and polish
-- Household name now syncs across devices. Setting it in Settings used to only save locally; now writes to the shared Household record.
-- Mute a family member's pushes: bell icon in Settings -> FAMILY, durations of 1 hour / 4 hours / until tomorrow. Per-device. Honors status pings + grocery activity.
-- Location radius now displayed in feet and miles (US units).
+- Household name now syncs across devices (was a phantom local-only edit before).
+- Mute a family member's pushes from Settings -> FAMILY for 1 hour / 4 hours / until tomorrow.
+- Location radius shown in feet and miles (US units).
 
 What to test
-- Create a reminder with a location trigger, leave the geofence area, confirm the notification fires.
-- Mark a reminder done from the lock screen. Confirm it advances to the next occurrence for recurring reminders.
-- Snooze a reminder for 15 minutes from the lock screen. Confirm the follow-up fires.
-- Assign a reminder to a specific family member. Confirm only that person's phone fires the notification.
-- Pick an Apple Reminders list in Settings. Create a reminder in Casalist. Confirm it appears in iOS Reminders.app in that list.
-- Set the household name in Settings on one device. Confirm it appears on the other family member's device within 30 seconds.
-- Save a reminder as a template. Use the templates picker to create a new reminder from it. Confirm everything carries over.
-- Attach a photo to a reminder. Confirm the thumbnail shows on the pinned card.
-
-Known gotchas
-- Photo attachments are device-local. They do not sync to other family members. Each device keeps its own reminder photos.
-- Apple Reminders mirroring is one-way (Casalist to Apple). Completing a reminder in iOS Reminders.app does not yet mark it done in Casalist. Two-way sync coming in v2.
-- Skip-next-occurrence is not yet available. Mark done or Snooze are the lock-screen options for now. The skip action requires a deeper notification-scheduling rework, planned for v2.
+- Create a location-based reminder. Leave the geofence. Confirm push fires.
+- Mark done from the lock screen. Confirm recurring reminders advance to the next occurrence.
+- Snooze from the lock screen.
+- Assign to one family member. Confirm only their phone fires.
+- Pick an Apple Reminders list. Create a reminder in Casalist. Confirm it appears in iOS Reminders.app.
+- Set household name in Settings on one device. Confirm it appears on the other within 30 seconds.
+- Save as template; create a new reminder from it.
+- Attach a photo. Confirm thumbnail on the pinned card.
