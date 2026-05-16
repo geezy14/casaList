@@ -31,6 +31,12 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         Self.acceptShare(metadata: metadata)
     }
 
+    /// NSUbiquitousKeyValueStore key — persists the share URL the user last
+    /// accepted. Lives at the iCloud account level, NOT the app sandbox, so
+    /// it SURVIVES app deletion. Used to auto-rejoin the family on a fresh
+    /// reinstall without needing the owner to re-send a share link.
+    static let lastShareURLKey = "lastJoinedShareURL"
+
     static func acceptShare(metadata: CKShare.Metadata) {
         appendShareLog("acceptShare called. share=\(metadata.share.recordID.recordName)")
         let stack = CasaCoreDataStack.shared
@@ -47,11 +53,66 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
                 appendShareLog("FAILED: \(error)")
             } else {
                 appendShareLog("SUCCEEDED: \(results?.count ?? 0) shares accepted")
+                // Persist the share URL to NSUbiquitousKeyValueStore so a
+                // future fresh install (after app delete or device reset)
+                // can silently re-accept and rejoin the family. Lives at
+                // the iCloud account level — survives app deletion.
+                if let url = metadata.share.url {
+                    let kv = NSUbiquitousKeyValueStore.default
+                    kv.set(url.absoluteString, forKey: lastShareURLKey)
+                    kv.synchronize()
+                    appendShareLog("Saved share URL to iCloud KV for auto-rejoin: \(url.absoluteString)")
+                }
                 // Give CloudKit a moment to sync down the shared household so we
                 // can attach a FamilyMember for the joiner.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                     addJoinerAsFamilyMember()
                 }
+            }
+        }
+    }
+
+    /// Called on fresh-install launch when the local store has no household
+    /// records. Looks up the previously-saved share URL from iCloud KV and
+    /// silently re-accepts the share, restoring access to the family.
+    /// No-op if no URL is saved or if a household already exists locally.
+    static func attemptAutoRejoinSavedShare() {
+        let stack = CasaCoreDataStack.shared
+
+        let req = Household.fetchRequest()
+        let count = (try? stack.context.count(for: req)) ?? 0
+        guard count == 0 else {
+            appendShareLog("attemptAutoRejoinSavedShare: skipped — already have \(count) household(s) locally")
+            return
+        }
+
+        let kv = NSUbiquitousKeyValueStore.default
+        kv.synchronize()
+        guard let urlString = kv.string(forKey: lastShareURLKey),
+              let url = URL(string: urlString) else {
+            appendShareLog("attemptAutoRejoinSavedShare: no saved share URL in iCloud KV")
+            return
+        }
+        appendShareLog("attemptAutoRejoinSavedShare: trying URL \(urlString)")
+
+        let container = CKContainer(identifier: "iCloud.com.gbrown10.casalist")
+        container.fetchShareMetadata(with: url) { metadata, error in
+            if let error {
+                appendShareLog("auto-rejoin fetchShareMetadata FAILED: \(error)")
+                // If Apple says the share is gone (revoked / expired), purge
+                // the stale URL so we don't keep retrying.
+                if let ckError = error as? CKError,
+                   ckError.code == .unknownItem || ckError.code == .invalidArguments {
+                    kv.removeObject(forKey: lastShareURLKey)
+                    kv.synchronize()
+                    appendShareLog("auto-rejoin cleared invalid share URL from iCloud KV")
+                }
+                return
+            }
+            guard let metadata else { return }
+            appendShareLog("auto-rejoin fetched metadata, calling acceptShare")
+            DispatchQueue.main.async {
+                acceptShare(metadata: metadata)
             }
         }
     }
@@ -175,6 +236,14 @@ struct CasalistApp: App {
                 .environment(\.managedObjectContext, stack.context)
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    // If this device has no household (fresh install on a
+                    // previous share-joiner), try silently re-accepting the
+                    // last-known share URL from iCloud KV. Restores the
+                    // family without owner action.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1))  // give iCloud KV a beat to sync
+                        CasalistAppDelegate.attemptAutoRejoinSavedShare()
+                    }
                     if notificationsEnabled {
                         _ = await NotificationsManager.requestAuth()
                         await NotificationsManager.syncFromContext(stack.context)
