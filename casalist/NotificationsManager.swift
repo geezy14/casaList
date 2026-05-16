@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import CoreData
+import CoreLocation
 
 private struct NotificationPlan {
     let id: String
@@ -655,9 +656,17 @@ enum NotificationsManager {
                 continue
             }
             let sender = ping.createdBy.isEmpty ? "Someone" : ping.createdBy
+            let (display, coord) = StatusPing.parseLocationPing(ping.task)
             let content = UNMutableNotificationContent()
             content.title = "📣 \(sender)"
-            content.body = ping.task
+            if let coord {
+                content.body = "\(display)— tap to open in Maps"
+                content.userInfo = ["pingCoordLat": coord.latitude,
+                                    "pingCoordLng": coord.longitude,
+                                    "pingSender": sender]
+            } else {
+                content.body = display
+            }
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let request = UNNotificationRequest(identifier: "ping-\(key)", content: content, trigger: trigger)

@@ -531,6 +531,19 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        // Status ping with attached location → tapping the notification
+        // opens Apple Maps centered on the sender's pinned coordinate.
+        let info = response.notification.request.content.userInfo
+        if let lat = info["pingCoordLat"] as? Double,
+           let lng = info["pingCoordLng"] as? Double {
+            let sender = (info["pingSender"] as? String) ?? "Family"
+            let q = sender.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sender
+            if let url = URL(string: "https://maps.apple.com/?ll=\(lat),\(lng)&q=\(q)") {
+                DispatchQueue.main.async { UIApplication.shared.open(url) }
+            } else if let mapsURL = URL(string: "maps://?ll=\(lat),\(lng)&q=\(q)") {
+                DispatchQueue.main.async { UIApplication.shared.open(mapsURL) }
+            }
+        }
         completionHandler()
     }
 }
