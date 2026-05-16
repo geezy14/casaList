@@ -38,7 +38,7 @@ struct SettingsView: View {
     @State private var showHelp: Bool = false
     @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
-    @AppStorage("paletteName") private var paletteName: String = "ember"  // ember | vivid | anchor
+    @AppStorage("paletteName") private var paletteName: String = "vivid"  // ember | vivid | anchor
     @AppStorage("backupEnabled") private var backupEnabled: Bool = true
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))

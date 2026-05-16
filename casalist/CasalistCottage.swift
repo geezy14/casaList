@@ -17,7 +17,7 @@ public enum CasalistCottage {
         let peach, mint, butter, lavender, sky, coral: Color
 
         /// Default palette name when none has been picked yet.
-        static let defaultName = "ember"
+        static let defaultName = "vivid"
 
         /// Resolve a specific palette by name regardless of the user's
         /// active selection. Used by the Settings picker swatches so they
@@ -212,7 +212,7 @@ public enum CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
         private var canManage: Bool {
@@ -952,7 +952,7 @@ public enum CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var sorted: [FamilyMember] { members.sorted { $0.points > $1.points } }
         private var topScore: Int { Int(sorted.first?.points ?? 0) }
@@ -1668,7 +1668,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
@@ -2073,7 +2073,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -2427,7 +2427,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -2636,7 +2636,7 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -3035,7 +3035,7 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
-        @AppStorage("paletteName") private var paletteName: String = "ember"
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var canAddEvents: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canCreateEvents ?? true
