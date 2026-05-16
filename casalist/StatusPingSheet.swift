@@ -19,7 +19,16 @@ struct StatusPingSheet: View {
                   predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
+    /// When set, the sheet enters edit mode: pre-fills the custom text
+    /// + expiry, hides the presets, swaps Send for Save + Delete.
+    let editing: TaskItem?
+
+    init(editing: TaskItem? = nil) {
+        self.editing = editing
+    }
+
     @State private var customText: String = ""
+    @State private var customExpiry: AnnouncementExpiry = .none
     @State private var locationError: String? = nil
     @StateObject private var locator = OneShotLocator()
 
@@ -45,7 +54,7 @@ struct StatusPingSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if shareLocationEnabled {
+                if editing == nil && shareLocationEnabled {
                     Section("Share your location") {
                         Button {
                             sendLocation()
@@ -72,55 +81,115 @@ struct StatusPingSheet: View {
                         }
                     }
                 }
-                Section("Quick send") {
-                    ForEach(presets, id: \.text) { p in
-                        Button {
-                            send(message: "\(p.emoji) \(p.text)")
-                        } label: {
-                            HStack {
-                                Text(p.emoji).font(.system(size: 22))
-                                Text(p.text).font(.system(size: 16, weight: .semibold))
-                                Spacer()
-                                Image(systemName: "paperplane.fill").foregroundStyle(.secondary)
+                if editing == nil {
+                    Section("Quick send") {
+                        ForEach(presets, id: \.text) { p in
+                            Button {
+                                send(message: "\(p.emoji) \(p.text)")
+                            } label: {
+                                HStack {
+                                    Text(p.emoji).font(.system(size: 22))
+                                    Text(p.text).font(.system(size: 16, weight: .semibold))
+                                    Spacer()
+                                    Image(systemName: "paperplane.fill").foregroundStyle(.secondary)
+                                }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-                Section("Custom") {
+                Section(editing == nil ? "Custom announcement" : "Edit announcement") {
                     TextField("Type a message…", text: $customText, axis: .vertical)
                         .lineLimit(2...4)
-                    Button {
-                        let trimmed = customText.trimmingCharacters(in: .whitespaces)
-                        guard !trimmed.isEmpty else { return }
-                        send(message: trimmed)
-                    } label: {
-                        Label("Send", systemImage: "paperplane.fill")
+                    Picker("Expires", selection: $customExpiry) {
+                        ForEach(AnnouncementExpiry.allCases, id: \.self) { e in
+                            Text(e.label).tag(e)
+                        }
                     }
-                    .disabled(customText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if editing == nil {
+                        Button {
+                            let trimmed = customText.trimmingCharacters(in: .whitespaces)
+                            guard !trimmed.isEmpty else { return }
+                            send(message: trimmed, expiresAt: customExpiry.expiryDate())
+                        } label: {
+                            Label("Send", systemImage: "paperplane.fill")
+                        }
+                        .disabled(customText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    } else {
+                        Button {
+                            saveEdit()
+                        } label: {
+                            Label("Save changes", systemImage: "checkmark.circle.fill")
+                        }
+                        .disabled(customText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Button(role: .destructive) {
+                            deleteAnnouncement()
+                        } label: {
+                            Label("Delete announcement", systemImage: "trash")
+                        }
+                    }
                 }
-                Section {
-                    Label("Sends a notification to everyone in your household.",
-                          systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if editing == nil {
+                    Section {
+                        Label("Sends a notification to everyone in your household.",
+                              systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            .navigationTitle("Ping family")
+            .navigationTitle(editing == nil ? "Ping family" : "Edit announcement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(editing == nil ? "Close" : "Cancel") { dismiss() }
                 }
             }
+            .onAppear { prefillIfEditing() }
         }
     }
 
-    private func send(message: String) {
+    private func prefillIfEditing() {
+        guard let ed = editing else { return }
+        customText = ed.task
+        if let due = ed.dueDate {
+            // Snap the stored expiry back to the closest preset bucket
+            // so the picker reflects something reasonable. If none fits,
+            // default to fourHours and let the user override.
+            let remaining = due.timeIntervalSinceNow
+            switch remaining {
+            case ..<900:                customExpiry = .fifteenMin   // <15 min left
+            case 900..<3600:            customExpiry = .fifteenMin
+            case 3600..<(4 * 3600):     customExpiry = .oneHour
+            case (4 * 3600)..<(8 * 3600): customExpiry = .fourHours
+            default:                    customExpiry = .untilTomorrow
+            }
+        } else {
+            customExpiry = .none
+        }
+    }
+
+    private func saveEdit() {
+        guard let ed = editing else { return }
+        ed.task = customText.trimmingCharacters(in: .whitespaces)
+        ed.dueDate = customExpiry.expiryDate()
+        try? moc.save()
+        dismiss()
+    }
+
+    private func deleteAnnouncement() {
+        guard let ed = editing else { return }
+        ed.softDelete()
+        try? moc.save()
+        dismiss()
+    }
+
+    private func send(message: String, expiresAt: Date? = nil) {
         let trimmedUser = userName.trimmingCharacters(in: .whitespaces)
         let ping = TaskItem(
             context: moc,
             task: message,
+            dueDate: expiresAt,  // reused as the announcement expiry
             category: StatusPing.category,
             points: 0,
             createdBy: trimmedUser
@@ -143,6 +212,40 @@ struct StatusPingSheet: View {
             case .failure(let err):
                 locationError = err.localizedDescription
             }
+        }
+    }
+}
+
+/// Duration options for a custom announcement. Every announcement
+/// also sends a push notification to every family member — the picker
+/// just controls how long the message lingers as a banner in the
+/// Family tab. `.none` means push-only, no banner.
+enum AnnouncementExpiry: String, CaseIterable {
+    case none, fifteenMin, oneHour, fourHours, eightHours, untilTomorrow
+
+    var label: String {
+        switch self {
+        case .none:            return "Push only — no banner"
+        case .fifteenMin:      return "Push + banner, 15 min"
+        case .oneHour:         return "Push + banner, 1 hour"
+        case .fourHours:       return "Push + banner, 4 hours"
+        case .eightHours:      return "Push + banner, 8 hours"
+        case .untilTomorrow:   return "Push + banner, until tomorrow"
+        }
+    }
+
+    /// Returns the future date this expiry lands on, or nil for `.none`.
+    func expiryDate(from now: Date = Date()) -> Date? {
+        let cal = Calendar.current
+        switch self {
+        case .none:          return nil
+        case .fifteenMin:    return now.addingTimeInterval(15 * 60)
+        case .oneHour:       return now.addingTimeInterval(3600)
+        case .fourHours:     return now.addingTimeInterval(4 * 3600)
+        case .eightHours:    return now.addingTimeInterval(8 * 3600)
+        case .untilTomorrow:
+            let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
+            return tomorrow
         }
     }
 }

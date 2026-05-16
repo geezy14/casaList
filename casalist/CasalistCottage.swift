@@ -747,11 +747,22 @@ public enum CasalistCottage {
             }
         }
 
+        /// Mirror the Family tab's "up for grabs" filter so the tile
+        /// number matches: unclaimed, non-completed, and excluding
+        /// outing containers (family tasks with a dueDate AND no
+        /// parentUid — those are plans, not chores).
         private var familyListOpenCount: Int {
-            allTodos.filter { $0.category.lowercased() == "family" && !$0.isCompleted && ($0.assignee ?? "").isEmpty }.count
+            allTodos.filter(isFamilyUpForGrabs).count
         }
         private var familyListNextItem: String {
-            allTodos.first(where: { $0.category.lowercased() == "family" && !$0.isCompleted && ($0.assignee ?? "").isEmpty })?.task ?? ""
+            allTodos.first(where: isFamilyUpForGrabs)?.task ?? ""
+        }
+        private func isFamilyUpForGrabs(_ t: TaskItem) -> Bool {
+            t.category.lowercased() == "family"
+                && !t.isCompleted
+                && (t.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+                && t.parentUid.isEmpty   // not nested under an outing
+                && t.dueDate == nil      // not an outing container itself
         }
 
         private var scheduleUpcomingCount: Int {

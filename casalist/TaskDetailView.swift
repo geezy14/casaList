@@ -39,7 +39,21 @@ struct TaskDetailView: View {
         let lc = (me?.name ?? userName).trimmingCharacters(in: .whitespaces).lowercased()
         return (task.assignee ?? "").lowercased() == lc
     }
-    private var canDelete: Bool { iAmAdmin || isMine }
+    /// True when this user created the task (added it themselves).
+    private var iAddedIt: Bool {
+        let lc = (me?.name ?? userName).trimmingCharacters(in: .whitespaces).lowercased()
+        return task.createdBy.lowercased() == lc
+    }
+    /// Owners + admins can delete anything. Standard members and kids
+    /// can only delete what they added themselves.
+    private var canDelete: Bool { iAmAdmin || iAddedIt }
+    /// Trip-style containers (family-category items with a dueDate and
+    /// no parent) aren't claimable — they're outings, not chores.
+    private var isTripContainer: Bool {
+        task.category.lowercased() == "family"
+            && task.dueDate != nil
+            && task.parentUid.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -129,6 +143,10 @@ struct TaskDetailView: View {
     /// current user has a FamilyMember record to claim it for.
     private var canClaim: Bool {
         guard !task.isCompleted else { return false }
+        guard !isTripContainer else { return false }
+        // Nested items belong collectively to their outing — no
+        // individual claim, the family works the outing together.
+        guard task.parentUid.isEmpty else { return false }
         let isUnassigned = (task.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
         guard isUnassigned else { return false }
         return FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid) != nil
