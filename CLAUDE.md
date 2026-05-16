@@ -24,12 +24,39 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
-### 2026-05-16 — 1.7 staged: Apple Reminders link + full reminder UX rebuild
-Long second session of the day, all on the Reminders surface. **1.6 is
-still the staged-and-locked build** waiting for Geezy's "go" + the
-Production schema deploy of `FamilyMember` location fields. **1.7 is
-what landed in this session** — local commits on `main`, ready to ship
-once 1.6 clears.
+### 2026-05-16 — 1.7 staged + 1.6 shipped to TF + schema deployed
+Long second session of the day on the Reminders surface, capped by
+the 1.6 TestFlight push and the Production CloudKit schema deploy.
+
+**1.6 shipped to TestFlight** at the end of the session. Bumped
+CURRENT_PROJECT_VERSION 1.5 → 1.6 on a temporary rollback of `main`
+to commit `72ab91e` (the pre-1.7 cutoff), archived Release config,
+exported the IPA with the App Store Connect API key auth flags, and
+uploaded via altool (Delivery UUID
+`3a6de1ac-7fc3-4aa7-beea-a9200f148e2b`, 4.7 MB transferred). The
+build was still processing on App Store Connect at the end of the
+session — `set_testflight_notes.py 1.6` returned 409 on the first
+attempt. A ScheduleWakeup is set for ~15 min after upload to retry
+the notes upload once processing settles. **After the upload, main
+was restored to `acbabda` (the 1.7 commit) and pbxproj bumped to
+`CURRENT_PROJECT_VERSION=1.7` in commit `80422ce`.** Branch
+`staged-1.7` was created at `acbabda` as a backup safety net before
+the rollback.
+
+**Production CloudKit schema deploy** done via Chrome MCP →
+icloud.developer.apple.com Dashboard. Both 1.6's FamilyMember
+location quartet (latitude / longitude / locationUpdatedAt /
+isSharingLocation) AND 1.7's TaskItem location quintet (locationLat
+/ locationLng / locationRadius / locationOnArrive / locationName)
+promoted in one deploy — confirmed by `Confirm Deployment` dialog
+("Modify 4 fields on CD_FamilyMember type" + "Modify 5 fields on
+CD_TaskItem type" + 8 new indexes on FamilyMember + 11 on TaskItem)
+and post-deploy `scripts/cloudkit-schema-diff.sh` reports identical
+Production and Development. **1.7 needs no additional schema deploy
+when it ships.**
+
+**1.7 stack on `main` (commit `acbabda`)**, ready for the next TF
+when Geezy gives the word:
 
 **Apple Reminders link** — mirror of the Apple Calendar feature from
 1.6. `ReminderLinkService.swift` (EKEventStore for `.reminder` entity),
