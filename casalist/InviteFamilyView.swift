@@ -40,7 +40,7 @@ struct InviteFamilyView: View {
                         } label: {
                             HStack(spacing: 8) {
                                 if preparingShare && nextShareIsAirDropOnly { ProgressView().tint(.white) }
-                                Label("Drop to nearby phone", systemImage: "dot.radiowaves.left.and.right")
+                                Label("Drop to nearby phone", systemImage: "iphone.radiowaves.left.and.right")
                                     .font(.system(size: 17, weight: .heavy))
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
