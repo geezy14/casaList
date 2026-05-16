@@ -15,6 +15,13 @@ struct AddReminderView: View {
     private var households: FetchedResults<Household>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var familyMembers: FetchedResults<FamilyMember>
+    /// All live reminders — used to mine title suggestions when the
+    /// user starts typing a new reminder title.
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt == nil AND category ==[c] %@", "reminders")
+    )
+    private var existingReminders: FetchedResults<TaskItem>
 
     private let editing: TaskItem?
 
@@ -309,14 +316,72 @@ struct AddReminderView: View {
     // MARK: – Top sub-views
 
     private var titleCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("What do you want to remember?", text: $title, axis: .vertical)
                 .font(.system(size: 18, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
+            if !titleSuggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(titleSuggestions, id: \.self) { suggestion in
+                            Button {
+                                title = suggestion
+                            } label: {
+                                Text(suggestion)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+    }
+
+    /// Recent reminder titles that start with the user's current input
+    /// (case-insensitive). Pulls from in-app history + the existing
+    /// reminders list + saved templates. Suppressed when the input is
+    /// empty or already matches an existing title exactly.
+    private var titleSuggestions: [String] {
+        let typed = title.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return [] }
+        let needle = typed.lowercased()
+        var seen: Set<String> = [typed.lowercased()]
+        var out: [String] = []
+        // Source 1: existing reminders' task names.
+        for t in existingReminders {
+            let name = t.task.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { continue }
+            let key = name.lowercased()
+            if seen.contains(key) { continue }
+            if key.hasPrefix(needle) {
+                out.append(name)
+                seen.insert(key)
+            }
+            if out.count >= 5 { break }
+        }
+        // Source 2: saved templates' reminder titles.
+        if out.count < 5 {
+            for tpl in ReminderTemplateStore.loadAll() {
+                let name = tpl.title.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { continue }
+                let key = name.lowercased()
+                if seen.contains(key) { continue }
+                if key.hasPrefix(needle) {
+                    out.append(name)
+                    seen.insert(key)
+                }
+                if out.count >= 5 { break }
+            }
+        }
+        return out
     }
 
     private var chipStrip: some View {

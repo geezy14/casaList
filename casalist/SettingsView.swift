@@ -41,6 +41,9 @@ struct SettingsView: View {
     @State private var deleteTarget: FamilyMember? = nil
     @State private var showAddMember: Bool = false
     @State private var showTrash: Bool = false
+    /// Forces re-render of the family list when a mute state changes.
+    /// MemberMuteStore is raw UserDefaults so it doesn't auto-publish.
+    @State private var muteVersion: Int = 0
     @State private var showRestorePicker: Bool = false
     /// Set when the user picks one of the two restore buttons. The
     /// fileImporter callback reads this to decide whether to bring back
@@ -332,6 +335,31 @@ struct SettingsView: View {
         .sheet(isPresented: $showAddMember) { AddFamilyMemberView() }
     }
 
+    /// Bell icon with a Menu that lets the user mute this member's
+    /// outbound activity pushes on THIS device. Mute state is
+    /// per-device (UserDefaults via MemberMuteStore). The Menu reads
+    /// `muteVersion` so the icon updates after a mute change.
+    @ViewBuilder
+    private func muteMenu(for m: FamilyMember) -> some View {
+        let _ = muteVersion   // re-render trigger; legal at top of @ViewBuilder body
+        let muted = MemberMuteStore.isMuted(m.name)
+        Menu {
+            ForEach(MemberMuteStore.Duration.allCases) { dur in
+                Button(dur.label) {
+                    MemberMuteStore.apply(dur, to: m.name)
+                    muteVersion += 1
+                }
+            }
+        } label: {
+            Image(systemName: muted ? "bell.slash.fill" : "bell")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(muted ? P.coral : P.textMuted)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill((muted ? P.coral : P.textMuted).opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func memberRow(_ m: FamilyMember) -> some View {
         let isMe = m.uid.uuidString == meUid || m.name.lowercased() == userName.lowercased()
         return HStack(spacing: 12) {
@@ -360,6 +388,9 @@ struct SettingsView: View {
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(P.peach.opacity(0.12)))
                 }.buttonStyle(.plain)
+            }
+            if !isMe {
+                muteMenu(for: m)
             }
             if canDelete(m, isMe: isMe) {
                 Button { deleteTarget = m } label: {

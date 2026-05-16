@@ -8,6 +8,51 @@ Newest first.
 
 ---
 
+## v2.0 — Notification scheduling rework + Skip-next-occurrence (proposed 2026-05-16)
+
+Today reminder notifications use `UNCalendarNotificationTrigger(repeats: true)` and `UNTimeIntervalNotificationTrigger(repeats: true)` — iOS manages the recurrence internally and delivers on every component match. That works great for "always fires" but means we can't surgically skip a single occurrence.
+
+For a "Skip next" lock-screen action to work cleanly we'd need to rework the scheduler:
+- Stop using repeating triggers.
+- Instead, schedule the next N occurrences (~7 days worth) as one-shot triggers, refresh on app open + background sync.
+- "Skip" then cancels a specific one-shot identifier.
+
+Bonus: this rework also unlocks
+- Cancelling specific past-fires that were accidentally scheduled
+- Showing the user "next 3 fires" in the edit sheet
+- Honoring quiet hours per-occurrence (today the recurring trigger doesn't know about them)
+- More accurate notification grouping by time window
+
+Bundled into v2 alongside the other reminder rework so the kid mode + adult mode both get the same upgraded scheduler.
+
+## v2.0 — Kick member flow (proposed 2026-05-16, originally parked 1.5)
+
+Real owner-side member removal. Today's owner-delete is reversed by the joiner's foreground self-heal (`ensureMeInSharedHousehold`) because we don't remove the CKShare participant. Needs:
+- `CKShare.removeParticipant` on the kicked member's `userIdentity`
+- Soft-delete the local FamilyMember record
+- Confirm dialog (this is destructive — the kicked person loses access to everything in the shared zone)
+- Optional: keep the soft-deleted record around for X days so the kick is reversible
+
+## v2.0 — Photo sync verification + fix (proposed 2026-05-16)
+
+`FamilyMember.photoBlob` was added to Production schema in 2026-05-16's bundled deploy alongside the location fields. Need to re-verify it actually syncs across Apple IDs now that the field is in Prod — the original 2026-05-14 TODO predicted a schema redeploy would fix it; that's now done but unverified.
+
+If it still doesn't sync after a real two-account test, the bug is deeper (probably in how the inline BYTES field is encoded for shared zones). Possible fallback: switch to a CKAsset path with explicit handling.
+
+## v2.0 — App-icon badge count (proposed 2026-05-16)
+
+Show pending-reminder count on the home-screen Casalist icon via `UNUserNotificationCenter.current().setBadgeCount(_:)`. Update at app launch, on every reminder save/complete, and when notifications fire. Pair with a Settings toggle ("Show reminder count on app icon — On/Off") because some people hate badges.
+
+## v2.0 — Two-way Apple Reminders sync (proposed 2026-05-16)
+
+Today the Apple Reminders mirror is one-way (Casalist → Apple). Make completing in iOS Reminders.app mark done in Casalist. Subscribe to `EKEventStoreChanged` notifications, diff the mirror against the source, propagate completions back into Core Data.
+
+Cost: needs careful loop-prevention (Casalist writes to Apple → fires EKEventStoreChanged → Casalist reads back and writes again).
+
+## v2.0 — Family-wide stats view (proposed 2026-05-16)
+
+Companion to the Personal Stats Card. Household-wide rollup: total chores done this week, who's leading, MVP per category, week-over-week trend. Already have the data; just needs the view.
+
 ## v2.0 — Rewards overhaul (proposed 2026-05-16)
 
 The Rewards surface (top-level tab on the adult shell after the 4→2

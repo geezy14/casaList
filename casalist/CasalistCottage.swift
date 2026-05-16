@@ -2832,6 +2832,51 @@ extension CasalistCottage {
             }
         }
 
+        /// Clone the tapped reminder — copies every cadence / location /
+        /// assignee / repeat-end attribute over a fresh TaskItem with a
+        /// new UID. Device-local attributes (color tag, sound, photo)
+        /// also carry over. Title gets a "(copy)" suffix so the user
+        /// can find it quickly in the pinned grid before editing.
+        private func duplicateReminder(_ src: TaskItem) {
+            let dup = TaskItem(
+                context: modelContext,
+                task: src.task + " (copy)",
+                assignee: src.assignee,
+                dueDate: src.dueDate,
+                category: "reminders",
+                points: 0,
+                createdBy: userName.trimmingCharacters(in: .whitespaces),
+                repeatHours: 0,
+                repeatKind: src.effectiveRepeatKind
+            )
+            dup.repeatEndMinutes = src.repeatEndMinutes
+            dup.locationLat = src.locationLat
+            dup.locationLng = src.locationLng
+            dup.locationRadius = src.locationRadius
+            dup.locationOnArrive = src.locationOnArrive
+            dup.locationName = src.locationName
+            if let h = src.household {
+                modelContext.assign(dup, toStoreOf: h)
+                dup.household = h
+            }
+            try? modelContext.save()
+            // Carry device-local attributes by UID.
+            let srcTag = ReminderColorTagStore.tag(for: src.uid)
+            if srcTag != .none {
+                ReminderColorTagStore.set(srcTag, for: dup.uid)
+            }
+            ReminderSoundStore.setPlaysSound(
+                ReminderSoundStore.playsSound(for: src.uid),
+                for: dup.uid
+            )
+            if let img = ReminderPhotoStore.image(for: src.uid) {
+                ReminderPhotoStore.save(img, for: dup.uid)
+            }
+            Task { await NotificationsManager.scheduleNow(for: dup) }
+            ReminderLinkService.shared.mirror(dup)
+            LocationReminderService.shared.resyncMonitoredRegions(in: modelContext)
+        }
+
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 hero
@@ -3194,6 +3239,11 @@ extension CasalistCottage {
                                     ReminderOrderStore.sendToBottom(t.uid)
                                 } label: {
                                     Label("Send to bottom", systemImage: "arrow.down.to.line.compact")
+                                }
+                                Button {
+                                    duplicateReminder(t)
+                                } label: {
+                                    Label("Duplicate", systemImage: "doc.on.doc")
                                 }
                             }
                         }

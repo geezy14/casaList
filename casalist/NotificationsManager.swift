@@ -149,6 +149,10 @@ enum NotificationsManager {
                 content.categoryIdentifier = "REMINDER_FIRE"
                 content.userInfo = ["taskUid": taskUid]
                 content.sound = ReminderSoundStore.playsSound(for: taskUid) ? .default : nil
+                // Group reminder pushes so a batch firing together
+                // (e.g. 3 hourly reminders at 9 AM) lands as one stack
+                // in Notification Center instead of 3 separate banners.
+                content.threadIdentifier = "casalist-reminders"
             } else {
                 content.sound = .default
             }
@@ -759,6 +763,13 @@ enum NotificationsManager {
                 notified.insert(key)
                 continue
             }
+            // Honor per-device mute on the sender. We still mark the
+            // ping as notified so an un-mute later doesn't replay
+            // back-history pushes.
+            if MemberMuteStore.isMuted(ping.createdBy) {
+                notified.insert(key)
+                continue
+            }
             let sender = ping.createdBy.isEmpty ? "Someone" : ping.createdBy
             let (display, coord) = StatusPing.parseLocationPing(ping.task)
             let content = UNMutableNotificationContent()
@@ -817,6 +828,11 @@ enum NotificationsManager {
             if notified.contains(key) { continue }
             // Skip items this device's user created — they already know.
             if item.createdBy.lowercased() == trimmed.lowercased() {
+                notified.insert(key)
+                continue
+            }
+            // Honor per-device mute on the actor.
+            if MemberMuteStore.isMuted(item.createdBy) {
                 notified.insert(key)
                 continue
             }
