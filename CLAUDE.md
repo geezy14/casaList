@@ -658,7 +658,7 @@ xcrun devicectl device install app --device 9A471194-E5FA-5B11-82F9-178E5612C19C
   build/Build/Products/Debug-iphoneos/casalist.app
 
 xcrun devicectl device process launch --device 9A471194-E5FA-5B11-82F9-178E5612C19C \
-  com.gbrown10.casalist
+  com.gbrown10.casalist.dev
 ```
 
 ### "push both" / "push to 15 too" — also deploy to iPhone 15
@@ -674,10 +674,29 @@ xcrun devicectl device install app --device 62C1F8BD-F78E-523B-929A-CC780C68595B
   build-iphone15/Build/Products/Debug-iphoneos/casalist.app
 
 xcrun devicectl device process launch --device 62C1F8BD-F78E-523B-929A-CC780C68595B \
-  com.gbrown10.casalist
+  com.gbrown10.casalist.dev
 ```
 
 If install/launch fails with "unavailable" or a network timeout, the phone went to sleep or wifi dropped. Retry after a few seconds.
+
+### Dual-bundle setup (Casalist + Casalist Dev side-by-side)
+
+As of 2026-05-16, Debug and Release builds use DIFFERENT bundle IDs so both can live on the same device:
+
+| Config | Bundle ID | Icon | Display Name | iCloud env |
+|---|---|---|---|---|
+| **Debug** | `com.gbrown10.casalist.dev` | `AppIcon-Dev` (orange DEV banner) | "Casalist Dev" | Development |
+| **Release** | `com.gbrown10.casalist` | `AppIcon` | "Casalist" | Production |
+
+Both bundles share the same iCloud container (`iCloud.com.gbrown10.casalist`); the environment split (Dev vs Prod) is automatic via Apple's default config-driven CloudKit container environment.
+
+Implications:
+- `xcodebuild ... -configuration Debug` produces "Casalist Dev" — what `push it` / `push both` deploy. Talks to Dev CloudKit. Family on TF never sees these builds.
+- `xcodebuild ... -configuration Release archive` is unchanged; ships as `com.gbrown10.casalist` to TestFlight / App Store. The TF workflow at the bottom of this doc is the same as before.
+- The two apps have completely separate local sandboxes — UserDefaults, Documents, photos, history, templates, color tags, saved locations, etc. Dev-side work doesn't bleed into the TF install.
+- iCloud KV is shared across both bundles (single Apple ID), so the `lastShareURLKey` auto-rejoin URL is overwritten when you bounce between Dev and TF on the same device. `shouldClearSavedShareURL(after:)` self-heals on `.unknownItem` when a stale-env URL is tried.
+
+Asset: `casalist/Assets.xcassets/AppIcon-Dev.appiconset/AppIcon-Dev-1024.png` (generated via ImageMagick — base icon + orange `rgba(255,140,0,0.92)` banner from y=820 to y=1024 + white "DEV" text in Avenir-Bold 150pt anchored to the bottom-center).
 
 ### "testflight it" — archive + upload to TestFlight
 
