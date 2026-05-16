@@ -1,0 +1,13 @@
+What's New
+- Family sharing now properly works end-to-end. Reinstall the app, switch devices, even delete and rejoin — your identity stays put and you don't end up with duplicate copies of yourself in the family list.
+
+What's Fixed
+- The crashes some testers were seeing on launch and when opening Settings. Two separate causes traced and fixed: backup running on the wrong queue, and a SwiftUI rendering issue on iOS 26.
+- Auto-rejoin no longer breaks when you open the app on bad Wi-Fi. It used to silently throw away your saved invitation; now only permanent failures clear it.
+- Duplicate family member records ("two Dakodas") fixed at the foundation. Identity is now tied to your iCloud account, not the name you typed.
+- When you delete the app and reinstall, your name comes back with the same identity — no ghost records.
+
+What to Test
+- Send an AirDrop invite from one phone to another (different Apple IDs). Both devices should show the same family members within ~30 seconds.
+- Delete and reinstall the app on a joiner device. Your name should auto-reappear in the family list on both phones.
+- Try going through the welcome flow on a brand new install with iCloud signed in — your previous household should silently restore.
