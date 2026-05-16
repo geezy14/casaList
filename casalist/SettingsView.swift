@@ -254,11 +254,33 @@ struct SettingsView: View {
 
     // MARK: Household
 
+    /// Reads the live Household record's name (synced via CloudKit) and
+    /// writes back to it on edit so other devices see the rename within
+    /// seconds. Falls back to the local AppStorage seed value if no
+    /// household exists yet (pre-onboarding). The AppStorage key is
+    /// kept in sync so the welcome / invite flow still has a sensible
+    /// default to seed new households.
+    private var householdNameBinding: Binding<String> {
+        Binding(
+            get: {
+                households.preferredTarget?.name ?? householdName
+            },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                householdName = newValue   // keep AppStorage in sync
+                if let h = households.preferredTarget {
+                    h.name = trimmed.isEmpty ? "My Household" : trimmed
+                    try? moc.save()
+                }
+            }
+        )
+    }
+
     private var householdSection: some View {
         section(title: "HOUSEHOLD") {
             VStack(spacing: 0) {
                 fieldRow(title: "Household name") {
-                    TextField("Household name", text: $householdName)
+                    TextField("Household name", text: householdNameBinding)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
                         .multilineTextAlignment(.trailing)
