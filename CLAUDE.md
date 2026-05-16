@@ -698,6 +698,32 @@ Implications:
 
 Asset: `casalist/Assets.xcassets/AppIcon-Dev.appiconset/AppIcon-Dev-1024.png` (generated via ImageMagick — base icon + orange `rgba(255,140,0,0.92)` banner from y=820 to y=1024 + white "DEV" text in Avenir-Bold 150pt anchored to the bottom-center).
 
+To regenerate the Dev icon if it goes missing:
+
+```bash
+cd casalist/Assets.xcassets/AppIcon-Dev.appiconset
+magick ../AppIcon.appiconset/AppIcon-1024.png \
+  -fill 'rgba(255,140,0,0.92)' -draw 'rectangle 0,820 1024,1024' \
+  -fill white -font /System/Library/Fonts/Avenir.ttc -pointsize 150 \
+  -gravity South -annotate +0+10 'DEV' \
+  AppIcon-Dev-1024.png
+```
+
+The Debug build settings (in `casalist.xcodeproj/project.pbxproj`, in the casalist target's Debug XCBuildConfiguration block) that drive the dual-bundle behavior:
+
+```
+PRODUCT_BUNDLE_IDENTIFIER = com.gbrown10.casalist.dev;
+ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Dev";
+INFOPLIST_KEY_CFBundleDisplayName = "Casalist Dev";
+DEVELOPMENT_TEAM = 57Z9HL3SZJ;
+```
+
+The Release block keeps the original bundle ID, icon (`AppIcon`), no display-name key (defaults to "Casalist"), same team. Don't touch Release.
+
+**First-time provisioning gotcha:** When you first introduce the `.dev` bundle ID, `xcodebuild ... -allowProvisioningUpdates` will fail with errors like *"No Accounts: Add a new account in Accounts settings"* and *"Provisioning profile doesn't include the iCloud capability."* That's because the new App ID doesn't exist yet in your developer team and the CLI can't create it from a cold start. Fix: open Xcode GUI once → Settings → Accounts → sign into the Apple ID that owns team `57Z9HL3SZJ` → reopen the project → casalist target → Signing & Capabilities → click into the Debug section so Xcode auto-creates the App ID with iCloud + Push capabilities + the `iCloud.com.gbrown10.casalist` container attached + a dev provisioning profile. After that one GUI pass, CLI builds work normally.
+
+If Xcode's auto-signing blanks `DEVELOPMENT_TEAM = ""` in the Debug config during the GUI pass (it sometimes does when accounts are flaky), put it back to `DEVELOPMENT_TEAM = 57Z9HL3SZJ;` manually.
+
 ### "testflight it" — archive + upload to TestFlight
 
 When Geezy says "testflight it" (or similar):
