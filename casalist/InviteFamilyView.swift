@@ -201,7 +201,11 @@ struct InviteFamilyView: View {
                 share[CKShare.SystemFieldKey.title] = trimmedName as CKRecordValue
                 share.publicPermission = .none
                 preparingShare = false
-                presentCloudSharingController(share: share, container: ckContainer)
+                // Present the standard iOS share sheet with the CKShare URL —
+                // unlike Apple's UICloudSharingController this exposes ALL
+                // share destinations including AirDrop. The CKShare itself
+                // was already saved server-side by the share() call above.
+                presentShareSheet(for: share, container: ckContainer)
                 return
             } catch let error as NSError where error.code == 134410 && attempt < 6 {
                 // Ineligible — record not exported yet. Wait and retry.
@@ -218,15 +222,33 @@ struct InviteFamilyView: View {
     }
 
     @MainActor
-    private func presentCloudSharingController(share: CKShare, container: CKContainer) {
-        let controller = UICloudSharingController(share: share, container: container)
-        controller.availablePermissions = [.allowReadWrite, .allowPrivate]
+    private func presentShareSheet(for share: CKShare, container: CKContainer) {
+        // share.url is populated by NSPersistentCloudKitContainer.share()
+        // after the server save. Poll briefly in the rare case it's still nil.
+        Task { @MainActor in
+            for _ in 0..<10 {
+                if share.url != nil { break }
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            guard let url = share.url else {
+                errorMessage = "Share URL didn't materialize — try again in a moment."
+                return
+            }
+            let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
 
-        guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
-              let window = scene.windows.first(where: { $0.isKeyWindow }),
-              let root = window.rootViewController else { return }
-        var top = root
-        while let presented = top.presentedViewController { top = presented }
-        top.present(controller, animated: true)
+            guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+                  let window = scene.windows.first(where: { $0.isKeyWindow }),
+                  let root = window.rootViewController else { return }
+            var top = root
+            while let presented = top.presentedViewController { top = presented }
+            // For iPad: anchor the popover near the top center so it doesn't
+            // crash on iPad layouts.
+            if let popover = activity.popoverPresentationController {
+                popover.sourceView = top.view
+                popover.sourceRect = CGRect(x: top.view.bounds.midX, y: 60, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            top.present(activity, animated: true)
+        }
     }
 }
