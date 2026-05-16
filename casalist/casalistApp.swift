@@ -28,7 +28,31 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
 
     func application(_ application: UIApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
         Self.appendShareLog("application(_:userDidAcceptCloudKitShareWith:) FIRED")
+        if Self.isKnownBadShare(metadata) {
+            Self.appendShareLog("SKIPPING — this share previously failed acceptance, not retrying")
+            return
+        }
         Self.acceptShare(metadata: metadata)
+    }
+
+    /// Names of CKShare record IDs that previously failed to accept on this
+    /// device. Persisted so we don't loop into Apple's 'Item Unavailable'
+    /// alert on every app launch when iOS keeps re-delivering a dead share.
+    private static let badShareKey = "failedShareRecordIDs"
+
+    static func isKnownBadShare(_ metadata: CKShare.Metadata) -> Bool {
+        let bad = Set(UserDefaults.standard.stringArray(forKey: badShareKey) ?? [])
+        return bad.contains(metadata.share.recordID.recordName)
+    }
+
+    static func markBadShare(_ metadata: CKShare.Metadata) {
+        var bad = Set(UserDefaults.standard.stringArray(forKey: badShareKey) ?? [])
+        bad.insert(metadata.share.recordID.recordName)
+        UserDefaults.standard.set(Array(bad), forKey: badShareKey)
+    }
+
+    static func clearBadShareList() {
+        UserDefaults.standard.removeObject(forKey: badShareKey)
     }
 
     /// NSUbiquitousKeyValueStore key — persists the share URL the user last
@@ -47,10 +71,18 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             }
             return
         }
+        // Bail before calling Apple's framework if we already know this
+        // share can't be accepted — prevents the 'Item Unavailable' alert
+        // from re-firing on every launch.
+        if isKnownBadShare(metadata) {
+            appendShareLog("SKIPPING acceptShareInvitations — known-bad share \(metadata.share.recordID.recordName)")
+            return
+        }
         appendShareLog("calling acceptShareInvitations into store \(sharedStore.identifier)")
         stack.container.acceptShareInvitations(from: [metadata], into: sharedStore) { results, error in
             if let error {
                 appendShareLog("FAILED: \(error)")
+                markBadShare(metadata)
                 // Acceptance failed — most likely the share is gone (owner
                 // stopped sharing, revoked, household deleted, etc.). Purge
                 // the saved URL so we don't loop into Apple's "Item
@@ -140,6 +172,49 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
     /// household for the recipient so the inviter sees them immediately. Pulls
     /// the name from the user's `userName` AppStorage; falls back to "New
     /// member" if not set yet.
+    /// Idempotent foreground self-heal. If the device has accepted a share
+    /// (shared household present) but no live FamilyMember for the user
+    /// exists in it, restore a soft-deleted one or create a fresh one in
+    /// the shared store. Fixes the "I joined but my name doesn't show up
+    /// in the family list" case after an owner deletes the joiner.
+    static func ensureMeInSharedHousehold(userName: String) {
+        let stack = CasaCoreDataStack.shared
+        let context = stack.context
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+
+        let households = (try? context.fetch(Household.fetchRequest())) ?? []
+        guard let shared = households.first(where: { $0.objectID.persistentStore === stack.sharedStore }) else {
+            return  // not joined to anything
+        }
+
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "household == %@ AND name ==[c] %@", shared, trimmed)
+        let matches = (try? context.fetch(req)) ?? []
+        if matches.contains(where: { $0.deletedAtValue == nil }) {
+            return  // already present
+        }
+        if let dead = matches.min(by: { $0.createdAt < $1.createdAt }) {
+            dead.restore()
+            dead.roleLevel = FamilyRole.standard.rawValue
+            UserDefaults.standard.set(dead.uid.uuidString, forKey: "meUid")
+            try? context.save()
+            appendShareLog("ensureMeInSharedHousehold: restored soft-deleted \(trimmed)")
+            return
+        }
+        // No record exists at all — create one in the shared store.
+        let m = FamilyMember(context: context, name: trimmed, role: "Member", colorHex: 0x7AB97D, roleLevel: .standard)
+        context.assign(m, toStoreOf: shared)
+        m.household = shared
+        do {
+            try context.save()
+            UserDefaults.standard.set(m.uid.uuidString, forKey: "meUid")
+            appendShareLog("ensureMeInSharedHousehold: created \(trimmed) in shared store")
+        } catch {
+            appendShareLog("ensureMeInSharedHousehold save error: \(error)")
+        }
+    }
+
     static func addJoinerAsFamilyMember() {
         let stack = CasaCoreDataStack.shared
         let context = stack.context
@@ -158,26 +233,51 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             return
         }
 
-        // Skip if a member with the same name already exists in this household.
+        // Look for an existing same-name member (live OR soft-deleted) in the
+        // shared household. If we find one, reuse it — restoring if necessary
+        // — instead of creating a duplicate. Without this check, a joiner who
+        // was deleted-then-rejoins would either silently fail (when the
+        // soft-deleted record blocks the create) or pile up duplicates.
         let myName = UserDefaults.standard.string(forKey: "userName")?
             .trimmingCharacters(in: .whitespaces) ?? ""
         let displayName = myName.isEmpty ? "New member" : myName
         let memberReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
         memberReq.predicate = NSPredicate(format: "household == %@ AND name ==[c] %@", shared, displayName)
         if let existing = try? context.fetch(memberReq), !existing.isEmpty {
-            appendShareLog("addJoinerAsFamilyMember: \(displayName) already in shared household")
+            // Prefer a live record; fall back to restoring a soft-deleted one.
+            let live = existing.first(where: { $0.deletedAtValue == nil })
+            let target = live ?? existing.min(by: { $0.createdAt < $1.createdAt })!
+            if target.deletedAtValue != nil {
+                target.restore()
+                appendShareLog("addJoinerAsFamilyMember: restored soft-deleted \(displayName)")
+            }
+            target.roleLevel = FamilyRole.standard.rawValue
+            UserDefaults.standard.set(target.uid.uuidString, forKey: "meUid")
+            try? context.save()
             return
         }
 
-        let m = FamilyMember(context: context, name: displayName, role: "Member", colorHex: 0x7AB97D)
+        // Joiners always come in as .standard. Owner is reserved for the
+        // share creator; if this device had an "owner" FamilyMember from a
+        // previous solo household, that role doesn't carry into the new one.
+        let m = FamilyMember(context: context, name: displayName, role: "Member", colorHex: 0x7AB97D, roleLevel: .standard)
         context.assign(m, toStoreOf: shared)
         m.household = shared
+
+        // Demote any pre-existing same-name FamilyMember records on this
+        // device so they can't reintroduce the owner role through dedupe.
+        let priorReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        priorReq.predicate = NSPredicate(format: "name ==[c] %@ AND deletedAt == nil AND SELF != %@", displayName, m)
+        for prior in (try? context.fetch(priorReq)) ?? [] {
+            prior.roleLevel = FamilyRole.standard.rawValue
+        }
+
         do {
             try context.save()
             // Claim this member as "me" so the name prompt can rename it later
             // if the user joined before setting their name.
             UserDefaults.standard.set(m.uid.uuidString, forKey: "meUid")
-            appendShareLog("addJoinerAsFamilyMember: added \(displayName) to shared household (meUid claimed)")
+            appendShareLog("addJoinerAsFamilyMember: added \(displayName) to shared household (meUid claimed, role=standard)")
         } catch {
             appendShareLog("addJoinerAsFamilyMember save error: \(error)")
         }
@@ -297,6 +397,12 @@ struct CasalistApp: App {
                 // reinstall-race "two me" pattern.
                 try? await Task.sleep(for: .milliseconds(1500))
                 FamilyDedupe.mergeDuplicateMeRecords(in: stack.context, userName: userName)
+                FamilyDedupe.mergeSameNameDupesInHousehold(in: stack.context)
+                // Joiner self-heal: if we're in a shared household but our
+                // own FamilyMember isn't there (got soft-deleted on the owner
+                // side, or never created in the shared store), restore /
+                // create it so we stay visible in the family list.
+                CasalistAppDelegate.ensureMeInSharedHousehold(userName: userName)
             }
             if notificationsEnabled {
                 Task {

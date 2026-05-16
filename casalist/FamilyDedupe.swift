@@ -69,4 +69,63 @@ enum FamilyDedupe {
         try? context.save()
         return removed
     }
+
+    /// Merges any same-name FamilyMember dupes within the same household.
+    /// Two members with identical names in one household are virtually
+    /// always sync artifacts (joiner auto-created during share accept +
+    /// the synced original). Keeps the record with the highest role
+    /// priority, falling back to oldest createdAt.
+    @discardableResult
+    static func mergeSameNameDupesInHousehold(in context: NSManagedObjectContext) -> Int {
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        let all = (try? context.fetch(req)) ?? []
+        var removed = 0
+        let priority: [String: Int] = ["owner": 3, "admin": 2, "standard": 1, "kid": 0]
+
+        // Group by (householdID, lowercased name).
+        var groups: [String: [FamilyMember]] = [:]
+        for m in all {
+            let hid = m.household?.uid.uuidString ?? "_none"
+            let key = "\(hid)|\(m.name.trimmingCharacters(in: .whitespaces).lowercased())"
+            groups[key, default: []].append(m)
+        }
+
+        let meUid = UserDefaults.standard.string(forKey: "meUid") ?? ""
+        let sharedStore = CasaCoreDataStack.shared.sharedStore
+        for (_, group) in groups where group.count > 1 {
+            // Survivor priority:
+            //   1. In the SHARED store (so it actually syncs to other devices)
+            //   2. Higher role
+            //   3. Older createdAt
+            // The role from the dropped record transfers onto the survivor
+            // below — we don't lose the "owner" label, just move it.
+            let survivor = group.max(by: { a, b in
+                let aShared = a.objectID.persistentStore === sharedStore
+                let bShared = b.objectID.persistentStore === sharedStore
+                if aShared != bShared { return !aShared && bShared }
+                let ap = priority[a.roleLevel] ?? 1
+                let bp = priority[b.roleLevel] ?? 1
+                if ap != bp { return ap < bp }
+                return a.createdAt > b.createdAt   // older wins
+            })!
+            for m in group where m !== survivor {
+                if survivor.photoBlob == nil, let blob = m.photoBlob, !blob.isEmpty {
+                    survivor.photoBlob = blob
+                }
+                if m.points > survivor.points { survivor.points = m.points }
+                let sPri = priority[survivor.roleLevel] ?? 1
+                let mPri = priority[m.roleLevel] ?? 1
+                if mPri > sPri { survivor.roleLevel = m.roleLevel }
+                m.softDelete()
+                removed += 1
+            }
+            // If the deleted record was meUid, re-claim onto survivor.
+            if group.contains(where: { $0.uid.uuidString == meUid }) {
+                UserDefaults.standard.set(survivor.uid.uuidString, forKey: "meUid")
+            }
+        }
+        if removed > 0 { try? context.save() }
+        return removed
+    }
 }

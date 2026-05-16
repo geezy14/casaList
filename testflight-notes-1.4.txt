@@ -1,0 +1,14 @@
+What's New
+- AirDrop is now the primary way to invite family. Tap "AirDrop", bring the other phone close, drop the invite.
+
+What's Fixed
+- The big one: invite links now actually work. Recipients no longer hit "Item Unavailable" when accepting a share. (Public permissions on the CKShare were locked down, blocking everyone with the link.)
+- Joiners come in as Standard, not Owner. Owner is reserved for the share creator.
+- If your name was deleted from the family list on another device, opening the app on yours restores it automatically.
+- Duplicate "me" records on reinstall are merged with shared-store preference, so your name actually syncs to the rest of the household.
+- Duplicate households on the owner device can be merged from Settings → Developer.
+
+What to Test
+- Send an AirDrop invite from one phone to another (different Apple IDs). Recipient should accept cleanly and appear in the family list on both devices within 30 seconds.
+- Reinstall on the joiner device with the same iCloud account. Open the app — your name should auto-restore.
+- Have the owner delete the joiner from the family list. Joiner reopens the app — name comes back.

@@ -597,6 +597,155 @@ struct SettingsView: View {
     /// non-owner with read-only permission to read-write so their writes
     /// actually flow back to the owner. Saves the modified share via
     /// CKModifyRecordsOperation on the private DB.
+    /// Force the current user's FamilyMember role to standard. Used when
+    /// a joiner imported "owner" role from their pre-share local record.
+    private func demoteMeToStandard() {
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            wipeMessage = "Set your name first."
+            return
+        }
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil AND name ==[c] %@", trimmed)
+        let matches = (try? moc.fetch(req)) ?? []
+        guard !matches.isEmpty else {
+            wipeMessage = "No FamilyMember matching '\(trimmed)'."
+            return
+        }
+        for m in matches { m.roleLevel = FamilyRole.standard.rawValue }
+        do {
+            try moc.save()
+            wipeMessage = "Set \(matches.count) record(s) to standard. Should sync to other devices."
+        } catch {
+            wipeMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Recreates the current user's FamilyMember in the shared store so it
+    /// syncs to the share owner. Used when the device joined a share but
+    /// the surviving "me" record is still in the local private store and
+    /// therefore invisible on other devices.
+    private func moveMeIntoSharedStore() {
+        let stack = CasaCoreDataStack.shared
+        guard let shared = households.first(where: { $0.objectID.persistentStore == stack.sharedStore }) else {
+            wipeMessage = "No shared household — accept an invite first."
+            return
+        }
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            wipeMessage = "Set your name first (Settings → Profile)."
+            return
+        }
+        // Find the existing me-ish record in the private store.
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil AND name ==[c] %@", trimmed)
+        let matches = (try? moc.fetch(req)) ?? []
+        let privateMe = matches.first(where: { $0.objectID.persistentStore == stack.privateStore })
+        let sharedMe = matches.first(where: { $0.objectID.persistentStore == stack.sharedStore })
+
+        if sharedMe != nil && privateMe == nil {
+            wipeMessage = "Already in shared store. Nothing to do."
+            return
+        }
+
+        // Create a fresh FamilyMember in the shared store carrying the
+        // private-store record's role/photo/points.
+        let source = privateMe
+        // Joiners always come in as .standard regardless of what role they
+        // had in their pre-share local household.
+        let new = FamilyMember(context: moc,
+                               name: trimmed,
+                               role: source?.role ?? "Member",
+                               colorHex: Int(source?.colorHex ?? 0x7AB97D),
+                               roleLevel: .standard)
+        moc.assign(new, toStoreOf: shared)
+        new.household = shared
+        if let blob = source?.photoBlob { new.photoBlob = blob }
+        if let pts = source?.points { new.points = pts }
+
+        // Soft-delete the private one. Re-claim meUid onto the new shared one.
+        source?.softDelete()
+        UserDefaults.standard.set(new.uid.uuidString, forKey: "meUid")
+        do {
+            try moc.save()
+            wipeMessage = "Created \(trimmed) in shared store. It should appear on the other device within ~30s."
+        } catch {
+            wipeMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Collapses duplicate private households into one. Keeps the household
+    /// with the most live FamilyMembers (or oldest createdAt as tiebreaker)
+    /// and re-parents members/tasks/goals/events from the rest before
+    /// soft-deleting them.
+    private func mergeDuplicateHouseholds() {
+        let stack = CasaCoreDataStack.shared
+        let privates = households.filter { $0.objectID.persistentStore == stack.privateStore }
+        guard privates.count > 1 else {
+            wipeMessage = "Only one private household — nothing to merge."
+            return
+        }
+        func liveMemberCount(_ h: Household) -> Int {
+            (h.members as? Set<FamilyMember>)?.filter { $0.deletedAt == nil }.count ?? 0
+        }
+        // Survivor = most members, then oldest.
+        let survivor = privates.max(by: { a, b in
+            let am = liveMemberCount(a), bm = liveMemberCount(b)
+            if am != bm { return am < bm }
+            return a.createdAt > b.createdAt
+        })!
+        var moved = 0
+        for h in privates where h !== survivor {
+            for m in (h.members as? Set<FamilyMember>) ?? [] { m.household = survivor; moved += 1 }
+            for t in (h.tasks as? Set<TaskItem>) ?? [] { t.household = survivor; moved += 1 }
+            for g in (h.goals as? Set<FamilyGoal>) ?? [] { g.household = survivor; moved += 1 }
+            for e in (h.events as? Set<FamilyEvent>) ?? [] { e.household = survivor; moved += 1 }
+            h.softDelete()
+        }
+        do {
+            try moc.save()
+            wipeMessage = "Merged \(privates.count) households → 1. Re-parented \(moved) records. Now tap 'Reset share' then re-invite."
+        } catch {
+            wipeMessage = "Merge save failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Deletes the existing CKShare on the owner's private household so the
+    /// next "Invite family" call creates a fresh share. Use when the existing
+    /// share is in a bad state and recipients hit "Item Unavailable".
+    private func resetOwnerShare() {
+        let stack = CasaCoreDataStack.shared
+        guard let mine = households.first(where: { $0.objectID.persistentStore == stack.privateStore }) else {
+            wipeMessage = "No private household to reset."
+            return
+        }
+        let shareMap: [NSManagedObjectID: CKShare]
+        do {
+            shareMap = try stack.container.fetchShares(matching: [mine.objectID])
+        } catch {
+            wipeMessage = "fetchShares failed: \(error.localizedDescription)"
+            return
+        }
+        guard let share = shareMap[mine.objectID] else {
+            wipeMessage = "No existing share — next invite will create a fresh one."
+            return
+        }
+        let ck = CKContainer(identifier: casalistCloudKitContainerID)
+        let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: [share.recordID])
+        op.qualityOfService = .userInitiated
+        op.modifyRecordsResultBlock = { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    wipeMessage = "Old share deleted. Open Invite family → AirDrop to send a fresh link."
+                case .failure(let err):
+                    wipeMessage = "Delete share failed: \(err.localizedDescription)"
+                }
+            }
+        }
+        ck.privateCloudDatabase.add(op)
+    }
+
     private func inspectAndFixShare() {
         let stack = CasaCoreDataStack.shared
         guard let mine = households.first(where: { $0.objectID.persistentStore == stack.privateStore }) else {
@@ -1073,7 +1222,24 @@ struct SettingsView: View {
                     let kv = NSUbiquitousKeyValueStore.default
                     kv.removeObject(forKey: CasalistAppDelegate.lastShareURLKey)
                     kv.synchronize()
-                    wipeMessage = "Cleared saved share URL. Restart the app — the 'Item Unavailable' loop should be gone."
+                    CasalistAppDelegate.clearBadShareList()
+                    wipeMessage = "Cleared saved share URL + bad-share cache. Restart the app."
+                }
+                divider
+                actionButton("Reset share (owner) — delete existing CKShare") {
+                    resetOwnerShare()
+                }
+                divider
+                actionButton("Merge duplicate households") {
+                    mergeDuplicateHouseholds()
+                }
+                divider
+                actionButton("Move me into shared store") {
+                    moveMeIntoSharedStore()
+                }
+                divider
+                actionButton("Demote me to standard") {
+                    demoteMeToStandard()
                 }
                 divider
                 Button(role: .destructive) { confirmWipe = true } label: {

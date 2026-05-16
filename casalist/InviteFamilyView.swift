@@ -40,7 +40,7 @@ struct InviteFamilyView: View {
                         } label: {
                             HStack(spacing: 8) {
                                 if preparingShare && nextShareIsAirDropOnly { ProgressView().tint(.white) }
-                                Label("Drop to nearby phone", systemImage: "iphone.radiowaves.left.and.right")
+                                Label("AirDrop", systemImage: "iphone.radiowaves.left.and.right")
                                     .font(.system(size: 17, weight: .heavy))
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
@@ -228,12 +228,33 @@ struct InviteFamilyView: View {
             do {
                 let (_, share, ckContainer) = try await stack.container.share([household], to: nil)
                 share[CKShare.SystemFieldKey.title] = trimmedName as CKRecordValue
-                share.publicPermission = .none
+                // Anyone with the link can join. Required for AirDrop/Messages
+                // invites where we don't pre-add the recipient as a participant.
+                // Without this CloudKit returns "Item Unavailable" on accept.
+                share.publicPermission = .readWrite
+                // Persist publicPermission + title back to the server. share()
+                // saved the initial CKShare but our subsequent mutations need
+                // an explicit modify-records call or recipients see the old
+                // locked-down version.
+                do {
+                    let op = CKModifyRecordsOperation(recordsToSave: [share], recordIDsToDelete: nil)
+                    op.qualityOfService = .userInitiated
+                    op.savePolicy = .changedKeys
+                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                        op.modifyRecordsResultBlock = { result in
+                            switch result {
+                            case .success: cont.resume()
+                            case .failure(let err): cont.resume(throwing: err)
+                            }
+                        }
+                        ckContainer.privateCloudDatabase.add(op)
+                    }
+                } catch {
+                    preparingShare = false
+                    errorMessage = "Could not save share permission: \(error.localizedDescription)"
+                    return
+                }
                 preparingShare = false
-                // Present the standard iOS share sheet with the CKShare URL —
-                // unlike Apple's UICloudSharingController this exposes ALL
-                // share destinations including AirDrop. The CKShare itself
-                // was already saved server-side by the share() call above.
                 presentShareSheet(for: share, container: ckContainer)
                 return
             } catch let error as NSError where error.code == 134410 && attempt < 6 {
