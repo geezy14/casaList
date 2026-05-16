@@ -6,6 +6,42 @@ Newest version at top.
 
 ---
 
+## v2.0 — Design refresh + bigger reworks (parked)
+
+The first major version cut since 1.0. Two themes: a visual refresh on **Casa Glass** design language, plus the bigger reworks that have been accumulating in `docs/v2-backlog.md`.
+
+### Casa Glass design language
+
+Adopt the shared `CasaGlassKit` Swift package (used by casabills2) to give Casalist its v2 visual identity. Casaglass3 is the frozen standard — we use what the kit ships, no in-place modifications.
+
+- `AppBackgroundView` at the root for gradient + user-picked photo background (with the 8 built-in gradient presets).
+- `.casaCard()` modifier replacing the current `RoundedRectangle(...).fill(P.surface).overlay(stroke)` chrome on every card.
+- `BackgroundImageStore` for photo persistence.
+- AppStorage keys the kit expects: `glassEnabled` (Bool), `customBgEnabled` (Bool), `customBgRevision` (Int), optionally `appBackground` (String).
+- Settings → APPEARANCE gets a "Glass UI" toggle + background photo picker.
+
+Start as a pilot — apply to one or two surfaces first (dashboard tiles, family card) to see how it lands before doing a full sweep. Then full migration.
+
+### Major rework tracks (from v2 backlog)
+
+Detailed in [`docs/v2-backlog.md`](v2-backlog.md):
+
+- **Notification scheduling rework + Skip-next-occurrence** — Swap repeating triggers for rolling one-shots so we can cancel a specific instance. Unlocks Skip, accurate quiet-hours, "next 3 fires" preview.
+- **Rewards overhaul** — Replace placeholder inbox tray icon, smoother goal request/approval flow, hero-goal view for kids.
+- **Starfield (kid mode) overhaul** — Age-aware variants, integration with Personal Stats Card, theme/palette options.
+- **Personal Stats Card** — Baseball-card-style trophy view on dashboard photo tap. Lifetime + season-to-date stats, shareable as image.
+- **Family-wide stats view** — Household rollup companion to Personal Card.
+- **Kick member flow** — Finish the parked 1.5 work. `share.removeParticipant` + soft-delete + confirm dialog.
+- **Two-way Apple Reminders sync** — Completing in Apple Reminders.app marks done in Casalist.
+- **App-icon badge count** — Pending-reminder count on the home-screen icon.
+- **Photo sync verification** — Re-test cross-account FamilyMember.photoBlob sync now that schema is in Prod.
+
+### v2 candidates from original sketch notes
+
+- **AI chat** — Natural-language task creation ("remind me to take the trash out Tuesday at 8") and family Q&A ("when's soccer practice next?"). Probably its own version line within v2, or a feature flag inside 2.0.
+
+---
+
 ## v1.9 — Search + Calendar + Watch (parked)
 
 Pulled out of 1.7's "what else can we add" pass because each is meaty enough to deserve its own ship.
