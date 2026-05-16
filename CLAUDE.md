@@ -787,6 +787,12 @@ When Geezy says "testflight it" (or similar):
 
    **Length cap too: keep `whatsNew` under ~4000 chars.** Apple's API returns `409 ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG` when the field is too long. 1.7's initial notes hit this at 4673 chars; trimming to 3114 cleared it. Safe target: < 3500 chars. Use the `wc -c testflight-notes-*.txt` check before uploading.
 
+   **Style rule — keep "What's New" short.** Geezy's preference (logged 2026-05-16):
+   - Highlight the headline features only. Skip minor bug fixes unless Geezy explicitly asks to call one out.
+   - Aim for ~1500–2000 chars max. Testers scan, not read; long notes get ignored.
+   - One-line bullet per feature is fine. No need to explain every chip in the icon strip.
+   - "What to test" section is welcome (helps your home-group testers focus their feedback), but keep it to 4-6 lines.
+
 ### ExportOptions.plist
 
 Should live at the project root. Required contents:
