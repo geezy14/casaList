@@ -24,6 +24,147 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
+### 2026-05-16 — Post-1.5 feature stack staged for next TF (no schema deploy needed)
+Long all-night session after 1.5 shipped. Everything below is in
+local commits on `main` ready to ship; no TF push yet, per Geezy's
+"I'll tell you when" rule. **No schema changes in this batch** so
+the next TF can go out without another CloudKit deploy. Highlights:
+
+**Notifications suite (A–D from Geezy's pick list).**
+- Daily morning briefing (`NotificationsManager.scheduleDailyBriefing`)
+  — once-a-day roll-up of today's chores + events + pending reward
+  requests at user-configurable hour
+- Quiet hours — non-critical pushes (assignments, reward requests,
+  redemptions, grocery activity, status pings) suppressed during a
+  user-defined window. Per-task due-date reminders + daily briefing
+  bypass the suppression
+- Grocery activity push — when another device adds a grocery item,
+  this device pushes "🛒 [name] added to the grocery list — [item]"
+  via `detectAndNotifyGroceryActivity`. Fix included: dashboard's
+  `addInlineItem` was using `allTasks.first?.household` which
+  returned nil for empty households and orphaned items — switched
+  to `households.preferredTarget`
+- Recurring event push — `scheduleEvent(for:)` was a model field
+  without a hook. Now wired so daily/weekly/monthly/yearly events
+  fire via repeating `UNCalendarNotificationTrigger`
+- Reward request push — already shipping pre-session, just confirmed
+- Status pings — "Ping family" megaphone button on Family tab top
+  bar opens `StatusPingSheet` with 6 quick-send presets (🚗 On my way,
+  🛒 At the store, etc.) + custom message. Storage: a TaskItem with
+  `category = "statusping"` syncs via CloudKit; receivers fire
+  "📣 [sender] — [msg]" pushes via `detectAndNotifyStatusPings`
+- All notification toggles re-wired in Settings via
+  `NotificationsSettingsSection` (isolated View struct so the iOS 26
+  metadata demangler stays happy)
+
+**Custom repeat picker.**
+`RepeatRule` struct encodes JSON inside the existing `repeatKind`
+string (`custom:{"i":2,"u":"w","d":6}` → every other Friday).
+`CustomRepeatPicker` sheet binds interval (1–12) + unit (minutes /
+hours / days / weeks / months) + optional weekday. Both
+`AddReminderView` and `AddEventView` get a "Custom…" entry that
+opens it. Notification scheduler handles all combinations: hours/
+minutes use `UNTimeIntervalNotificationTrigger`, days/weeks at
+interval 1 use repeating calendar triggers, intervals ≥ 2 are
+one-shot calendar triggers that reschedule themselves after firing
+(iOS calendar triggers can't do "every N days" repeating natively).
+
+**Task detail polish.**
+- 🙋 Claim pill on unassigned chores (next to the 10pt pill in the
+  header). Tap → assigns to you, pill vanishes.
+- Confetti celebration wired to Mark done in TaskDetailView. The
+  static-star ⭐ overlay was rebuilt — `CelebrationOverlay` now
+  spawns 20 rotating stars bursting outward via `.onAppear` (the
+  original `.onChange(of: visible)` hook never fired because the
+  overlay only exists DURING `visible == true`). Pill removed since
+  points are already shown in the task header.
+
+**Live location sharing (Option A).**
+- Settings → Privacy → "Share my location with family" toggle.
+  Uses `CLLocationManager.startUpdatingLocation()` with
+  `kCLLocationAccuracyBest` + 10m distanceFilter. Apple's "significant
+  changes" mode was too coarse (~500m, two phones in the same house
+  showed hundreds of feet apart).
+- Writes throttled (≥10m moved OR ≥30s elapsed) to keep battery +
+  CloudKit overhead reasonable. Drops bad fixes (negative accuracy,
+  stale >10s, accuracy >100m).
+- New `FamilyMember` schema fields (`latitude`, `longitude`,
+  `locationUpdatedAt`, `isSharingLocation`) — Production CloudKit
+  deploy required before TF.
+- Family tab → 📍 pin button opens `FamilyMapView` showing every
+  sharing member as a pin with avatar + "now / 3m / 2h" age label.
+- Info.plist: NSLocationWhenInUseUsageDescription +
+  NSLocationAlwaysAndWhenInUseUsageDescription + UIBackgroundModes
+  location.
+
+**Manual location ping (Option C) — built then hidden.**
+One-shot GPS fix attached to a ping. Push tap → opens Apple Maps
+centered on sender's coord. Worked but tap-to-Maps was unreliable
+in testing; gated behind `shareLocationEnabled = false` flag in
+`StatusPingSheet`. Live-share covers the same use case.
+
+**Apple Calendar link (Option 1+2 — `CalendarLinkService.swift`).**
+- Settings → SCHEDULE picks an Apple Calendar via EventKit. Mirror
+  push: every FamilyEvent created/edited in Casalist is written as
+  an EKEvent in that calendar with the prefix "Casalist:" in notes.
+- Read-only display: that calendar's events appear at the bottom of
+  Casalist's Schedule view in a "FROM YOUR APPLE CALENDAR 🍎"
+  section, color-tinted by the calendar's color. Filtered to drop
+  our own mirrors (notes prefix check) so events don't double-up.
+- Per-device — each device decides what to mirror via its own
+  `calendarLinkID` AppStorage. Mapping (FamilyEvent.uid → EKEvent
+  identifier) lives in UserDefaults so CloudKit doesn't have to
+  know about EventKit identifiers.
+- One-way only by design — deleting from Apple Calendar leaves the
+  Casalist event intact. Geezy's explicit call. Reverse-delete
+  detector is in the bullpen if we change our mind.
+- Info.plist: NSCalendarsFullAccessUsageDescription. iOS 17+ uses
+  `requestFullAccessToEvents`; pre-17 falls back to legacy.
+
+**Family tab overhaul.**
+- Inline quick-add bar at top (mirrors Grocery)
+- AGENDA section — horizontal scrolling tiles, dashboard style
+- OUTINGS section — `AddFamilyTripView` creates a parent TaskItem
+  (category=family, dueDate set) that nests child items via
+  `parentUid`. Per-card inline "Add a task to this outing…" field
+- + button now opens the outing creator instead of single-item add
+- Everything tap-to-edit via `TaskDetailView`
+- Hero badge + dashboard tile share the same "loose unclaimed
+  non-trip" filter via `isFamilyUpForGrabs(_:)` — was previously
+  off by the outing itself
+- Claim semantics: outings + nested items never claimable.
+  `canDelete` rule tightened to `iAmAdmin || iAddedIt`
+
+**Announcements (banner on Family tab).**
+- Custom announcements get an Expires picker
+  (`AnnouncementExpiry` enum: Push-only / 15 min / 1 hr / 4 hr /
+  8 hr / until tomorrow). When set, the message shows as a big
+  peach→coral gradient banner at the top of every household
+  member's Family tab. Auto-disappears at expiry via
+  `dueDate > now` filter.
+- Sender taps banner (pencil icon affordance) → StatusPingSheet
+  opens in edit mode (`init editing:`). Save commits text + new
+  expiry; Delete soft-deletes. Receivers can't edit — only the
+  original sender.
+
+**Side-quest crash fixes still in scope.**
+- `CloudBackup.snapshot` switched from `stack.context` on a global
+  queue → `container.newBackgroundContext()` + `.perform`. Apple's
+  documented thread-affine context rule.
+- Auto-rejoin URL only cleared on permanent CloudKit errors
+  (`.unknownItem`, `.permissionFailure`, `.invalidArguments`,
+  `.badContainer`, `.participantMayNeedVerification`). Network +
+  account-temporarily-unavailable errors preserve it via
+  `shouldClearSavedShareURL(after:)`.
+- `Nuke ALL local data` dev button now also clears userName +
+  householdName so the welcome screen actually shows on reopen.
+
+**Schema deploy needed before TF:** the `FamilyMember` location
+fields (latitude / longitude / locationUpdatedAt / isSharingLocation).
+Already in Dev (auto-registered via Debug writes); needs Dashboard
+"Deploy Schema Changes…" promote to Production. Script:
+`scripts/cloudkit-schema-diff.sh` confirms the delta.
+
 ### 2026-05-15 — TestFlight 1.5: identity rebuild on CKUserID + crash trio fixed
 Long debug session. Started chasing a duplicate "Dakoda" record on the
 joiner side that wouldn't dedupe; ended up rebuilding the identity
