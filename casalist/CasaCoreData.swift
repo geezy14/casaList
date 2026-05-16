@@ -296,6 +296,17 @@ final class CasaCoreDataStack {
             // minute-of-day. Schema redeploy required before this syncs in
             // Production.
             attr("repeatEndMinutes", .integer64AttributeType, def: 0),
+            // Location-based reminders. radius == 0 means no location
+            // trigger (the default). When radius > 0 the reminder fires
+            // a local notification on region enter (locationOnArrive)
+            // or exit. Coords are CL degrees. locationName is the
+            // human label shown in the form ("Home", "Work", etc.).
+            // Schema redeploy required before these sync in Production.
+            attr("locationLat", .doubleAttributeType, def: 0.0),
+            attr("locationLng", .doubleAttributeType, def: 0.0),
+            attr("locationRadius", .doubleAttributeType, def: 0.0),
+            attr("locationOnArrive", .booleanAttributeType, def: true),
+            attr("locationName", .stringAttributeType, def: ""),
         ]
 
         // ------- FamilyGoal attributes -------

@@ -96,6 +96,30 @@ enum NotificationsManager {
         let dueDate = task.dueDate
         let endMinutes = task.repeatEndMinutes
         let isCompleted = task.isCompleted
+        let taskUid = task.uid
+        let category = task.category.lowercased()
+        let assignee = (task.assignee ?? "").trimmingCharacters(in: .whitespaces)
+
+        // Per-person reminders: only the device whose user owns the
+        // reminder schedules a local notification. Empty assignee
+        // means "everyone" — every household device schedules its own
+        // copy. Only applies to reminders; chores keep their existing
+        // assignment semantics elsewhere in the codebase.
+        if category == "reminders" && !assignee.isEmpty {
+            let me = UserDefaults.standard.string(forKey: "userName")?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            if !me.isEmpty && me.lowercased() != assignee.lowercased() {
+                // Cancel any stale pending notifications for this task
+                // before bailing — the reminder may have been
+                // reassigned away from this user.
+                let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
+                let toCancel = pending.map(\.identifier).filter { $0.hasPrefix(baseId) }
+                if !toCancel.isEmpty {
+                    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: toCancel)
+                }
+                return
+            }
+        }
 
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
@@ -117,11 +141,73 @@ enum NotificationsManager {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            content.sound = .default
+            // Reminders get action buttons (Mark done / Snooze) on the
+            // lock screen via the REMINDER_FIRE category registered in
+            // CasalistAppDelegate.registerReminderActions. Sound is
+            // device-local: ReminderSoundStore tracks per-uid silence.
+            if category == "reminders" {
+                content.categoryIdentifier = "REMINDER_FIRE"
+                content.userInfo = ["taskUid": taskUid]
+                content.sound = ReminderSoundStore.playsSound(for: taskUid) ? .default : nil
+            } else {
+                content.sound = .default
+            }
             let id = "\(baseId)-\(suffix)"
             let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
             try? await center.add(request)
         }
+    }
+
+    // MARK: – Daily reminder recap
+
+    /// Schedules tonight's recap push at the user-configured hour
+    /// (default 21:00). Pulls the day's reminder activity from
+    /// `ReminderHistory` and bakes a one-shot calendar-trigger
+    /// notification with the summary. Call from app launch and
+    /// after any meaningful state change.
+    @MainActor
+    static func scheduleReminderRecap() async {
+        let enabled = UserDefaults.standard.object(forKey: "reminderRecapEnabled") as? Bool ?? false
+        let center = UNUserNotificationCenter.current()
+        let id = "reminder-recap"
+        let pending = await center.pendingNotificationRequests()
+        if pending.contains(where: { $0.identifier == id }) {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+        }
+        guard enabled else { return }
+
+        let hour = UserDefaults.standard.object(forKey: "reminderRecapHour") as? Int ?? 21
+        let minute = UserDefaults.standard.object(forKey: "reminderRecapMinute") as? Int ?? 0
+        let cal = Calendar.current
+        guard let target = cal.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) else { return }
+        // If we're past today's target time already, push to tomorrow.
+        let fireDate = target > Date() ? target : (cal.date(byAdding: .day, value: 1, to: target) ?? target)
+
+        let entries = ReminderHistory.load().filter {
+            cal.isDateInToday($0.timestamp)
+        }
+        let doneCount = entries.filter { $0.action == .markedDone }.count
+        let firedCount = entries.filter { $0.action == .fired }.count
+        let snoozedCount = entries.filter { $0.action == .snoozed }.count
+
+        let content = UNMutableNotificationContent()
+        content.title = "Today's reminders"
+        if entries.isEmpty {
+            content.body = "Nothing fired today — a quiet day."
+        } else {
+            var parts: [String] = []
+            if doneCount > 0 { parts.append("✅ \(doneCount) done") }
+            if firedCount > 0 { parts.append("🔔 \(firedCount) fired") }
+            if snoozedCount > 0 { parts.append("🌙 \(snoozedCount) snoozed") }
+            content.body = parts.joined(separator: " · ")
+        }
+        content.sound = .default
+
+        var comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+        comps.second = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        try? await center.add(req)
     }
 
     private static func computeTriggers(kind: String, dueDate: Date?, now: Date, endMinutes: Int64 = 0) -> [(String, UNNotificationTrigger)] {
@@ -168,6 +254,15 @@ enum NotificationsManager {
                     return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
                 }
                 let next = cal.date(byAdding: .month, value: rule.interval, to: max(due, now)) ?? due
+                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
+            case .year:
+                guard let due = dueDate else { return [] }
+                if rule.interval == 1 {
+                    let c = cal.dateComponents([.month, .day, .hour, .minute], from: due)
+                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+                }
+                let next = cal.date(byAdding: .year, value: rule.interval, to: max(due, now)) ?? due
                 let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
                 return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
             }
@@ -500,6 +595,15 @@ enum NotificationsManager {
                     trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
                 } else {
                     let next = cal.date(byAdding: .month, value: rule.interval, to: max(event.startDate, Date())) ?? event.startDate
+                    let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+                }
+            case .year:
+                if rule.interval == 1 {
+                    let dc = cal.dateComponents([.month, .day, .hour, .minute], from: event.startDate)
+                    trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                } else {
+                    let next = cal.date(byAdding: .year, value: rule.interval, to: max(event.startDate, Date())) ?? event.startDate
                     let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
                     trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
                 }

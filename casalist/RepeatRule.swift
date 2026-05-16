@@ -18,6 +18,7 @@ struct RepeatRule: Codable, Equatable {
         case day = "d"
         case week = "w"
         case month = "m"
+        case year = "y"
 
         var label: String {
             switch self {
@@ -26,6 +27,7 @@ struct RepeatRule: Codable, Equatable {
             case .day:    return "Days"
             case .week:   return "Weeks"
             case .month:  return "Months"
+            case .year:   return "Years"
             }
         }
         var singular: String {
@@ -35,6 +37,7 @@ struct RepeatRule: Codable, Equatable {
             case .day:    return "day"
             case .week:   return "week"
             case .month:  return "month"
+            case .year:   return "year"
             }
         }
     }
@@ -62,6 +65,7 @@ struct RepeatRule: Codable, Equatable {
         case .day:    nounPlural = interval == 1 ? "day"    : "days"
         case .week:   nounPlural = interval == 1 ? "week"   : "weeks"
         case .month:  nounPlural = interval == 1 ? "month"  : "months"
+        case .year:   nounPlural = interval == 1 ? "year"   : "years"
         }
         var s = interval == 1 ? "Every \(nounPlural.dropFirst(0))" : "Every \(interval) \(nounPlural)"
         // Simpler phrasing for "Every 1 X":
@@ -97,5 +101,52 @@ struct RepeatRule: Codable, Equatable {
         let json = String(raw.dropFirst("custom:".count))
         guard let data = json.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(RepeatRule.self, from: data)
+    }
+
+    /// Map a legacy preset string ("daily", "hourly", "every2h", …) to
+    /// an equivalent RepeatRule. Returns nil for unknown strings. Used
+    /// by the picker to pre-fill its UI state when editing a reminder
+    /// that was created before the custom sheet existed.
+    static func fromLegacy(_ raw: String) -> RepeatRule? {
+        switch raw {
+        case "hourly":   return RepeatRule(interval: 1,  unit: .hour,  weekday: nil)
+        case "every2h":  return RepeatRule(interval: 2,  unit: .hour,  weekday: nil)
+        case "every4h":  return RepeatRule(interval: 4,  unit: .hour,  weekday: nil)
+        case "every8h":  return RepeatRule(interval: 8,  unit: .hour,  weekday: nil)
+        case "every12h": return RepeatRule(interval: 12, unit: .hour,  weekday: nil)
+        case "daily":    return RepeatRule(interval: 1,  unit: .day,   weekday: nil)
+        case "weekly":   return RepeatRule(interval: 1,  unit: .week,  weekday: nil)
+        case "monthly":  return RepeatRule(interval: 1,  unit: .month, weekday: nil)
+        case "yearly":   return RepeatRule(interval: 1,  unit: .year,  weekday: nil)
+        default:         return nil
+        }
+    }
+
+    /// If the rule matches one of the legacy preset shapes, return that
+    /// string so callers can store it as the existing repeatKind value
+    /// (preserves all the existing `repeatKind == "hourly"` filters,
+    /// notification scheduling paths, etc.). Returns nil when the rule
+    /// only expresses as a `custom:…` JSON blob.
+    var legacyEquivalent: String? {
+        if weekday != nil { return nil }   // weekday-specific rules are always custom
+        switch (unit, interval) {
+        case (.hour, 1):   return "hourly"
+        case (.hour, 2):   return "every2h"
+        case (.hour, 4):   return "every4h"
+        case (.hour, 8):   return "every8h"
+        case (.hour, 12):  return "every12h"
+        case (.day, 1):    return "daily"
+        case (.week, 1):   return "weekly"
+        case (.month, 1):  return "monthly"
+        case (.year, 1):   return "yearly"
+        default:           return nil
+        }
+    }
+
+    /// Save form: legacy preset string when available, otherwise the
+    /// JSON-encoded custom form. Empty string means "no repeat" — use
+    /// the caller-side toggle for that.
+    var saveForm: String {
+        legacyEquivalent ?? encoded
     }
 }

@@ -9,7 +9,41 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        Self.registerReminderActions()
         return true
+    }
+
+    /// Register the "REMINDER_FIRE" notification category. Reminder
+    /// notifications stamp this categoryIdentifier so the lock-screen
+    /// presentation gets Mark Done / Snooze action buttons.
+    static func registerReminderActions() {
+        let done = UNNotificationAction(
+            identifier: "REMINDER_DONE",
+            title: "Mark done",
+            options: []
+        )
+        let snooze15 = UNNotificationAction(
+            identifier: "REMINDER_SNOOZE_15",
+            title: "Snooze 15 min",
+            options: []
+        )
+        let snooze1h = UNNotificationAction(
+            identifier: "REMINDER_SNOOZE_1H",
+            title: "Snooze 1 hour",
+            options: []
+        )
+        let snoozeTomorrow = UNNotificationAction(
+            identifier: "REMINDER_SNOOZE_TOMORROW",
+            title: "Snooze until tomorrow",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: "REMINDER_FIRE",
+            actions: [done, snooze15, snooze1h, snoozeTomorrow],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
     }
 
     func application(
@@ -523,6 +557,17 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // Record foreground fires so the Reminder history view has
+        // something to show. Lock-screen fires can't be intercepted —
+        // iOS delivers them without calling back to the app.
+        if notification.request.content.categoryIdentifier == "REMINDER_FIRE",
+           let uid = notification.request.content.userInfo["taskUid"] as? String {
+            ReminderHistory.record(
+                taskUid: uid,
+                taskName: notification.request.content.title,
+                action: .fired
+            )
+        }
         completionHandler([.banner, .sound, .list, .badge])
     }
 
@@ -531,9 +576,20 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let info = response.notification.request.content.userInfo
+
+        // Reminder action buttons (Mark done / Snooze 15m / 1h / Tomorrow).
+        if response.notification.request.content.categoryIdentifier == "REMINDER_FIRE",
+           let uid = info["taskUid"] as? String {
+            Task { @MainActor in
+                ReminderActionHandler.handle(actionID: response.actionIdentifier, taskUid: uid)
+                completionHandler()
+            }
+            return
+        }
+
         // Status ping with attached location → tapping the notification
         // opens Apple Maps centered on the sender's pinned coordinate.
-        let info = response.notification.request.content.userInfo
         if let lat = info["pingCoordLat"] as? Double,
            let lng = info["pingCoordLng"] as? Double {
             let sender = (info["pingSender"] as? String) ?? "Family"
@@ -584,6 +640,10 @@ struct CasalistApp: App {
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
                     LocationSharingService.shared.resumeIfPreviouslySharing()
+                    // Re-register geofences for any active
+                    // location-based reminders so monitoring picks up
+                    // where iOS left off across reboots / cold starts.
+                    LocationReminderService.shared.resyncMonitoredRegions(in: stack.context)
                     // If this device has no household (fresh install on a
                     // previous share-joiner), try silently re-accepting the
                     // last-known share URL from iCloud KV. Restores the
@@ -597,6 +657,7 @@ struct CasalistApp: App {
                         await NotificationsManager.syncFromContext(stack.context)
                         await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
                         await NotificationsManager.scheduleDailyBriefing(in: stack.context)
+                        await NotificationsManager.scheduleReminderRecap()
                         await NotificationsManager.syncEventsFromContext(stack.context)
                     }
                 }
@@ -644,6 +705,7 @@ struct CasalistApp: App {
                     await NotificationsManager.syncFromContext(stack.context)
                     await NotificationsManager.scheduleWeeklyRecap(in: stack.context)
                         await NotificationsManager.scheduleDailyBriefing(in: stack.context)
+                        await NotificationsManager.scheduleReminderRecap()
                 }
             }
             // Auto-snapshot to iCloud Drive if enabled and a day has passed.

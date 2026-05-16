@@ -24,6 +24,145 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
+### 2026-05-16 — 1.7 staged: Apple Reminders link + full reminder UX rebuild
+Long second session of the day, all on the Reminders surface. **1.6 is
+still the staged-and-locked build** waiting for Geezy's "go" + the
+Production schema deploy of `FamilyMember` location fields. **1.7 is
+what landed in this session** — local commits on `main`, ready to ship
+once 1.6 clears.
+
+**Apple Reminders link** — mirror of the Apple Calendar feature from
+1.6. `ReminderLinkService.swift` (EKEventStore for `.reminder` entity),
+`ReminderSettingsSection.swift` (picker with inline list of available
+Reminders lists — original Menu-style Picker was hidden behind a tap
+so we switched to inline rows). Settings → REMINDERS now picks an
+Apple Reminders list. Saves a `taskUid → calendarItemIdentifier`
+mapping in UserDefaults. Casalist reminders push as EKReminders into
+the chosen list; that list's non-Casalist items show up in a "FROM
+YOUR APPLE REMINDERS 🔔" section in the Reminders view (notes prefix
+"Casalist:" filters our own mirrors back out). Info.plist:
+NSRemindersFullAccessUsageDescription + NSRemindersUsageDescription.
+
+**Unified Repeat picker** — old "How often" Menu + separate "Custom…"
+button combo collapsed into one entry point. `CustomRepeatPicker` now
+opens a sheet with: Don't repeat toggle, quick-pick chips
+(Hourly / Every 2h-12h / Daily / Weekly / Monthly / Yearly), and the
+full interval × unit × weekday builder under that. Save form maps
+back to the legacy preset string when shape matches (preserves all
+the `repeatKind == "hourly"` filters), otherwise stores
+`custom:{...}` JSON. `.year` added as a new `RepeatRule.Unit` with
+NotificationsManager scheduler cases for both reminders and events.
+
+**Snooze + Mark done from the lock screen** — new
+`UNNotificationCategory("REMINDER_FIRE")` registered at app launch
+with four actions: Mark done, Snooze 15 min, Snooze 1 hour, Snooze
+until tomorrow (8 AM). Reminder pushes stamp the category +
+`userInfo["taskUid"]`. `ReminderActionHandler.swift` routes the
+action: mark-done reuses `FamilyPoints.toggle` for recurring-advance,
+snooze schedules a single `UNTimeIntervalNotificationTrigger`
+(identifier stable per-task so successive snoozes replace not stack).
+
+**Per-family-member reminders** — AddReminderView "Notify" panel
+picks an assignee. NotificationsManager.scheduleNow now bails out
+(and proactively cancels stale pending notifications) when the
+reminder has an assignee that isn't the device's `userName`.
+
+**Location-based reminders** — `LocationReminderService.swift`
+registers a `CLCircularRegion` per reminder with `locationRadius > 0`,
+capped at iOS's 20-region-per-app limit. Region-enter / region-exit
+delegate fires a local notification respecting the user's "Arriving"
+vs "Leaving" choice. Resyncs on app launch + after every save.
+Schema delta (5 new `TaskItem` attrs: locationLat, locationLng,
+locationRadius, locationOnArrive, locationName) — bundle with the
+1.6 schema deploy when the time comes.
+
+**Saved locations (Home / Work / School)** —
+`SavedLocationsStore.swift` + Settings → SAVED LOCATIONS section.
+Define labeled places once, then chips appear above "Pick a place"
+in the location panel.
+
+**Add-reminder sheet rebuilt around Apple Reminders' icon-strip
+pattern** — title field, horizontal row of chip buttons (when /
+repeats / notify / location / photo / tag / sound + optional stop
+time), and each chip's panel expands inline below. Multi-expand via
+`Set<Chip>` so multiple panels can be open at once. **Edit mode
+auto-expands every populated panel** so the user sees everything at
+a glance without hunting. Mini-map renders inside the Location panel
+when a place is picked, with a translucent radius circle (sized in
+US units — slider goes 100 ft → 1 mi, stored as meters internally
+because `CLCircularRegion` needs meters).
+
+**Photo attachments** — camera chip + panel.
+`ReminderPhotoStore.swift` writes JPGs (max 1600×1600 px, 0.85
+quality) to `<Documents>/reminder-photos/{uid}.jpg`. Device-local
+only — photos do NOT sync via CloudKit. Pinned reminder cards in the
+cottage now show a 70 pt thumbnail under the title.
+
+**Reminder history feed** — `ReminderHistory.swift` (JSON log capped
+at 500 entries, on disk at `<Documents>/reminder-history.json`).
+Records foreground-fire (via `willPresent`), mark-done, and snooze
+events. `ReminderHistoryView.swift` renders sectioned Today /
+Yesterday / This Week / Older feed accessible via the new clock-
+arrow icon in the Reminders top bar. Clear all behind an ellipsis
+menu.
+
+**Templates** — `ReminderTemplate.swift` + `ReminderTemplateStore`
+(JSON in UserDefaults). "Save as template" capsule button at the
+bottom of AddReminderView prompts for a name. New stacked-squares
+icon in the Reminders top bar opens `ReminderTemplatePicker.swift`,
+which lists saved templates with cadence/assignee/location summary
+inline. Tap a row → opens AddReminderView seeded via a new
+`init(editing:template:)` initializer that pre-fills state and
+auto-expands every chip the template seeded.
+
+**Color tags** — `ReminderColorTag.swift` (8 tags + None) stored
+device-local per uid. Tag chip on the strip opens a color row;
+pinned card gets a colored stripe on the left edge.
+
+**Drag-to-reorder pinned reminders** — long-press a card →
+context menu with "Pin to top" / "Send to bottom".
+`ReminderOrderStore.swift` keeps a per-device sparse-numbered map;
+unsorted entries fall back to createdAt-desc.
+
+**Streak heatmap** — `ReminderStreak` already tracked current+best.
+Extended to log per-day completions (ISO yyyy-MM-dd, last 90 days
+capped). `ReminderStreakHeatmap.swift` renders a 30-day grid
+(10 cols × 3 rows) inside AddReminderView's edit mode for
+daily/weekly/monthly/yearly reminders that have at least one
+completion logged.
+
+**Daily reminder recap** — Settings → Notifications → "Daily reminder
+recap" toggle + hour picker (default 21:00).
+`NotificationsManager.scheduleReminderRecap` reads today's
+`ReminderHistory` and bakes a one-shot calendar notification ("✅ N
+done · 🔔 M fired · 🌙 K snoozed"). Re-schedules on every app launch
+and whenever the Settings toggle/hour changes.
+
+**Per-reminder sound toggle** — speaker chip on the strip flips
+between sound-on (default) and silent. `ReminderSoundStore`
+(UserDefaults set of silenced uids). NotificationsManager applies
+`.default` or nil sound based on the per-uid preference. Full sound
+picker with bundled .caf files punted to a later build.
+
+**Buttons rounded to capsules** — Save-as-template + Delete-reminder
+buttons + the photo-panel Choose/Replace button switched from
+RoundedRectangle(14) → Capsule, matching the existing Arriving/
+Leaving segmented control's pill shape. Trash button next to a
+photo went rounded-square → full Circle.
+
+**1.8 parked**: Live Activities (status pings on Lock Screen /
+Dynamic Island) + Widgets (home screen). They share a WidgetKit
+extension target so they ship together.
+**1.9 parked**: 7-day calendar grid (Schedule tab), Global search,
+Apple Watch complication.
+
+**Schema deltas pending Production deploy** (both bundle into one
+Dashboard "Deploy Schema Changes…" when 1.6 ships): 1.6's
+FamilyMember location quartet (latitude / longitude /
+locationUpdatedAt / isSharingLocation) + 1.7's TaskItem location
+quintet (locationLat / locationLng / locationRadius /
+locationOnArrive / locationName).
+
 ### 2026-05-16 — Post-1.5 feature stack staged for next TF (no schema deploy needed)
 Long all-night session after 1.5 shipped. Everything below is in
 local commits on `main` ready to ship; no TF push yet, per Geezy's
@@ -340,26 +479,7 @@ goals, family stats, avatar tier emblems (the LeveledAvatar tier
 ring ships; just the corner medal is suppressed on top-bar +
 standings).
 
-### 2026-05-14 — Multi-user family sharing actually works (Option A complete)
-Two-account share is verified working end-to-end on iPhone Air ↔ iPhone 15
-(different Apple IDs). The data layer was rewritten from SwiftData to Core
-Data + `NSPersistentCloudKitContainer` with a private store and a shared
-store. Sharing routes through Apple's `container.share(_:to:)` + a custom
-`CasalistSceneDelegate` that catches CKShare accept callbacks (SwiftUI's
-default scene delegate drops them — this was the main misconception).
-On accept, a `FamilyMember` is auto-created in the shared household using
-the joiner's `userName` AppStorage, so the inviter sees them immediately
-with no manual add step. Recipient-side writes now use
-`moc.assign(_, toStoreOf: household)` so they land in the shared store
-instead of silently falling into the joiner's private store. CloudKit
-Production schema was redeployed (added `CD_Household` + `CD_household`
-relationship + share-related system fields like `CD_moveReceipt`) via the
-Dashboard. App is on dev build with `MARKETING_VERSION=1`,
-`CURRENT_PROJECT_VERSION=3.8`. Pushed directly to both phones via
-`devicectl` — no TestFlight in the iteration loop per Geezy's preference.
-Tag `broken-arrow` (commit `95ed13e`) preserves the pre-rewrite state if
-rollback is ever needed. See "CRITICAL: multi-user family sharing" below
-for the architecture rules.
+_(2026-05-14 Option A entry rotated to `docs/progress-log-archive.md`)_
 
 ## Overview
 Casalist is a private family household management app for iOS.

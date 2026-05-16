@@ -115,23 +115,51 @@ struct LocationPickerSheet: View {
 }
 
 /// Read-only preview map showing a single pin for a stored location.
+/// When `radius` > 0 the map also draws a translucent circle so the
+/// caller can visualize the geofence area for location-based reminders.
 struct LocationMiniMap: View {
     let latitude: Double
     let longitude: Double
     let title: String
+    /// Geofence radius in meters. 0 hides the circle and falls back
+    /// to a fixed-zoom view (legacy behavior used by AddEventView).
+    var radiusMeters: Double = 0
 
     private var coord: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    var body: some View {
-        Map(initialPosition: .region(MKCoordinateRegion(
-            center: coord,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        ))) {
-            Marker(title, coordinate: coord)
+    /// Pick a map span that frames the geofence with breathing room.
+    /// ~111 km per degree of latitude → convert radius to degrees and
+    /// scale up so the circle fills ~60% of the map width.
+    private var region: MKCoordinateRegion {
+        let baseSpan: Double = 0.01
+        let span: Double
+        if radiusMeters > 0 {
+            let degrees = radiusMeters / 111_000
+            span = max(baseSpan, degrees * 3.2)
+        } else {
+            span = baseSpan
         }
-        .frame(height: 140)
+        return MKCoordinateRegion(
+            center: coord,
+            span: MKCoordinateSpan(latitudeDelta: span, longitudeDelta: span)
+        )
+    }
+
+    var body: some View {
+        // `id: radiusMeters` forces the map to recompute its position
+        // when the slider moves so the framing keeps up.
+        Map(initialPosition: .region(region)) {
+            Marker(title, coordinate: coord)
+            if radiusMeters > 0 {
+                MapCircle(center: coord, radius: radiusMeters)
+                    .foregroundStyle(Color.accentColor.opacity(0.22))
+                    .stroke(Color.accentColor, lineWidth: 2)
+            }
+        }
+        .id(radiusMeters)
+        .frame(height: 160)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .disabled(true) // read-only preview — tap doesn't pan
     }

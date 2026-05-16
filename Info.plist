@@ -42,6 +42,10 @@
 	<string>Mirror Casalist events into your chosen Apple calendar and show that calendar's events in Casalist's Schedule.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Read events from your linked Apple calendar to show them in Casalist's Schedule.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Mirror Casalist reminders into your chosen Apple Reminders list and show that list's reminders in Casalist.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Read reminders from your linked Apple Reminders list to show them in Casalist.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

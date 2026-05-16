@@ -14,6 +14,8 @@ struct NotificationsSettingsSection: View {
     @AppStorage("quietHoursStart") private var quietHoursStart: Int = 21
     @AppStorage("quietHoursEnd") private var quietHoursEnd: Int = 7
     @AppStorage("groceryActivityPush") private var groceryActivityPush: Bool = true
+    @AppStorage("reminderRecapEnabled") private var reminderRecapEnabled: Bool = false
+    @AppStorage("reminderRecapHour") private var reminderRecapHour: Int = 21
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -24,11 +26,34 @@ struct NotificationsSettingsSection: View {
             VStack(spacing: 0) {
                 NotifDueDateRow(enabled: $notificationsEnabled)
                 NotifDailyBriefingRow(enabled: $dailyBriefingEnabled, hour: $dailyBriefingHour)
+                NotifReminderRecapRow(enabled: $reminderRecapEnabled, hour: $reminderRecapHour)
                 NotifGroceryActivityRow(enabled: $groceryActivityPush)
                 NotifQuietHoursRow(enabled: $quietHoursEnabled, start: $quietHoursStart, end: $quietHoursEnd)
             }
             .background(Color(.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .onChange(of: reminderRecapEnabled) { _, _ in
+            Task { await NotificationsManager.scheduleReminderRecap() }
+        }
+        .onChange(of: reminderRecapHour) { _, _ in
+            Task { await NotificationsManager.scheduleReminderRecap() }
+        }
+    }
+}
+
+private struct NotifReminderRecapRow: View {
+    @Binding var enabled: Bool
+    @Binding var hour: Int
+    var body: some View {
+        Group {
+            Toggle("Daily reminder recap", isOn: $enabled)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+            if enabled {
+                NotifDivider()
+                NotifHourPickerRow(label: "Time", selection: $hour)
+            }
+            NotifDivider()
         }
     }
 }

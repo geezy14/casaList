@@ -57,6 +57,37 @@ enum ReminderStreak {
         if let data = try? JSONEncoder().encode(state) {
             UserDefaults.standard.set(data, forKey: key(task.uid))
         }
+        // Append today's day key to the heatmap log so the visualizer
+        // can render the last N days. Deduped per day.
+        appendHeatmapDay(for: task.uid, date: now)
+    }
+
+    // MARK: – Heatmap log (last 90 days of completion dates)
+
+    private static func heatmapKey(_ uid: String) -> String { "reminder_streak_days_\(uid)" }
+
+    /// Stores ISO yyyy-MM-dd strings so the daily grid can render
+    /// without ambiguity across time zones. Keeps up to 90 days.
+    private static func appendHeatmapDay(for uid: String, date: Date) {
+        var arr = UserDefaults.standard.stringArray(forKey: heatmapKey(uid)) ?? []
+        let day = isoDay(date)
+        guard arr.last != day else { return }   // already logged today
+        arr.append(day)
+        if arr.count > 90 { arr = Array(arr.suffix(90)) }
+        UserDefaults.standard.set(arr, forKey: heatmapKey(uid))
+    }
+
+    /// Returns the set of ISO yyyy-MM-dd strings the user completed on,
+    /// across the lookback window. Used by ReminderStreakHeatmap.
+    static func completionDays(for uid: String) -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: heatmapKey(uid)) ?? [])
+    }
+
+    static func isoDay(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone.current
+        return f.string(from: date)
     }
 
     /// Drops the stored streak for a single reminder. Called when the user

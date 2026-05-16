@@ -19,7 +19,16 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var deletedAt: Date?
     @NSManaged public var completedAt: Date?
     @NSManaged public var repeatEndMinutes: Int64
+    // Location-based reminders. See CasaCoreData attribute comments for
+    // the semantics. radius == 0 means no location trigger.
+    @NSManaged public var locationLat: Double
+    @NSManaged public var locationLng: Double
+    @NSManaged public var locationRadius: Double
+    @NSManaged public var locationOnArrive: Bool
+    @NSManaged public var locationName: String
     @NSManaged public var household: Household?
+
+    var hasLocationTrigger: Bool { locationRadius > 0 }
 
     var isLive: Bool { deletedAt == nil }
 

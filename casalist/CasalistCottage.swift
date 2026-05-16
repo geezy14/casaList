@@ -2651,7 +2651,13 @@ extension CasalistCottage {
         @State private var newItem: String = ""
         @State private var showAddReminder: Bool = false
         @State private var editingReminder: TaskItem? = nil
+        @State private var showHistory: Bool = false
+        @State private var showTemplates: Bool = false
+        @State private var pendingTemplate: ReminderTemplate? = nil
         @State private var expandedHourlyIds: Set<NSManagedObjectID> = []
+        /// Mirror of the user's linked Apple Reminders list (read-only).
+        /// Empty when no list is linked or access wasn't granted.
+        @State private var linkedReminders: [EKReminder] = []
         @AppStorage("userName") private var userName: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
@@ -2666,7 +2672,18 @@ extension CasalistCottage {
         private var otherReminders: [TaskItem] {
             allReminders.filter { !$0.isCompleted && $0.effectiveRepeatKind != "hourly" }
         }
-        private var pinned: [TaskItem] { otherReminders }
+        /// Pinned reminders, sorted by the device-local order store
+        /// first (long-press → Pin to top / Send to bottom rewrites
+        /// that), then by createdAt desc for anything the user hasn't
+        /// explicitly reordered.
+        private var pinned: [TaskItem] {
+            otherReminders.sorted { a, b in
+                let oa = ReminderOrderStore.order(for: a.uid)
+                let ob = ReminderOrderStore.order(for: b.uid)
+                if oa != ob { return oa < ob }
+                return a.createdAt > b.createdAt
+            }
+        }
 
         private func iconFor(_ t: TaskItem) -> String {
             if !t.effectiveRepeatKind.isEmpty { return "arrow.triangle.2.circlepath" }
@@ -2743,13 +2760,35 @@ extension CasalistCottage {
             }
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
-            .sheet(isPresented: $showAddReminder) { AddReminderView() }
+            .sheet(isPresented: $showAddReminder) {
+                AddReminderView(template: pendingTemplate)
+                    .onDisappear { pendingTemplate = nil }
+            }
             .sheet(item: $editingReminder) { reminder in AddReminderView(editing: reminder) }
+            .sheet(isPresented: $showHistory) { ReminderHistoryView() }
+            .sheet(isPresented: $showTemplates) { ReminderTemplatePicker(onPick: applyTemplate) }
             .swipeToDismiss()
+            .onAppear { Task { await refreshLinkedReminders() } }
+            .onChange(of: allTasks.count) { _, _ in
+                Task { await refreshLinkedReminders() }
+            }
+        }
+
+        /// Pull EKReminders from the user's linked Apple Reminders list.
+        /// Filtered to drop our own mirror items so we don't show them
+        /// twice. No-op when no list is linked.
+        private func refreshLinkedReminders() async {
+            let svc = ReminderLinkService.shared
+            let fetched = await svc.fetchReminders(includeCompleted: false)
+            await MainActor.run {
+                linkedReminders = fetched.filter { ek in
+                    !(ek.notes ?? "").hasPrefix("Casalist:")
+                }
+            }
         }
 
         private var topBar: some View {
-            HStack {
+            HStack(spacing: 8) {
                 Button { dismiss() } label: {
                     Image(systemName: "house.fill")
                         .font(.system(size: 14, weight: .bold))
@@ -2758,6 +2797,20 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
+                Button { showHistory = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
+                }
+                Button { showTemplates = true } label: {
+                    Image(systemName: "square.stack.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
+                }
                 Button { showAddReminder = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
@@ -2767,12 +2820,87 @@ extension CasalistCottage {
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
 
+        /// Bridge: tap a template → present AddReminderView pre-filled
+        /// via the template-seed initializer.
+        private func applyTemplate(_ template: ReminderTemplate) {
+            showTemplates = false
+            // Defer a beat so the templates sheet finishes dismissing
+            // before the new-reminder sheet animates in.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                pendingTemplate = template
+                showAddReminder = true
+            }
+        }
+
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 quickAddRow
                 listSection
+                if !linkedReminders.isEmpty {
+                    linkedSection
+                }
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var linkedSection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("FROM YOUR APPLE REMINDERS 🔔")
+                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                        .foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(linkedReminders.count)")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                VStack(spacing: 0) {
+                    ForEach(linkedReminders, id: \.calendarItemIdentifier) { ek in
+                        linkedReminderRow(ek)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            }
+        }
+
+        private func linkedReminderRow(_ ek: EKReminder) -> some View {
+            HStack(spacing: 12) {
+                Image(systemName: ek.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(cgColor: ek.calendar.cgColor))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(ek.title ?? "Untitled")
+                        .font(.system(size: 15, weight: .heavy))
+                        .strikethrough(ek.isCompleted)
+                        .foregroundStyle(ek.isCompleted ? P.textDim : P.text)
+                    if let due = linkedReminderDue(ek) {
+                        Text(due)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(P.textDim)
+                    }
+                }
+                Spacer()
+                Image(systemName: "checklist")
+                    .font(.system(size: 11))
+                    .foregroundStyle(P.textMuted)
+            }
+            .padding(.vertical, 10)
+        }
+
+        private func linkedReminderDue(_ ek: EKReminder) -> String? {
+            guard let comps = ek.dueDateComponents,
+                  let date = Calendar.current.date(from: comps) else { return nil }
+            let f = DateFormatter()
+            if Calendar.current.isDateInToday(date) {
+                f.dateFormat = "'Today' h:mm a"
+            } else if Calendar.current.isDateInTomorrow(date) {
+                f.dateFormat = "'Tmrw' h:mm a"
+            } else {
+                f.dateFormat = "MMM d · h:mm a"
+            }
+            return f.string(from: date)
         }
 
         private var hero: some View {
@@ -2825,6 +2953,9 @@ extension CasalistCottage {
                 it.household = h
             }
             try? modelContext.save()
+            // Mirror to the user's linked Apple Reminders list, same
+            // as AddReminderView. No-op if no list is linked.
+            ReminderLinkService.shared.mirror(it)
             newItem = ""
         }
 
@@ -3004,6 +3135,14 @@ extension CasalistCottage {
                                         .multilineTextAlignment(.leading)
                                         .lineLimit(4)
                                         .foregroundStyle(P.text)
+                                    if let img = ReminderPhotoStore.image(for: t.uid) {
+                                        Image(uiImage: img)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 70)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
                                     Spacer(minLength: 0)
                                     // Per-reminder 🔥 streak — only renders
                                     // when the reminder has a cadence
@@ -3030,8 +3169,33 @@ extension CasalistCottage {
                                 .padding(14)
                                 .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
                                 .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                                .overlay(alignment: .leading) {
+                                    // Color-tag stripe along the left
+                                    // edge — invisible when no tag set.
+                                    let tag = ReminderColorTagStore.tag(for: t.uid)
+                                    if tag != .none {
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(tag.swiftUIColor)
+                                            .frame(width: 4)
+                                            .padding(.vertical, 8)
+                                            .padding(.leading, 4)
+                                    }
+                                }
                                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
-                            }.buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    ReminderOrderStore.pinToTop(t.uid)
+                                } label: {
+                                    Label("Pin to top", systemImage: "arrow.up.to.line.compact")
+                                }
+                                Button {
+                                    ReminderOrderStore.sendToBottom(t.uid)
+                                } label: {
+                                    Label("Send to bottom", systemImage: "arrow.down.to.line.compact")
+                                }
+                            }
                         }
                     }
                 }
