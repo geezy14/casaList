@@ -140,10 +140,29 @@ struct TodayRemindersEntryView: View {
             case "blue":   return .blue
             case "purple": return .purple
             case "pink":   return .pink
-            default:       return .gray.opacity(0.5)
+            default:
+                if raw.hasPrefix("custom:") {
+                    let hex = String(raw.dropFirst("custom:".count))
+                    return colorFromHex(hex) ?? .gray.opacity(0.5)
+                }
+                return .gray.opacity(0.5)
             }
         }()
         return Circle().fill(color).frame(width: 6, height: 6)
+    }
+
+    /// "#RRGGBB" → Color. Standalone copy here (widget target isn't
+    /// linking ReminderColorTag.swift). Keep in sync if the canonical
+    /// parser ever changes.
+    private func colorFromHex(_ hex: String) -> Color? {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        return Color(
+            red: Double((v >> 16) & 0xFF) / 255,
+            green: Double((v >> 8) & 0xFF) / 255,
+            blue: Double(v & 0xFF) / 255
+        )
     }
 }
 

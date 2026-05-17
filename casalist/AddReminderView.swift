@@ -456,31 +456,81 @@ struct AddReminderView: View {
                 panelHeader("Color tag", icon: "tag.fill")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(ReminderColorTag.allCases) { tag in
-                            Button {
-                                colorTag = tag
-                            } label: {
-                                ZStack {
-                                    Circle().fill(tag.swiftUIColor)
-                                        .frame(width: 32, height: 32)
-                                    if colorTag == tag {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 14, weight: .heavy))
-                                            .foregroundStyle(.white)
-                                    }
-                                }
-                                .overlay(
-                                    Circle().stroke(Color.primary.opacity(colorTag == tag ? 0.4 : 0), lineWidth: 2)
-                                )
-                            }
-                            .buttonStyle(.plain)
+                        ForEach(ReminderColorTag.presets) { tag in
+                            tagSwatch(tag)
                         }
+                        // Color wheel — opens the native iOS ColorPicker
+                        // for arbitrary hex tags. Tinted with whatever
+                        // custom color is currently selected (or the
+                        // accent color as a default).
+                        colorWheelSwatch
                     }
                 }
-                Text("Adds a colored stripe to the reminder card so the family categorize at a glance.")
+                Text("Pick a preset color or tap the color-wheel for a custom one. Shows as a stripe on the reminder card.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func tagSwatch(_ tag: ReminderColorTag) -> some View {
+        Button { colorTag = tag } label: {
+            ZStack {
+                Circle().fill(tag.swiftUIColor).frame(width: 32, height: 32)
+                if colorTag == tag {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+            }
+            .overlay(
+                Circle().stroke(Color.primary.opacity(colorTag == tag ? 0.4 : 0), lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Color-wheel swatch. Wraps a SwiftUI `ColorPicker` whose label
+    /// is the swatch itself, so tapping the swatch opens the system
+    /// color wheel directly. Selected hex is converted to a `.custom`
+    /// tag on every change.
+    @ViewBuilder
+    private var colorWheelSwatch: some View {
+        let isCustom = colorTag.isCustom
+        let displayColor: Color = isCustom ? colorTag.swiftUIColor : .accentColor
+        ZStack {
+            // Conic gradient ring as the "color wheel" affordance.
+            // When the user already picked a custom color, fill solid
+            // with that color instead so they can see what's set.
+            if isCustom {
+                Circle().fill(displayColor).frame(width: 32, height: 32)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+            } else {
+                Circle()
+                    .fill(AngularGradient(
+                        gradient: Gradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .pink, .red]),
+                        center: .center
+                    ))
+                    .frame(width: 32, height: 32)
+                    .overlay(Circle().fill(.black.opacity(0.001)))   // hit test
+            }
+            ColorPicker("",
+                        selection: Binding(
+                            get: { displayColor },
+                            set: { newColor in
+                                colorTag = .custom(newColor.hexString)
+                            }
+                        ),
+                        supportsOpacity: false
+            )
+            .labelsHidden()
+            .frame(width: 32, height: 32)
+            .opacity(0.025)   // invisible but full hit-target over the swatch
+        }
+        .overlay(
+            Circle().stroke(Color.primary.opacity(isCustom ? 0.4 : 0), lineWidth: 2)
+        )
     }
 
     private var soundPanel: some View {
@@ -554,6 +604,14 @@ struct AddReminderView: View {
                     Toggle("Schedule an alert", isOn: $hasFireDate)
                 }
                 if !isPinned {
+                    // Quick-set chips — most-common cases without
+                    // having to spin the date wheel. Today defaults
+                    // to "an hour from now"; Tomorrow / This Weekend /
+                    // Next Week each anchor at 9 AM. Chip is
+                    // highlighted when fireDate matches its target.
+                    if !dailyOnlyTime {
+                        whenQuickPicks
+                    }
                     if dailyOnlyTime {
                         DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
                             .datePickerStyle(.compact)
@@ -566,6 +624,79 @@ struct AddReminderView: View {
                 }
             }
         }
+    }
+
+    /// Horizontal scroller of quick-set date chips for the When panel.
+    /// Each one snaps `fireDate` to a sensible default, sets
+    /// `hasFireDate = true`, and highlights itself when the current
+    /// fireDate falls within its target day.
+    private var whenQuickPicks: some View {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
+        let weekendDay = nextSaturday(from: today, cal: cal)
+        let nextWeek = cal.date(byAdding: .day, value: 7, to: today) ?? today
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                whenChip(
+                    label: "Today",
+                    isOn: cal.isDateInToday(fireDate),
+                    target: defaultTimeOnTodayOrLater()
+                )
+                whenChip(
+                    label: "Tomorrow",
+                    isOn: cal.isDateInTomorrow(fireDate),
+                    target: cal.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+                )
+                whenChip(
+                    label: "This weekend",
+                    isOn: cal.isDate(fireDate, inSameDayAs: weekendDay),
+                    target: cal.date(bySettingHour: 10, minute: 0, second: 0, of: weekendDay) ?? weekendDay
+                )
+                whenChip(
+                    label: "Next week",
+                    isOn: cal.isDate(fireDate, inSameDayAs: nextWeek),
+                    target: cal.date(bySettingHour: 9, minute: 0, second: 0, of: nextWeek) ?? nextWeek
+                )
+            }
+        }
+    }
+
+    /// Returns an "Today" target time: the current time + 1 hour,
+    /// rounded to the nearest hour. If +1h overflows into tomorrow
+    /// (e.g. you're tapping at 11:30 PM), clamp to today's last hour
+    /// so the chip stays meaningful.
+    private func defaultTimeOnTodayOrLater() -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        let plusHour = now.addingTimeInterval(3600)
+        if cal.isDateInToday(plusHour) { return plusHour }
+        // Tapped late — anchor to 11 PM today.
+        let today = cal.startOfDay(for: now)
+        return cal.date(bySettingHour: 23, minute: 0, second: 0, of: today) ?? now
+    }
+
+    /// First Saturday >= today.
+    private func nextSaturday(from base: Date, cal: Calendar) -> Date {
+        let weekday = cal.component(.weekday, from: base)   // 1 = Sun … 7 = Sat
+        let daysUntilSat = (7 - weekday + 7) % 7   // 0 if today IS Saturday
+        return cal.date(byAdding: .day, value: daysUntilSat == 0 ? 0 : daysUntilSat, to: base) ?? base
+    }
+
+    private func whenChip(label: String, isOn: Bool, target: Date) -> some View {
+        Button {
+            hasFireDate = true
+            fireDate = target
+        } label: {
+            Text(label)
+                .font(.system(size: 12, weight: .heavy))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .foregroundStyle(isOn ? Color.white : Color.primary)
+                .background(
+                    Capsule().fill(isOn ? Color.accentColor : Color(.tertiarySystemBackground))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var repeatsPanel: some View {

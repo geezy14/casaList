@@ -19,7 +19,7 @@
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.gbrown10.casabills2</string>
+		<string>group.com.gbrown10.casalist</string>
 	</array>
 </dict>
 </plist>
