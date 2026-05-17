@@ -575,17 +575,12 @@ public enum CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 greetingCard
-                if hasSearchableContent { searchBar }
-                if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    stickyAgenda
-                    quickAdd
-                    if canManage { quickAddChips }
-                    star
-                    tiles
-                    whatsNew
-                } else {
-                    searchResults
-                }
+                stickyAgenda
+                quickAdd
+                if canManage { quickAddChips }
+                star
+                tiles
+                whatsNew
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
@@ -804,9 +799,12 @@ public enum CasalistCottage {
                     taskUid: nil
                 )
             }
-            let timedTiles = dueToday.map { task in
-                AgendaTile(
-                    timeText: timeFmt.string(from: task.dueDate ?? Date()),
+            let timedTiles = dueToday.map { task -> AgendaTile in
+                let due = task.dueDate ?? Date()
+                let comps = cal.dateComponents([.hour, .minute], from: due)
+                let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+                return AgendaTile(
+                    timeText: hasTime ? timeFmt.string(from: due) : "Today",
                     label: task.task,
                     sub: task.assignee ?? "",
                     symbol: tileSymbol(task.category),

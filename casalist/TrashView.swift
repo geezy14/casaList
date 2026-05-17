@@ -26,9 +26,19 @@ struct TrashView: View {
         predicate: NSPredicate(format: "deletedAt != nil")
     ) private var deletedEvents: FetchedResults<FamilyEvent>
 
+    @AppStorage("userName") private var userName: String = ""
+    @AppStorage("meUid") private var meUid: String = ""
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)],
+                  predicate: NSPredicate(format: "deletedAt == nil"))
+    private var members: FetchedResults<FamilyMember>
+
     @State private var confirmEmpty: Bool = false
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
+
+    private var iAmAdmin: Bool {
+        FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+    }
 
     private var totalCount: Int {
         deletedMembers.count + deletedTasks.count + deletedGoals.count + deletedEvents.count
@@ -79,7 +89,7 @@ struct TrashView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-                if totalCount > 0 {
+                if totalCount > 0 && iAmAdmin {
                     ToolbarItem(placement: .primaryAction) {
                         Button(role: .destructive) { confirmEmpty = true } label: {
                             Text("Empty").foregroundStyle(.red)

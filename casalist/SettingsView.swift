@@ -389,7 +389,7 @@ struct SettingsView: View {
                         .background(Circle().fill(P.peach.opacity(0.12)))
                 }.buttonStyle(.row)
             }
-            if !isMe {
+            if !isMe && !m.canManageFamily {
                 muteMenu(for: m)
             }
             if canDelete(m, isMe: isMe) {
