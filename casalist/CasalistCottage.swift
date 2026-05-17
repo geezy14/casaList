@@ -1667,18 +1667,22 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         @State private var darkOverride: Bool? = nil
-        @State private var filter: String = "All"
+        @State private var timeFilter: String = "All"   // All / Today / This week
+        @State private var kindFilter: String = "All"   // All / Chores / Home / Maintenance
         /// Admin-only toggle: "Mine" shows only my assigned chores (default),
         /// "Everyone" shows all family chores grouped by assignee.
         @State private var scope: String = "Mine"
         @State private var showAddTodo = false
         @State private var showSettings = false
         @State private var showInbox = false
+        @State private var editingTask: TaskItem? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
+        @State private var newItem: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var todos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
@@ -1688,9 +1692,6 @@ extension CasalistCottage {
         private func isModuleCategory(_ cat: String) -> Bool {
             ["groceries", "maintenance", "reminders"].contains(cat.lowercased())
         }
-        /// True if the task is mine — assignee matches my display name (case
-        /// insensitive). Empty/unassigned tasks are *not* "mine" and shouldn't
-        /// clutter my list (they live on the Family wall).
         private func isMine(_ t: TaskItem) -> Bool {
             let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
                 .trimmingCharacters(in: .whitespaces).lowercased()
@@ -1701,11 +1702,15 @@ extension CasalistCottage {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
         private var scopeAllowsEveryone: Bool { iAmAdmin && scope == "Everyone" }
-        private func passesScope(_ t: TaskItem) -> Bool {
-            scopeAllowsEveryone ? true : isMine(t)
+        private func passesScope(_ t: TaskItem) -> Bool { scopeAllowsEveryone ? true : isMine(t) }
+
+        private var incomplete: [TaskItem] {
+            todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0) && !$0.isContainer }
         }
-        private var incomplete: [TaskItem] { todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0) } }
-        private var completed: [TaskItem] { todos.filter { $0.isCompleted && !isModuleCategory($0.category) && passesScope($0) } }
+        private var completed: [TaskItem] {
+            todos.filter { $0.isCompleted && !isModuleCategory($0.category) && passesScope($0) && !$0.isContainer }
+        }
+
         private func isToday(_ d: Date?) -> Bool {
             guard let d else { return false }
             return Calendar.current.isDateInToday(d)
@@ -1714,21 +1719,28 @@ extension CasalistCottage {
             guard let d else { return false }
             return Calendar.current.isDate(d, equalTo: Date(), toGranularity: .weekOfYear)
         }
-        private var todayItems: [TaskItem] { incomplete.filter { isToday($0.dueDate) } }
-        private var weekItems: [TaskItem] { incomplete.filter { isThisWeek($0.dueDate) } }
-        private var visibleItems: [TaskItem] {
-            switch filter {
-            case "Today": return todayItems
-            case "This week": return weekItems
-            default: return incomplete
+
+        private func passesKind(_ t: TaskItem) -> Bool {
+            kindFilter == "All" || t.category.lowercased() == kindFilter.lowercased()
+        }
+        private func passesTime(_ t: TaskItem) -> Bool {
+            switch timeFilter {
+            case "Today":     return isToday(t.dueDate)
+            case "This week": return isThisWeek(t.dueDate)
+            default:          return true
             }
         }
+        private var visibleItems: [TaskItem] {
+            incomplete.filter { passesKind($0) && passesTime($0) }
+        }
+
         private var doneTodayCount: Int { completed.filter { isToday($0.dueDate) }.count }
-        private var totalTodayCount: Int { todos.filter { isToday($0.dueDate) }.count }
+        private var totalTodayCount: Int { todos.filter { isToday($0.dueDate) && !isModuleCategory($0.category) && passesScope($0) }.count }
         private var donePercent: Double {
             guard totalTodayCount > 0 else { return 0 }
             return Double(doneTodayCount) / Double(totalTodayCount)
         }
+
         private func categoryColor(_ cat: String) -> Color {
             switch cat.lowercased() {
             case "chores": return P.mint
@@ -1738,26 +1750,14 @@ extension CasalistCottage {
             default: return P.peach
             }
         }
-        private func categorySymbol(_ cat: String) -> String {
-            switch cat.lowercased() {
-            case "chores": return "checkmark.circle.fill"
-            case "home": return "house.fill"
-            case "groceries": return "cart.fill"
-            case "maintenance": return "wrench.fill"
-            default: return "circle.fill"
-            }
-        }
         private func memberFor(_ assignee: String?) -> CLFamilyMember? {
             guard let assignee, !assignee.isEmpty else { return nil }
             return members.first { $0.name.lowercased() == assignee.lowercased() }?.asCLMember
         }
-        private func whenString(_ d: Date?) -> String {
-            guard let d else { return "No date" }
+        private func whenString(_ d: Date) -> String {
             let f = DateFormatter()
-            if Calendar.current.isDateInToday(d) {
-                f.dateFormat = "h:mm a"
-                return "Today \(f.string(from: d))"
-            }
+            if Calendar.current.isDateInToday(d) { f.dateFormat = "h:mm a"; return "Today \(f.string(from: d))" }
+            if Calendar.current.isDateInTomorrow(d) { f.dateFormat = "h:mm a"; return "Tomorrow \(f.string(from: d))" }
             f.dateFormat = "EEE MMM d"
             return f.string(from: d)
         }
@@ -1770,9 +1770,6 @@ extension CasalistCottage {
                     ScrollView { content }
                         .scrollIndicators(.hidden)
                         .refreshable {
-                            // Pull-to-refresh: wait briefly so CloudKit can
-                            // land pending shared-zone changes, then drop
-                            // cached objects so @FetchRequests re-read.
                             try? await Task.sleep(for: .seconds(2))
                             modelContext.refreshAllObjects()
                         }
@@ -1785,6 +1782,7 @@ extension CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
+            .sheet(item: $editingTask) { t in TaskDetailView(task: t) }
             .celebration(visible: $celebrate, label: celebrateLabel)
             .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
@@ -1800,6 +1798,26 @@ extension CasalistCottage {
                 celebrateLabel = "+\(pts) pts!"
                 celebrate = true
             }
+        }
+
+        private func addInlineItem() {
+            let name = newItem.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            let myName = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName
+            let it = TaskItem(
+                context: modelContext,
+                task: name,
+                category: "Chores",
+                points: 5,
+                createdBy: myName.trimmingCharacters(in: .whitespaces)
+            )
+            it.assignee = myName.trimmingCharacters(in: .whitespaces)
+            if let h = households.preferredTarget {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
+            try? modelContext.save()
+            newItem = ""
         }
 
         private var inboxBadgeCount: Int {
@@ -1848,15 +1866,44 @@ extension CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 progressHero
                 if iAmAdmin { scopeToggle }
-                quickAdd
-                filters
-                byKind
-                forToday
+                quickAddRow
+                kindFilters
+                taskList
                 recentlyDone
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
-        /// Admin-only segmented toggle: see only my chores, or everyone's.
+        // MARK: – Hero
+
+        private var progressHero: some View {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 6).frame(width: 76, height: 76)
+                    Circle().trim(from: 0, to: donePercent)
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 76, height: 76)
+                    VStack(spacing: 0) {
+                        Text("\(Int(donePercent * 100))%").font(.system(size: 18, weight: .heavy))
+                        Text("DONE").font(.system(size: 8, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(scopeAllowsEveryone ? "FAMILY TO-DO" : "MY TO-DO")
+                        .font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    Text("\(visibleItems.count) open").font(.system(size: 22, weight: .heavy))
+                    Text(totalTodayCount == 0 ? "Nothing due today" : "\(doneTodayCount) of \(totalTodayCount) done today")
+                        .font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.white).padding(20)
+            .background(P.coral)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+
+        // MARK: – Scope toggle (admin only)
+
         private var scopeToggle: some View {
             HStack(spacing: 8) {
                 ForEach(["Mine", "Everyone"], id: \.self) { opt in
@@ -1876,124 +1923,90 @@ extension CasalistCottage {
             }
         }
 
-        private var progressHero: some View {
-            HStack(spacing: 16) {
-                ZStack {
-                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 6).frame(width: 76, height: 76)
-                    Circle().trim(from: 0, to: donePercent)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 76, height: 76)
-                    VStack(spacing: 0) {
-                        Text("\(Int(donePercent * 100))%").font(.system(size: 18, weight: .heavy))
-                        Text("DONE").font(.system(size: 8, weight: .heavy)).tracking(0.8).opacity(0.85)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(scopeAllowsEveryone ? "FAMILY TO-DO" : "MY TO-DO")
-                        .font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
-                    Text("\(todayItems.count) left for today").font(.system(size: 22, weight: .heavy))
-                    Text(totalTodayCount == 0 ? "Nothing scheduled" : "\(doneTodayCount) of \(totalTodayCount) done").font(.system(size: 12, weight: .semibold)).opacity(0.85)
-                }
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.white)
-            .padding(20)
-            .background(P.coral)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        }
+        // MARK: – Inline quick-add
 
-        private var quickAdd: some View {
-            Button { showAddTodo = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-                    Text("Add to your list...").font(.system(size: 14, weight: .semibold)).foregroundStyle(P.textDim)
-                    Spacer()
+        private var quickAddRow: some View {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                TextField("Add a task...", text: $newItem)
+                    .font(.system(size: 14, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit(addInlineItem)
+                Button { addInlineItem() } label: {
                     Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
                         .frame(width: 32, height: 32).background(Circle().fill(P.peach))
                 }
-                .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
-                .background(Capsule().fill(P.surface))
-                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        // MARK: – Kind + time filter chips
+
+        private var kindFilters: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    // Time filters
+                    timeChip("All", icon: "tray.fill")
+                    timeChip("Today", icon: "sun.max.fill")
+                    timeChip("This week", icon: "calendar")
+                    Divider().frame(height: 20).padding(.horizontal, 2)
+                    // Kind filters
+                    kindChip("Chores", icon: "checkmark.circle.fill", color: P.mint)
+                    kindChip("Home", icon: "house.fill", color: P.butter)
+                    kindChip("Maintenance", icon: "wrench.fill", color: P.lavender)
+                }
+            }
+        }
+
+        private func timeChip(_ label: String, icon: String) -> some View {
+            let active = timeFilter == label
+            return Button {
+                timeFilter = label
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.system(size: 11, weight: .heavy))
+                    Text(label).font(.system(size: 12, weight: .heavy))
+                }
+                .foregroundStyle(active ? .white : P.textDim)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Capsule().fill(active ? P.peach : P.surfaceAlt))
             }.buttonStyle(.plain)
         }
 
-        private var filters: some View {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    pill("All", count: incomplete.count)
-                    pill("Today", count: todayItems.count)
-                    pill("This week", count: weekItems.count)
-                }
-            }
-        }
-
-        private func pill(_ label: String, count: Int) -> some View {
-            let active = filter == label
-            return Button { filter = label } label: {
-                HStack(spacing: 8) {
-                    Text(label).font(.system(size: 13, weight: .heavy))
-                    Text("\(count)").font(.system(size: 11, weight: .heavy))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.black.opacity(0.25)))
+        private func kindChip(_ label: String, icon: String, color: Color) -> some View {
+            let active = kindFilter == label
+            return Button {
+                kindFilter = kindFilter == label ? "All" : label
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(active ? .white : color)
+                    Text(label).font(.system(size: 12, weight: .heavy))
                 }
                 .foregroundStyle(active ? .white : P.textDim)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Capsule().fill(active ? P.peach : P.surfaceAlt))
-            }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Capsule().fill(active ? color : P.surfaceAlt))
+                .overlay(Capsule().stroke(active ? color : P.border, lineWidth: 1.5))
+            }.buttonStyle(.plain)
         }
 
-        private var byKind: some View {
-            let counts = Dictionary(grouping: incomplete, by: { $0.category }).mapValues { $0.count }
-            return VStack(alignment: .leading, spacing: 8) {
-                Text("BY KIND").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        kindChip(emoji: "🧹", label: "Chores", color: P.mint, count: counts["Chores"] ?? 0)
-                        kindChip(emoji: "🏠", label: "Home", color: P.butter, count: counts["home"] ?? 0)
-                        kindChip(emoji: "🛒", label: "Groceries", color: P.coral, count: counts["groceries"] ?? 0)
-                        kindChip(emoji: "🔧", label: "Maintenance", color: P.lavender, count: counts["Maintenance"] ?? 0)
-                    }
-                }
-            }
-        }
+        // MARK: – Task list
 
-        private func kindChip(emoji: String, label: String, color: Color, count: Int) -> some View {
-            HStack(spacing: 8) {
-                Text(emoji).font(.system(size: 14))
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.3)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(label).font(.system(size: 12, weight: .heavy))
-                    Text("\(count) open").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1.5))
-        }
-
-        private var filterHeader: String {
-            switch filter {
-            case "Today": return "FOR TODAY ☀️"
-            case "This week": return "THIS WEEK 📅"
-            default: return "ALL OPEN ✨"
-            }
-        }
-
-        private var forToday: some View {
+        private var taskList: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(filterHeader).font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text(listHeader).font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
-                    Text("\(visibleItems.count) items").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                    Text("\(visibleItems.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
                 }
                 if visibleItems.isEmpty {
                     Button { showAddTodo = true } label: {
                         VStack(spacing: 8) {
                             Text("📝").font(.system(size: 36))
-                            Text("Nothing here yet").font(.system(size: 14, weight: .heavy))
-                            Text("Tap to add your first task").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                            Text("Nothing here").font(.system(size: 14, weight: .heavy))
+                            Text("Tap + to add a task").font(.system(size: 11, weight: .semibold)).opacity(0.7)
                         }
                         .foregroundStyle(P.text)
                         .frame(maxWidth: .infinity).padding(24)
@@ -2001,50 +2014,84 @@ extension CasalistCottage {
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
                     }.buttonStyle(.plain)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(visibleItems.enumerated()), id: \.element.id) { i, t in
-                            todoRow(t, isFirst: i == 0)
+                    VStack(spacing: 10) {
+                        ForEach(visibleItems, id: \.uid) { t in
+                            taskCard(t)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
                 }
             }
         }
 
-        private func todoRow(_ t: TaskItem, isFirst: Bool) -> some View {
-            let color = categoryColor(t.category)
-            return HStack(spacing: 12) {
-                Button { FamilyPoints.toggle(t, in: members); try? modelContext.save() } label: {
-                    Circle().stroke(color, lineWidth: 2).frame(width: 22, height: 22)
-                }.buttonStyle(.plain)
-                Image(systemName: categorySymbol(t.category)).font(.system(size: 14)).foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(color))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t.task).font(.system(size: 14, weight: .heavy))
-                    HStack(spacing: 6) {
-                        Circle().fill(color).frame(width: 6, height: 6)
-                        Text(whenString(t.dueDate)).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
-                        if !t.category.isEmpty {
-                            Text("·").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                            Text(t.category.capitalized).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
-                        }
-                    }
-                }
-                Spacer()
-                if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 26) }
-            }.padding(.vertical, 11)
-            .overlay(alignment: .top) {
-                if !isFirst { Rectangle().fill(P.border).frame(height: 1) }
+        private var listHeader: String {
+            let kind = kindFilter == "All" ? "" : kindFilter.uppercased() + " · "
+            switch timeFilter {
+            case "Today":     return "\(kind)TODAY"
+            case "This week": return "\(kind)THIS WEEK"
+            default:          return kindFilter == "All" ? "ALL OPEN" : kindFilter.uppercased()
             }
         }
+
+        private func taskCard(_ t: TaskItem) -> some View {
+            let color = categoryColor(t.category)
+            return Button { editingTask = t } label: {
+                HStack(spacing: 0) {
+                    // Left color stripe
+                    RoundedRectangle(cornerRadius: 3).fill(color)
+                        .frame(width: 5).padding(.vertical, 10)
+                    HStack(spacing: 12) {
+                        // Complete button
+                        Button {
+                            completeTask(t)
+                        } label: {
+                            ZStack {
+                                Circle().stroke(color, lineWidth: 2).frame(width: 24, height: 24)
+                                Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(color).opacity(0.4)
+                            }
+                        }.buttonStyle(.plain)
+
+                        // Text
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(t.task).font(.system(size: 15, weight: .heavy)).foregroundStyle(P.text)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                if let d = t.dueDate {
+                                    Image(systemName: "clock").font(.system(size: 9, weight: .semibold)).foregroundStyle(P.textDim)
+                                    Text(whenString(d)).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                                    Text("·").foregroundStyle(P.textMuted)
+                                }
+                                Text(t.category.capitalized).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                            }
+                        }
+
+                        Spacer(minLength: 4)
+
+                        // Right side: avatar + points
+                        VStack(alignment: .trailing, spacing: 4) {
+                            if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 26) }
+                            if t.points > 0 {
+                                Text("+\(t.points)")
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(color.opacity(0.85)))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                }
+                .background(P.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
+            }.buttonStyle(.plain)
+        }
+
+        // MARK: – Recently done
 
         private var recentlyDone: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("RECENTLY DONE 🎉").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("RECENTLY DONE").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
                     if !completed.isEmpty {
                         Text("\(completed.count) done").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
@@ -3269,8 +3316,11 @@ extension CasalistCottage {
         @State private var showAdd: Bool = false
         @State private var editingEvent: FamilyEvent? = nil
         @State private var linkedEvents: [EKEvent] = []
+        @State private var newEventTitle: String = ""
+        @State private var selectedDay: Date? = nil   // nil = show all
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
@@ -3281,6 +3331,8 @@ extension CasalistCottage {
         }
         public init() {}
 
+        // MARK: – Computed lists
+
         private var upcoming: [FamilyEvent] {
             allEvents.filter { $0.startDate >= Calendar.current.startOfDay(for: Date()) }
                 .sorted { $0.startDate < $1.startDate }
@@ -3289,21 +3341,43 @@ extension CasalistCottage {
             allEvents.filter { $0.startDate < Calendar.current.startOfDay(for: Date()) }
                 .sorted { $0.startDate > $1.startDate }
         }
-        private var todayEvents: [FamilyEvent] {
-            upcoming.filter { Calendar.current.isDateInToday($0.startDate) }
+        private var nextEvent: FamilyEvent? { upcoming.first }
+
+        private func isSameDay(_ a: Date, _ b: Date) -> Bool {
+            Calendar.current.isDate(a, inSameDayAs: b)
         }
-        private var weekEvents: [FamilyEvent] {
+
+        /// Events to show — filtered by selected day strip if one is picked.
+        private var filteredUpcoming: [FamilyEvent] {
+            guard let day = selectedDay else { return upcoming }
+            return upcoming.filter { isSameDay($0.startDate, day) }
+        }
+
+        private var todayEvents: [FamilyEvent] { upcoming.filter { Calendar.current.isDateInToday($0.startDate) } }
+
+        /// Next 7 calendar days starting today for the day strip.
+        private var stripDays: [Date] {
             let cal = Calendar.current
-            let now = Date()
-            let weekOut = cal.date(byAdding: .day, value: 7, to: now) ?? now
-            return upcoming.filter { !cal.isDateInToday($0.startDate) && $0.startDate <= weekOut }
+            let today = cal.startOfDay(for: Date())
+            // Always start the strip on the Saturday of the current week.
+            // weekday: 1=Sun 2=Mon 3=Tue 4=Wed 5=Thu 6=Fri 7=Sat
+            // daysBack to most-recent Saturday: weekday % 7
+            // Sat(7)->0  Sun(1)->1  Mon(2)->2  ...  Fri(6)->6
+            let weekday = cal.component(.weekday, from: today)
+            let daysBack = weekday % 7
+            let saturday = cal.date(byAdding: .day, value: -daysBack, to: today) ?? today
+            return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: saturday) }
         }
-        private var laterEvents: [FamilyEvent] {
+
+        private func eventColor(_ e: FamilyEvent) -> Color {
+            if Calendar.current.isDateInToday(e.startDate) { return P.peach }
             let cal = Calendar.current
-            let now = Date()
-            let weekOut = cal.date(byAdding: .day, value: 7, to: now) ?? now
-            return upcoming.filter { $0.startDate > weekOut }
+            let weekOut = cal.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+            if e.startDate <= weekOut { return P.butter }
+            return P.sky
         }
+
+        // MARK: – Body
 
         public var body: some View {
             ZStack {
@@ -3313,9 +3387,6 @@ extension CasalistCottage {
                     ScrollView { content }
                         .scrollIndicators(.hidden)
                         .refreshable {
-                            // Pull-to-refresh: wait briefly so CloudKit can
-                            // land pending shared-zone changes, then drop
-                            // cached objects so @FetchRequests re-read.
                             try? await Task.sleep(for: .seconds(2))
                             modelContext.refreshAllObjects()
                         }
@@ -3330,18 +3401,39 @@ extension CasalistCottage {
             .onChange(of: allEvents.count) { _, _ in refreshLinkedEvents() }
         }
 
-        /// Pull EKEvents from the user's linked Apple Calendar for the
-        /// next 30 days. Filtered to drop our own mirror events so we
-        /// don't show them twice. Empty when no calendar is linked.
         private func refreshLinkedEvents() {
             let svc = CalendarLinkService.shared
             let start = Calendar.current.startOfDay(for: Date())
             let end = Calendar.current.date(byAdding: .day, value: 30, to: start) ?? start
-            let fetched = svc.fetchEvents(from: start, to: end)
-            linkedEvents = fetched.filter { ek in
-                !(ek.notes ?? "").hasPrefix("Casalist:")
-            }
+            linkedEvents = svc.fetchEvents(from: start, to: end).filter { !($0.notes ?? "").hasPrefix("Casalist:") }
         }
+
+        private func addQuickEvent() {
+            let name = newEventTitle.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            let myName = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName
+            let ev = FamilyEvent(context: modelContext)
+            ev.uid = UUID()
+            ev.title = name
+            ev.startDate = Calendar.current.startOfDay(for: Date())
+            ev.isAllDay = true
+            ev.location = ""
+            ev.attendees = ""
+            ev.notes = ""
+            ev.repeatKind = ""
+            ev.createdBy = myName.trimmingCharacters(in: .whitespaces)
+            ev.createdAt = Date()
+            if let h = households.preferredTarget {
+                modelContext.assign(ev, toStoreOf: h)
+                ev.household = h
+            }
+            try? modelContext.save()
+            Task { await NotificationsManager.scheduleEvent(for: ev) }
+            CalendarLinkService.shared.mirror(ev)
+            newEventTitle = ""
+        }
+
+        // MARK: – Top bar
 
         private var topBar: some View {
             HStack {
@@ -3364,99 +3456,243 @@ extension CasalistCottage {
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
 
+        // MARK: – Content
+
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 hero
-                if allEvents.isEmpty {
+                dayStrip
+                if canAddEvents { quickAddRow }
+                if allEvents.isEmpty && linkedEvents.isEmpty {
                     emptyCard
                 } else {
-                    section("TODAY ☀️", events: todayEvents, color: P.peach)
-                    section("THIS WEEK 📅", events: weekEvents, color: P.butter)
-                    section("UPCOMING", events: laterEvents, color: P.sky)
-                    section("PAST", events: past.prefix(10).map { $0 }, color: P.textMuted, isPast: true)
+                    eventList
                 }
-                if !linkedEvents.isEmpty {
-                    linkedSection
-                }
+                if !linkedEvents.isEmpty { linkedSection }
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
-        private var linkedSection: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("FROM YOUR APPLE CALENDAR 🍎")
-                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
-                        .foregroundStyle(P.textDim).padding(.leading, 4)
-                    Spacer()
-                    Text("\(linkedEvents.count)")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(P.textMuted).padding(.trailing, 4)
-                }
-                VStack(spacing: 0) {
-                    ForEach(linkedEvents, id: \.eventIdentifier) { ek in
-                        linkedEventRow(ek)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-            }
-        }
-
-        private func linkedEventRow(_ ek: EKEvent) -> some View {
-            HStack(spacing: 12) {
-                VStack(spacing: 2) {
-                    Text(dayLabel(ek.startDate))
-                        .font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(P.textDim).tracking(0.5)
-                    Text(monthLabel(ek.startDate))
-                        .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(Color(cgColor: ek.calendar.cgColor))
-                }
-                .frame(width: 44).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(cgColor: ek.calendar.cgColor).opacity(0.18)))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(ek.title ?? "Untitled")
-                        .font(.system(size: 15, weight: .heavy))
-                    Text(linkedSubtitle(ek))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(P.textDim)
-                }
-                Spacer()
-                Image(systemName: "calendar")
-                    .font(.system(size: 11))
-                    .foregroundStyle(P.textMuted)
-            }
-            .padding(.vertical, 10)
-        }
-
-        private func linkedSubtitle(_ ek: EKEvent) -> String {
-            let f = DateFormatter()
-            if ek.isAllDay {
-                f.dateFormat = "EEE MMM d 'all day'"
-            } else {
-                f.dateFormat = "EEE MMM d 'at' h:mm a"
-            }
-            return f.string(from: ek.startDate)
-        }
+        // MARK: – Hero
 
         private var hero: some View {
             HStack(spacing: 16) {
-                ZStack {
-                    Circle().fill(Color.white.opacity(0.2)).frame(width: 76, height: 76)
-                    Image(systemName: "calendar").font(.system(size: 32)).foregroundStyle(.white)
+                // Month/day badge
+                VStack(spacing: 0) {
+                    Text(Date().formatted(.dateTime.month(.abbreviated)).uppercased())
+                        .font(.system(size: 10, weight: .heavy)).tracking(1).opacity(0.85)
+                    Text(Date().formatted(.dateTime.day()))
+                        .font(.system(size: 34, weight: .heavy))
+                    Text(Date().formatted(.dateTime.weekday(.wide)).uppercased())
+                        .font(.system(size: 8, weight: .heavy)).tracking(0.8).opacity(0.85)
                 }
+                .foregroundStyle(.white)
+                .frame(width: 76, height: 76)
+                .background(Circle().fill(Color.white.opacity(0.2)))
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text("SCHEDULE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
                     Text("\(upcoming.count) upcoming").font(.system(size: 22, weight: .heavy))
-                    Text(todayEvents.isEmpty ? "Nothing today" : "\(todayEvents.count) today").font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                    if let next = nextEvent {
+                        Text("Next: \(next.title)").font(.system(size: 12, weight: .semibold)).opacity(0.85).lineLimit(1)
+                    } else {
+                        Text("Nothing scheduled").font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                    }
                 }
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.white).padding(20)
             .background(P.sky)
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+
+        // MARK: – Day strip
+
+        private var dayStrip: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    // "All" pill
+                    let allActive = selectedDay == nil
+                    Button { selectedDay = nil } label: {
+                        VStack(spacing: 2) {
+                            Text("ALL").font(.system(size: 9, weight: .heavy)).tracking(0.5)
+                            Image(systemName: "calendar").font(.system(size: 16, weight: .heavy))
+                        }
+                        .foregroundStyle(allActive ? .white : P.textDim)
+                        .frame(width: 48, height: 56)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(allActive ? P.sky : P.surfaceAlt))
+                    }.buttonStyle(.plain)
+
+                    ForEach(stripDays, id: \.self) { day in
+                        let isSelected = selectedDay.map { isSameDay($0, day) } ?? false
+                        let isToday = Calendar.current.isDateInToday(day)
+                        let count = upcoming.filter { isSameDay($0.startDate, day) }.count
+                        Button { selectedDay = isSelected ? nil : day } label: {
+                            VStack(spacing: 2) {
+                                Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                                    .font(.system(size: 9, weight: .heavy)).tracking(0.5)
+                                Text(day.formatted(.dateTime.day()))
+                                    .font(.system(size: 15, weight: .heavy))
+                                if count > 0 {
+                                    Circle().fill(isSelected ? .white : P.peach).frame(width: 5, height: 5)
+                                } else {
+                                    Circle().fill(Color.clear).frame(width: 5, height: 5)
+                                }
+                            }
+                            .foregroundStyle(isSelected ? .white : (isToday ? P.sky : P.textDim))
+                            .frame(width: 48, height: 56)
+                            .background(RoundedRectangle(cornerRadius: 14)
+                                .fill(isSelected ? P.sky : (isToday ? P.sky.opacity(0.15) : P.surfaceAlt)))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(isToday && !isSelected ? P.sky : Color.clear, lineWidth: 1.5))
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+
+        // MARK: – Quick-add
+
+        private var quickAddRow: some View {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                TextField("Add an event...", text: $newEventTitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit(addQuickEvent)
+                Button { addQuickEvent() } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        // MARK: – Event list
+
+        private var eventList: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                if let day = selectedDay {
+                    let label = Calendar.current.isDateInToday(day) ? "TODAY" : day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()).uppercased()
+                    HStack {
+                        Text(label).font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                        Spacer()
+                        Text("\(filteredUpcoming.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                    }
+                }
+                if filteredUpcoming.isEmpty && selectedDay != nil {
+                    Text("No events on this day").font(.system(size: 13, weight: .semibold)).foregroundStyle(P.textDim)
+                        .frame(maxWidth: .infinity).padding(20)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(filteredUpcoming) { e in
+                            eventCard(e, isPast: false)
+                        }
+                        if selectedDay == nil {
+                            ForEach(past.prefix(5).map { $0 }) { e in
+                                eventCard(e, isPast: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private func eventCard(_ e: FamilyEvent, isPast: Bool) -> some View {
+            let color = isPast ? P.textMuted : eventColor(e)
+            return Button { editingEvent = e } label: {
+                HStack(spacing: 0) {
+                    // Left color stripe
+                    RoundedRectangle(cornerRadius: 3).fill(color)
+                        .frame(width: 5).padding(.vertical, 10)
+                    HStack(spacing: 12) {
+                        // Date badge
+                        VStack(spacing: 1) {
+                            Text(dayLabel(e.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
+                            Text(monthLabel(e.startDate)).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(P.textDim)
+                        }
+                        .frame(width: 40)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.12)))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(e.title)
+                                .font(.system(size: 15, weight: .heavy))
+                                .foregroundStyle(isPast ? P.textDim : P.text)
+                                .strikethrough(isPast)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock").font(.system(size: 9, weight: .semibold)).foregroundStyle(P.textDim)
+                                Text(timeLabel(e)).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                                if !e.location.isEmpty {
+                                    Text("·").foregroundStyle(P.textMuted)
+                                    Image(systemName: "mappin").font(.system(size: 9)).foregroundStyle(P.textMuted)
+                                    Text(e.location).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim).lineLimit(1)
+                                }
+                            }
+                            if !e.attendees.isEmpty {
+                                Text(e.attendees).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                }
+                .background(P.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
+                .opacity(isPast ? 0.6 : 1)
+            }.buttonStyle(.plain)
+        }
+
+        // MARK: – Apple Calendar section
+
+        private var linkedSection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("FROM APPLE CALENDAR").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(linkedEvents.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                VStack(spacing: 10) {
+                    ForEach(linkedEvents, id: \.eventIdentifier) { ek in
+                        linkedEventCard(ek)
+                    }
+                }
+            }
+        }
+
+        private func linkedEventCard(_ ek: EKEvent) -> some View {
+            let cal = Color(cgColor: ek.calendar.cgColor)
+            return HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 3).fill(cal).frame(width: 5).padding(.vertical, 10)
+                HStack(spacing: 12) {
+                    VStack(spacing: 1) {
+                        Text(dayLabel(ek.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(cal)
+                        Text(monthLabel(ek.startDate)).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(P.textDim)
+                    }
+                    .frame(width: 40).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(cal.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(ek.title ?? "Untitled").font(.system(size: 15, weight: .heavy)).lineLimit(2)
+                        Text(linkedSubtitle(ek)).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "calendar").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+            }
+            .background(P.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func linkedSubtitle(_ ek: EKEvent) -> String {
+            let f = DateFormatter()
+            f.dateFormat = ek.isAllDay ? "EEE MMM d 'all day'" : "EEE MMM d 'at' h:mm a"
+            return f.string(from: ek.startDate)
         }
 
         private var emptyCard: some View {
@@ -3466,86 +3702,19 @@ extension CasalistCottage {
                     Text("No events scheduled").font(.system(size: 14, weight: .heavy))
                     Text(canAddEvents ? "Tap + to add a family event" : "Ask a parent to add events").font(.system(size: 11, weight: .semibold)).opacity(0.7)
                 }
-                .foregroundStyle(P.text)
-                .frame(maxWidth: .infinity).padding(24)
+                .foregroundStyle(P.text).frame(maxWidth: .infinity).padding(24)
                 .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                 .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
             }.buttonStyle(.plain)
         }
 
-        @ViewBuilder
-        private func section(_ title: String, events: [FamilyEvent], color: Color, isPast: Bool = false) -> some View {
-            if !events.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(title).font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
-                        Spacer()
-                        Text("\(events.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
-                    }
-                    VStack(spacing: 0) {
-                        ForEach(Array(events.enumerated()), id: \.element.id) { i, e in
-                            eventRow(e, color: color, isFirst: i == 0, isPast: isPast)
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                }
-            }
-        }
+        // MARK: – Helpers
 
-        private func eventRow(_ e: FamilyEvent, color: Color, isFirst: Bool, isPast: Bool) -> some View {
-            HStack(spacing: 12) {
-                VStack(spacing: 2) {
-                    Text(dayLabel(e.startDate)).font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textDim).tracking(0.5)
-                    Text(monthLabel(e.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
-                }
-                .frame(width: 44)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.18)))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(e.title)
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundStyle(isPast ? P.textDim : P.text)
-                        .strikethrough(isPast)
-                    HStack(spacing: 6) {
-                        Image(systemName: "clock").font(.system(size: 10)).foregroundStyle(color)
-                        Text(timeLabel(e))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(P.textDim)
-                        if !e.location.isEmpty {
-                            Text("·").foregroundStyle(P.textMuted)
-                            Image(systemName: "mappin").font(.system(size: 10)).foregroundStyle(P.textMuted)
-                            Text(e.location).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim).lineLimit(1)
-                        }
-                    }
-                    if !e.attendees.isEmpty {
-                        Text(e.attendees).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
-            }
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
-            .onTapGesture { editingEvent = e }
-            .overlay(alignment: .top) {
-                if !isFirst { Rectangle().fill(P.border).frame(height: 1) }
-            }
-        }
-
-        private func dayLabel(_ d: Date) -> String {
-            let f = DateFormatter(); f.dateFormat = "d"
-            return f.string(from: d)
-        }
-        private func monthLabel(_ d: Date) -> String {
-            let f = DateFormatter(); f.dateFormat = "MMM"
-            return f.string(from: d).uppercased()
-        }
+        private func dayLabel(_ d: Date) -> String { d.formatted(.dateTime.day()) }
+        private func monthLabel(_ d: Date) -> String { d.formatted(.dateTime.month(.abbreviated)).uppercased() }
         private func timeLabel(_ e: FamilyEvent) -> String {
-            if e.isAllDay { return "All-day" }
-            let f = DateFormatter(); f.dateFormat = "h:mm a"
-            return f.string(from: e.startDate)
+            if e.isAllDay { return "All day" }
+            return e.startDate.formatted(.dateTime.hour().minute())
         }
     }
 }
