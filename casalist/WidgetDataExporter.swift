@@ -4,9 +4,9 @@ import CoreData
 import WidgetKit
 #endif
 
-/// Writes a snapshot of "today's reminders" to a JSON file in the
-/// shared App Group container so the Widget Extension's timeline
-/// provider can read it without needing direct Core Data access.
+/// Writes a `TodayReminderSnapshot` JSON file to the shared App Group
+/// container so the Widget Extension's timeline provider can render
+/// without needing direct Core Data access.
 ///
 /// The widget extension runs in its own process and can't reach the
 /// app's NSPersistentCloudKitContainer directly — even if it could,
@@ -14,32 +14,9 @@ import WidgetKit
 /// be re-done in-extension. A JSON snapshot in shared storage is
 /// simpler, smaller, and refreshes whenever the main app saves.
 ///
-/// Snapshot is intentionally minimal: enough for the widget views to
-/// render, no more. We dump after every save in the main app and on
-/// foreground entry.
-struct TodayReminderSnapshot: Codable {
-    /// One reminder firing today.
-    struct Entry: Codable, Identifiable {
-        var id: String           // TaskItem.uid
-        var title: String
-        var fireAt: Date?        // dueDate; nil for pinned reminders without a time
-        var isDone: Bool
-        var colorTagRaw: String  // ReminderColorTag rawValue ("none", "red", …)
-        var assignee: String     // empty == everyone
-    }
-
-    /// All today-relevant reminders, sorted by fireAt ascending.
-    /// Pinned-but-undated reminders are sorted last.
-    var entries: [Entry]
-
-    /// When this snapshot was written. The widget displays "Updated
-    /// 2 min ago" using this — surfaces staleness without needing a
-    /// background refresh hook from the extension side.
-    var generatedAt: Date
-}
-
+/// Main-app-only target membership. The snapshot TYPE itself
+/// (TodayReminderSnapshot.swift) is the shared file.
 enum WidgetDataExporter {
-    /// Filename inside the App Group container.
     private static let snapshotFilename = "today-reminders-snapshot.json"
 
     private static var snapshotURL: URL {
@@ -47,8 +24,8 @@ enum WidgetDataExporter {
     }
 
     /// Read today's reminders from the given context, serialize them,
-    /// and atomically write the snapshot. Safe to call from the main
-    /// thread; the actual disk write is fast (small JSON blob).
+    /// and atomically write the snapshot. Tickles the widget extension
+    /// to reload its timeline.
     static func export(from context: NSManagedObjectContext) {
         let cal = Calendar.current
         let now = Date()
@@ -83,19 +60,7 @@ enum WidgetDataExporter {
         let snapshot = TodayReminderSnapshot(entries: entries, generatedAt: now)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: snapshotURL, options: .atomic)
-
-        // Tickle the widget extension to reload via WidgetCenter. The
-        // import is gated behind canImport because the WidgetKit
-        // framework is iOS 14+ and this file otherwise compiles fine
-        // on older targets / on macOS test runs.
         reloadTimelines()
-    }
-
-    /// Read the most-recent snapshot. Returns nil if the file doesn't
-    /// exist yet (first launch before any export).
-    static func loadSnapshot() -> TodayReminderSnapshot? {
-        guard let data = try? Data(contentsOf: snapshotURL) else { return nil }
-        return try? JSONDecoder().decode(TodayReminderSnapshot.self, from: data)
     }
 
     private static func reloadTimelines() {

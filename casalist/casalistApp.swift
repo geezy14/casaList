@@ -660,6 +660,16 @@ struct CasalistApp: App {
                         await NotificationsManager.scheduleReminderRecap()
                         await NotificationsManager.syncEventsFromContext(stack.context)
                     }
+                    // Widget extension reads a JSON snapshot from the
+                    // shared App Group container. Refresh on every
+                    // launch so the widget shows current state.
+                    WidgetDataExporter.export(from: stack.context)
+                    // Reconcile any active status pings into Live
+                    // Activities on this device's Lock Screen / Dynamic
+                    // Island. Skips pings created by the current user.
+                    if #available(iOS 16.2, *) {
+                        StatusPingLiveActivityBridge.syncFromContext(stack.context, currentUser: userName)
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
@@ -675,9 +685,15 @@ struct CasalistApp: App {
                             await NotificationsManager.detectAndNotifyPendingRequests(in: stack.context, userName: userName)
                             await NotificationsManager.detectAndNotifyGroceryActivity(in: stack.context, userName: userName)
                             await NotificationsManager.detectAndNotifyStatusPings(in: stack.context, userName: userName)
+                            if #available(iOS 16.2, *) {
+                                StatusPingLiveActivityBridge.syncFromContext(stack.context, currentUser: userName)
+                            }
                             await NotificationsManager.syncEventsFromContext(stack.context)
                         }
                     }
+                    // Snapshot may have changed — re-export so the
+                    // widget sees the new state.
+                    WidgetDataExporter.export(from: stack.context)
                 }
         }
         .onChange(of: scenePhase) {

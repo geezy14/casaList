@@ -6,14 +6,78 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9B697F1A2FB939780033761F /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B697F192FB939770033761F /* WidgetKit.framework */; };
+		9B697F1C2FB939780033761F /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B697F1B2FB939780033761F /* SwiftUI.framework */; };
+		9B697F2B2FB939790033761F /* CasalistWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9B697F172FB939770033761F /* CasalistWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		9B697F292FB939790033761F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9B5ECD422FAC6D6F00278AD3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9B697F162FB939770033761F;
+			remoteInfo = CasalistWidgetsExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9B697F2C2FB939790033761F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9B697F2B2FB939790033761F /* CasalistWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		9B5ECD4A2FAC6D6F00278AD3 /* casalist.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = casalist.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9B697F172FB939770033761F /* CasalistWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CasalistWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9B697F192FB939770033761F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		9B697F1B2FB939780033761F /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		9B697F312FB939C20033761F /* CasalistWidgetsExtensionRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CasalistWidgetsExtensionRelease.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9B697F2F2FB939790033761F /* Exceptions for "CasalistWidgets" folder in "CasalistWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 9B697F162FB939770033761F /* CasalistWidgetsExtension */;
+		};
+		9B697FE42FB93DD20033761F /* Exceptions for "casalist" folder in "CasalistWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppGroup.swift,
+				StatusPingActivityAttributes.swift,
+				TodayReminderSnapshot.swift,
+			);
+			target = 9B697F162FB939770033761F /* CasalistWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9B5ECD4C2FAC6D6F00278AD3 /* casalist */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9B697FE42FB93DD20033761F /* Exceptions for "casalist" folder in "CasalistWidgetsExtension" target */,
+			);
 			path = casalist;
+			sourceTree = "<group>";
+		};
+		9B697F1D2FB939780033761F /* CasalistWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9B697F2F2FB939790033761F /* Exceptions for "CasalistWidgets" folder in "CasalistWidgetsExtension" target */,
+			);
+			path = CasalistWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,13 +90,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9B697F142FB939770033761F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9B697F1C2FB939780033761F /* SwiftUI.framework in Frameworks */,
+				9B697F1A2FB939780033761F /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		9B5ECD412FAC6D6F00278AD3 = {
 			isa = PBXGroup;
 			children = (
+				9B697F312FB939C20033761F /* CasalistWidgetsExtensionRelease.entitlements */,
 				9B5ECD4C2FAC6D6F00278AD3 /* casalist */,
+				9B697F1D2FB939780033761F /* CasalistWidgets */,
+				9B697F182FB939770033761F /* Frameworks */,
 				9B5ECD4B2FAC6D6F00278AD3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +117,18 @@
 			isa = PBXGroup;
 			children = (
 				9B5ECD4A2FAC6D6F00278AD3 /* casalist.app */,
+				9B697F172FB939770033761F /* CasalistWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9B697F182FB939770033761F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9B697F192FB939770033761F /* WidgetKit.framework */,
+				9B697F1B2FB939780033761F /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +141,12 @@
 				9B5ECD462FAC6D6F00278AD3 /* Sources */,
 				9B5ECD472FAC6D6F00278AD3 /* Frameworks */,
 				9B5ECD482FAC6D6F00278AD3 /* Resources */,
+				9B697F2C2FB939790033761F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				9B697F2A2FB939790033761F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9B5ECD4C2FAC6D6F00278AD3 /* casalist */,
@@ -69,6 +157,28 @@
 			productName = casalist;
 			productReference = 9B5ECD4A2FAC6D6F00278AD3 /* casalist.app */;
 			productType = "com.apple.product-type.application";
+		};
+		9B697F162FB939770033761F /* CasalistWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9B697F302FB939790033761F /* Build configuration list for PBXNativeTarget "CasalistWidgetsExtension" */;
+			buildPhases = (
+				9B697F132FB939770033761F /* Sources */,
+				9B697F142FB939770033761F /* Frameworks */,
+				9B697F152FB939770033761F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9B697F1D2FB939780033761F /* CasalistWidgets */,
+			);
+			name = CasalistWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = CasalistWidgetsExtension;
+			productReference = 9B697F172FB939770033761F /* CasalistWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +191,9 @@
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					9B5ECD492FAC6D6F00278AD3 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					9B697F162FB939770033761F = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -100,12 +213,20 @@
 			projectRoot = "";
 			targets = (
 				9B5ECD492FAC6D6F00278AD3 /* casalist */,
+				9B697F162FB939770033761F /* CasalistWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		9B5ECD482FAC6D6F00278AD3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B697F152FB939770033761F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +243,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9B697F132FB939770033761F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9B697F2A2FB939790033761F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9B697F162FB939770033761F /* CasalistWidgetsExtension */;
+			targetProxy = 9B697F292FB939790033761F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		9B5ECD592FAC6D7200278AD3 /* Debug */ = {
@@ -319,6 +455,67 @@
 			};
 			name = Release;
 		};
+		9B697F2D2FB939790033761F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CasalistWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CasalistWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gbrown10.casalist.dev.CasalistWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9B697F2E2FB939790033761F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = CasalistWidgetsExtensionRelease.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CasalistWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CasalistWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gbrown10.casalist.CasalistWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -336,6 +533,15 @@
 			buildConfigurations = (
 				9B5ECD592FAC6D7200278AD3 /* Debug */,
 				9B5ECD5A2FAC6D7200278AD3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9B697F302FB939790033761F /* Build configuration list for PBXNativeTarget "CasalistWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9B697F2D2FB939790033761F /* Debug */,
+				9B697F2E2FB939790033761F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
