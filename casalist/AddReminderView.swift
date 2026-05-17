@@ -269,7 +269,7 @@ struct AddReminderView: View {
             }
             .sheet(isPresented: $showColorWheel) {
                 ColorWheelSheet(tag: $colorTag)
-                    .presentationDetents([.height(360)])
+                    .presentationDetents([.large])
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
