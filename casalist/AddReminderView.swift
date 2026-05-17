@@ -55,6 +55,7 @@ struct AddReminderView: View {
     @State private var templateName: String = ""
     @State private var colorTag: ReminderColorTag
     @State private var playSound: Bool
+    @State private var showColorWheel: Bool = false
 
     enum Chip: Hashable, CaseIterable { case when, repeats, notify, location, photo, tag, sound, stopTime }
 
@@ -265,6 +266,10 @@ struct AddReminderView: View {
                     locationName = picked.displayName
                     if locationRadius == 0 { locationRadius = 500 * metersPerFoot }
                 }
+            }
+            .sheet(isPresented: $showColorWheel) {
+                ColorWheelSheet(tag: $colorTag)
+                    .presentationDetents([.height(360)])
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -489,48 +494,35 @@ struct AddReminderView: View {
         .buttonStyle(.plain)
     }
 
-    /// Color-wheel swatch. Wraps a SwiftUI `ColorPicker` whose label
-    /// is the swatch itself, so tapping the swatch opens the system
-    /// color wheel directly. Selected hex is converted to a `.custom`
-    /// tag on every change.
-    @ViewBuilder
+    /// Color-wheel swatch. Tapping opens a sheet with a real
+    /// ColorPicker + hex input field for direct typing. Inline
+    /// ColorPicker overlays were unreliable — the SwiftUI label-less
+    /// ColorPicker doesn't always intercept taps when stacked under
+    /// another shape. Real sheet sidesteps the issue and gives us
+    /// room for the hex field.
     private var colorWheelSwatch: some View {
         let isCustom = colorTag.isCustom
-        let displayColor: Color = isCustom ? colorTag.swiftUIColor : .accentColor
-        ZStack {
-            // Conic gradient ring as the "color wheel" affordance.
-            // When the user already picked a custom color, fill solid
-            // with that color instead so they can see what's set.
-            if isCustom {
-                Circle().fill(displayColor).frame(width: 32, height: 32)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(.white)
-            } else {
-                Circle()
-                    .fill(AngularGradient(
-                        gradient: Gradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .pink, .red]),
-                        center: .center
-                    ))
-                    .frame(width: 32, height: 32)
-                    .overlay(Circle().fill(.black.opacity(0.001)))   // hit test
+        return Button { showColorWheel = true } label: {
+            ZStack {
+                if isCustom {
+                    Circle().fill(colorTag.swiftUIColor).frame(width: 32, height: 32)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(.white)
+                } else {
+                    Circle()
+                        .fill(AngularGradient(
+                            gradient: Gradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .pink, .red]),
+                            center: .center
+                        ))
+                        .frame(width: 32, height: 32)
+                }
             }
-            ColorPicker("",
-                        selection: Binding(
-                            get: { displayColor },
-                            set: { newColor in
-                                colorTag = .custom(newColor.hexString)
-                            }
-                        ),
-                        supportsOpacity: false
+            .overlay(
+                Circle().stroke(Color.primary.opacity(isCustom ? 0.4 : 0), lineWidth: 2)
             )
-            .labelsHidden()
-            .frame(width: 32, height: 32)
-            .opacity(0.025)   // invisible but full hit-target over the swatch
         }
-        .overlay(
-            Circle().stroke(Color.primary.opacity(isCustom ? 0.4 : 0), lineWidth: 2)
-        )
+        .buttonStyle(.plain)
     }
 
     private var soundPanel: some View {
@@ -788,88 +780,94 @@ struct AddReminderView: View {
         panelCard {
             VStack(alignment: .leading, spacing: 10) {
                 panelHeader("Location", icon: "mappin.and.ellipse")
-                Toggle("Trigger at a location", isOn: Binding(
-                    get: { hasLocationTrigger },
-                    set: { on in
-                        if on {
-                            LocationReminderService.shared.requestAuthorization()
-                            if locationRadius == 0 { locationRadius = 500 * metersPerFoot }
-                            showLocationPicker = true
-                        } else {
-                            locationLat = 0; locationLng = 0
-                            locationRadius = 0; locationName = ""
-                        }
-                    }
-                ))
-                if hasLocationTrigger {
-                    // Saved locations — quick-tap chips for the places
-                    // the user defined in Settings. Avoids re-typing
-                    // "Home" / "Work" every time.
-                    let saved = SavedLocationsStore.loadAll()
-                    if !saved.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(saved) { s in
-                                    Button {
-                                        locationLat = s.latitude
-                                        locationLng = s.longitude
-                                        locationName = s.label
-                                    } label: {
-                                        Label(s.label, systemImage: "mappin.circle.fill")
-                                            .font(.system(size: 12, weight: .heavy))
-                                            .padding(.horizontal, 12).padding(.vertical, 8)
-                                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                                    }
-                                    .buttonStyle(.plain)
+                // Saved locations — quick-tap chips for places
+                // defined in Settings.
+                let saved = SavedLocationsStore.loadAll()
+                if !saved.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(saved) { s in
+                                Button {
+                                    locationLat = s.latitude
+                                    locationLng = s.longitude
+                                    locationName = s.label
+                                } label: {
+                                    Label(s.label, systemImage: "mappin.circle.fill")
+                                        .font(.system(size: 12, weight: .heavy))
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
-                    Button { showLocationPicker = true } label: {
-                        HStack {
-                            Text(locationName.isEmpty ? "Pick a place" : locationName)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
+                }
+                Button { showLocationPicker = true } label: {
+                    HStack {
+                        Text(locationName.isEmpty ? "Pick a place" : locationName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
-                    // Visual confirmation that the right pin landed on
-                    // the right spot — re-uses the same mini-map that
-                    // events use in AddEventView.
-                    if locationLat != 0 || locationLng != 0 {
-                        LocationMiniMap(
-                            latitude: locationLat,
-                            longitude: locationLng,
-                            title: locationName.isEmpty ? "Reminder" : locationName,
-                            radiusMeters: locationRadius
-                        )
+                }
+                if locationLat != 0 || locationLng != 0 {
+                    LocationMiniMap(
+                        latitude: locationLat,
+                        longitude: locationLng,
+                        title: locationName.isEmpty ? "Reminder" : locationName,
+                        radiusMeters: locationRadius
+                    )
+                }
+                Picker("Fire when", selection: $locationOnArrive) {
+                    Text("Arriving").tag(true)
+                    Text("Leaving").tag(false)
+                }
+                .pickerStyle(.segmented)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Radius")
+                        Spacer()
+                        Text(radiusLabel).foregroundStyle(.secondary)
                     }
-                    Picker("Fire when", selection: $locationOnArrive) {
-                        Text("Arriving").tag(true)
-                        Text("Leaving").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Radius")
-                            Spacer()
-                            Text(radiusLabel).foregroundStyle(.secondary)
-                        }
-                        // Slider in feet — CoreLocation needs meters
-                        // internally, but the UI stays in US units.
-                        Slider(
-                            value: Binding(
-                                get: { locationRadius / metersPerFoot },
-                                set: { locationRadius = $0 * metersPerFoot }
-                            ),
-                            in: 100...5280,
-                            step: 50
-                        )
-                    }
-                    Text("Needs Always location permission to fire while Casalist is in the background.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Slider(
+                        value: Binding(
+                            get: { locationRadius / metersPerFoot },
+                            set: { locationRadius = $0 * metersPerFoot }
+                        ),
+                        in: 100...5280,
+                        step: 50
+                    )
+                }
+                Text("Needs Always location permission to fire while Casalist is in the background.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button {
+                    locationLat = 0
+                    locationLng = 0
+                    locationRadius = 0
+                    locationName = ""
+                    expandedChips.remove(.location)
+                } label: {
+                    Label("Remove location trigger", systemImage: "xmark.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+        }
+        .onAppear {
+            // Opening the chip = wants location trigger. Auto-arm
+            // the defaults so all controls are immediately usable.
+            if locationRadius == 0 {
+                LocationReminderService.shared.requestAuthorization()
+                locationRadius = 500 * metersPerFoot
+                if locationLat == 0 && locationLng == 0 {
+                    // Prompt for a place since the user clearly
+                    // wants to set one — no separate "pick a place"
+                    // step.
+                    showLocationPicker = true
                 }
             }
         }
@@ -879,14 +877,24 @@ struct AddReminderView: View {
         panelCard {
             VStack(alignment: .leading, spacing: 10) {
                 panelHeader("Stop time", icon: "moon.zzz")
-                Toggle("Stop firing after a time", isOn: $hasStopTime)
-                if hasStopTime {
-                    DatePicker("Stop at", selection: $stopDate, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.compact)
-                    Text("Notifications fire between the start time and the stop time each day. Set stop > start.")
-                        .font(.caption).foregroundStyle(.secondary)
+                DatePicker("Stop at", selection: $stopDate, displayedComponents: .hourAndMinute)
+                    .datePickerStyle(.compact)
+                Text("Notifications fire between the start time and the stop time each day. Set stop > start.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button {
+                    hasStopTime = false
+                    expandedChips.remove(.stopTime)
+                } label: {
+                    Label("Remove stop time", systemImage: "xmark.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
             }
+        }
+        .onAppear {
+            if !hasStopTime { hasStopTime = true }
         }
     }
 
