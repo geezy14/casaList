@@ -2960,6 +2960,15 @@ extension CasalistCottage {
             }
         }
 
+        private func reminderPriorityColor(_ p: Int64) -> Color {
+            switch p {
+            case 1: return .blue
+            case 2: return .orange
+            case 3: return .red
+            default: return .clear
+            }
+        }
+
         private func iconFor(_ t: TaskItem) -> String {
             if !t.effectiveRepeatKind.isEmpty { return "arrow.triangle.2.circlepath" }
             if t.dueDate != nil { return "clock.fill" }
@@ -3446,6 +3455,12 @@ extension CasalistCottage {
                                                 .lineLimit(1)
                                         }
                                         Spacer(minLength: 0)
+                                        // Priority badge
+                                        if t.reminderPriority > 0 {
+                                            Text(String(repeating: "!", count: Int(t.reminderPriority)))
+                                                .font(.system(size: 11, weight: .black))
+                                                .foregroundStyle(reminderPriorityColor(t.reminderPriority))
+                                        }
                                         Image(systemName: "chevron.right")
                                             .font(.system(size: 10, weight: .heavy))
                                             .foregroundStyle(P.textMuted)
@@ -3488,7 +3503,7 @@ extension CasalistCottage {
                                 }
                                 .padding(14)
                                 .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-                                .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                                .background(RoundedRectangle(cornerRadius: 26).fill(P.surface))
                                 .overlay(alignment: .leading) {
                                     // Color-tag stripe along the left
                                     // edge — invisible when no tag set.
@@ -3497,11 +3512,11 @@ extension CasalistCottage {
                                         RoundedRectangle(cornerRadius: 4)
                                             .fill(tag.swiftUIColor)
                                             .frame(width: 4)
-                                            .padding(.vertical, 8)
+                                            .padding(.vertical, 10)
                                             .padding(.leading, 4)
                                     }
                                 }
-                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                                .overlay(RoundedRectangle(cornerRadius: 26).stroke(P.border, lineWidth: 1.5))
                             }
                             .buttonStyle(.row)
                             .contextMenu {

@@ -2,8 +2,8 @@ import SwiftUI
 import CoreData
 import PhotosUI
 
-/// Reminder add/edit sheet — all fields visible inline, no hidden panels.
-/// Layout: title → when (date + time always shown) → repeat → notify → advanced.
+/// Reminder add/edit sheet — Apple Reminders "Details" style.
+/// Grouped cards, section headers, all options visible — no icon strip or hidden panels.
 struct AddReminderView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
@@ -42,8 +42,9 @@ struct AddReminderView: View {
     @State private var colorTag: ReminderColorTag
     @State private var playSound: Bool
     @State private var showColorWheel: Bool = false
-    @State private var showAdvanced: Bool = false
     @State private var nextFireDates: [Date] = []
+    @State private var hasFireTime: Bool
+    @State private var priority: Int64
 
     init(editing: TaskItem? = nil, template: ReminderTemplate? = nil) {
         self.editing = editing
@@ -67,12 +68,8 @@ struct AddReminderView: View {
             _colorTag = State(initialValue: ReminderColorTagStore.tag(for: t.uid))
             _playSound = State(initialValue: ReminderSoundStore.playsSound(for: t.uid))
             _pendingPhoto = State(initialValue: ReminderPhotoStore.image(for: t.uid))
-            // Auto-open advanced section if any advanced field is set.
-            let hasAdvanced = t.locationRadius > 0
-                || ReminderPhotoStore.hasImage(for: t.uid)
-                || ReminderColorTagStore.tag(for: t.uid) != .none
-                || !ReminderSoundStore.playsSound(for: t.uid)
-            _showAdvanced = State(initialValue: hasAdvanced)
+            _hasFireTime = State(initialValue: t.dueDate != nil)
+            _priority = State(initialValue: t.reminderPriority)
         } else if let tpl = template {
             _title = State(initialValue: tpl.title)
             _repeatKind = State(initialValue: tpl.repeatKind)
@@ -92,7 +89,8 @@ struct AddReminderView: View {
             _locationOnArrive = State(initialValue: tpl.locationOnArrive)
             _colorTag = State(initialValue: .none)
             _playSound = State(initialValue: true)
-            _showAdvanced = State(initialValue: tpl.locationRadius > 0)
+            _hasFireTime = State(initialValue: tpl.hasFireTime)
+            _priority = State(initialValue: 0)
         } else {
             _title = State(initialValue: "")
             _repeatKind = State(initialValue: "")
@@ -109,7 +107,8 @@ struct AddReminderView: View {
             _locationOnArrive = State(initialValue: true)
             _colorTag = State(initialValue: .none)
             _playSound = State(initialValue: true)
-            _showAdvanced = State(initialValue: false)
+            _hasFireTime = State(initialValue: false)
+            _priority = State(initialValue: 0)
         }
     }
 
@@ -133,6 +132,15 @@ struct AddReminderView: View {
         if let rule = RepeatRule.fromLegacy(repeatKind) { return rule.label }
         return repeatKind.capitalized
     }
+    private var priorityTint: Color {
+        switch priority {
+        case 1: return .blue
+        case 2: return .orange
+        case 3: return .red
+        default: return .secondary
+        }
+    }
+
     private var stopMinutesValue: Int64 {
         guard isCadenceKind, hasStopTime else { return 0 }
         let cal = Calendar.current
@@ -147,55 +155,33 @@ struct AddReminderView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
-                    titleCard
+                VStack(alignment: .leading, spacing: 0) {
+                    titleSection
 
-                    // Streak heatmap in edit mode (daily/weekly/monthly/yearly only)
-                    if let editing,
-                       ["daily","weekly","monthly","yearly"].contains(editing.effectiveRepeatKind),
-                       !ReminderStreak.completionDays(for: editing.uid).isEmpty {
-                        ReminderStreakHeatmap(taskUid: editing.uid)
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+                    sectionLabel("Date & Time")
+                    dateTimeCard
+
+                    sectionLabel("Repeat")
+                    repeatCard
+
+                    if !nextFireDates.isEmpty && hasFireDate {
+                        nextFiresBlock
+                            .padding(.horizontal, 36)
+                            .padding(.top, 8)
                     }
 
-                    whenCard
-                    if hasFireDate { repeatCard }
-                    notifyCard
-                    advancedCard
+                    sectionLabel("Details")
+                    detailsCard
 
-                    // Footer actions
-                    Button {
-                        templateName = title.isEmpty ? "" : title
-                        showSaveTemplate = true
-                    } label: {
-                        Label("Save as template", systemImage: "square.stack")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    }
-                    .buttonStyle(.row)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    sectionLabel("Location")
+                    locationCard
 
-                    if editing != nil {
-                        Button(role: .destructive) { confirmDelete = true } label: {
-                            Label("Delete reminder", systemImage: "trash")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Capsule().fill(Color.red.opacity(0.12)))
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.row)
-                    }
+                    footerSection
                 }
-                .padding(16)
-                .animation(.easeInOut(duration: 0.2), value: hasFireDate)
-                .animation(.easeInOut(duration: 0.2), value: hasRepeat)
-                .animation(.easeInOut(duration: 0.2), value: showAdvanced)
+                .padding(.bottom, 36)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(editing == nil ? "New reminder" : "Edit reminder")
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle(editing == nil ? "New Reminder" : "Edit Reminder")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showCustomRepeat) {
                 CustomRepeatPicker(encoded: $repeatKind)
@@ -212,10 +198,21 @@ struct AddReminderView: View {
                 ColorWheelSheet(tag: $colorTag).presentationDetents([.large])
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color(.secondaryLabel))
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
-                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(action: save) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .confirmationDialog("Delete reminder?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -238,41 +235,48 @@ struct AddReminderView: View {
                     }
                 }
             }
-            // Populate "Next Fires" from the actual notification center so
-            // snoozes, skips, and real queued fires are reflected accurately.
-            // Runs on appear and whenever the repeat/date config changes.
             .task(id: "\(repeatKind)|\(hasFireDate)|\(fireDate.timeIntervalSince1970.rounded())") {
                 await refreshNextFires()
             }
         }
     }
 
-    private func refreshNextFires() async {
-        if let t = editing {
-            // Edit mode: read what's actually pending (includes snoozes).
-            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
-            nextFireDates = await NotificationsManager.upcomingFireDates(
-                baseId: baseId, taskUid: t.uid, limit: 3
-            )
-        } else {
-            // New reminder: compute from pattern since nothing is queued yet.
-            nextFireDates = NotificationsManager.previewFireDates(
-                kind: repeatKind,
-                dueDate: hasFireDate ? fireDate : nil,
-                endMinutes: stopMinutesValue,
-                limit: 3
-            )
-        }
+    // MARK: – Layout helpers
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 36)
+            .padding(.top, 22)
+            .padding(.bottom, 6)
     }
 
-    // MARK: – Title card
+    @ViewBuilder
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .padding(.horizontal, 20)
+    }
 
-    private var titleCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("What do you want to remember?", text: $title, axis: .vertical)
-                .font(.system(size: 18, weight: .semibold))
+    // MARK: – Title section
+
+    private var titleSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField("Title", text: $title, axis: .vertical)
+                .font(.title2.weight(.semibold))
                 .textInputAutocapitalization(.sentences)
-                .lineLimit(1...4)
+                .lineLimit(1...5)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+
             if !titleSuggestions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -283,17 +287,382 @@ struct AddReminderView: View {
                                     .foregroundStyle(.primary)
                                     .padding(.horizontal, 10).padding(.vertical, 6)
                                     .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                                    .lineLimit(1)
                             }
                             .buttonStyle(.row)
                         }
                     }
+                    .padding(.horizontal, 20)
                 }
+                .padding(.bottom, 8)
+            }
+
+            if let editing,
+               ["daily","weekly","monthly","yearly"].contains(editing.effectiveRepeatKind),
+               !ReminderStreak.completionDays(for: editing.uid).isEmpty {
+                ReminderStreakHeatmap(taskUid: editing.uid)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
+
+    // MARK: – Date & Time card
+
+    private var dateTimeCard: some View {
+        card {
+            // ── Date row ────────────────────────────────────────────
+            HStack(spacing: 12) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text("Date")
+                Spacer()
+                if hasFireDate {
+                    DatePicker("", selection: $fireDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                }
+                Toggle("", isOn: $hasFireDate)
+                    .labelsHidden()
+                    .onChange(of: hasFireDate) { _, on in
+                        if on && fireDate < Date() { fireDate = Date().addingTimeInterval(3600) }
+                        if !on { repeatKind = ""; hasFireTime = false }
+                    }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            // Quick chips (when date is on)
+            if hasFireDate {
+                Divider().padding(.leading, 50)
+                quickDateChips
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+            }
+
+            Divider().padding(.leading, 50)
+
+            // ── Time row ────────────────────────────────────────────
+            HStack(spacing: 12) {
+                Image(systemName: "clock")
+                    .font(.system(size: 17))
+                    .foregroundStyle(hasFireDate ? .secondary : .tertiary)
+                    .frame(width: 22)
+                Text("Time")
+                    .foregroundStyle(hasFireDate ? .primary : Color(.tertiaryLabel))
+                Spacer()
+                if hasFireDate && hasFireTime {
+                    DatePicker("", selection: $fireDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                }
+                Toggle("", isOn: $hasFireTime)
+                    .labelsHidden()
+                    .disabled(!hasFireDate)
+                    .onChange(of: hasFireTime) { _, on in
+                        if on {
+                            if fireDate < Date() { fireDate = Date().addingTimeInterval(3600) }
+                        } else {
+                            let cal = Calendar.current
+                            fireDate = cal.date(bySettingHour: 9, minute: 0, second: 0,
+                                                of: fireDate) ?? fireDate
+                        }
+                    }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+        }
+    }
+
+    // MARK: – Repeat card
+
+    private var repeatCard: some View {
+        card {
+            HStack(spacing: 12) {
+                Image(systemName: "repeat")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Button { showCustomRepeat = true } label: {
+                    HStack {
+                        Text("Repeat").foregroundStyle(.primary)
+                        Spacer()
+                        Text(repeatRowLabel)
+                            .foregroundStyle(hasRepeat ? .primary : .secondary)
+                        if !hasRepeat {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.row)
+                if hasRepeat {
+                    Button { repeatKind = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(.tertiaryLabel))
+                    }
+                    .buttonStyle(.row)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            if isCadenceKind {
+                Divider().padding(.leading, 50)
+                HStack(spacing: 12) {
+                    Image(systemName: "stop.circle")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22)
+                    Text("Stop at")
+                    Spacer()
+                    if hasStopTime {
+                        DatePicker("", selection: $stopDate, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                    }
+                    Toggle("", isOn: $hasStopTime).labelsHidden()
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 50)
+            }
+        }
+    }
+
+    // MARK: – Next fires block
+
+    private var nextFiresBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("NEXT FIRES")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .tracking(0.5)
+            ForEach(Array(nextFireDates.enumerated()), id: \.offset) { _, d in
+                (Text(d, style: .relative).foregroundStyle(.secondary)
+                + Text("  ·  ").foregroundStyle(.tertiary)
+                + Text(d, style: .time).foregroundStyle(.secondary))
+                .font(.system(size: 12))
+            }
+        }
+    }
+
+    // MARK: – Details card (notify, tag, sound, photo)
+
+    private var detailsCard: some View {
+        card {
+            // Notify
+            HStack(spacing: 12) {
+                Image(systemName: "person")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text("Notify")
+                Spacer()
+                Picker("Notify", selection: $assignee) {
+                    Text("Everyone").tag("")
+                    ForEach(familyMembers, id: \.uid) { m in
+                        Text(m.name).tag(m.name)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            Divider().padding(.leading, 50)
+
+            // Priority
+            HStack(spacing: 12) {
+                Image(systemName: "flag")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text("Priority")
+                Spacer()
+                Picker("Priority", selection: $priority) {
+                    Text("None").tag(Int64(0))
+                    Text("Low").tag(Int64(1))
+                    Text("Medium").tag(Int64(2))
+                    Text("High").tag(Int64(3))
+                }
+                .pickerStyle(.menu)
+                .tint(priorityTint)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            Divider().padding(.leading, 50)
+
+            // Sound
+            HStack(spacing: 12) {
+                Image(systemName: playSound ? "speaker.wave.2" : "speaker.slash")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text("Sound")
+                Spacer()
+                Toggle("", isOn: $playSound).labelsHidden()
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            Divider().padding(.leading, 50)
+
+            // Photo
+            photoRow
+        }
+    }
+
+    private var photoRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: pendingPhoto == nil ? "camera" : "camera.fill")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text("Photo")
+                Spacer()
+                PhotosPicker(selection: $pickerItem, matching: .images) {
+                    Text(pendingPhoto == nil ? "Add" : "Change")
+                        .foregroundStyle(Color.accentColor)
+                }
+                if pendingPhoto != nil {
+                    Button { pendingPhoto = nil } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color(.tertiaryLabel))
+                    }
+                    .buttonStyle(.row)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            if let img = pendingPhoto {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 120)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
+        }
+    }
+
+    // MARK: – Location card
+
+    private var locationCard: some View {
+        card {
+            HStack(spacing: 12) {
+                Image(systemName: "location")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Button { showLocationPicker = true } label: {
+                    HStack {
+                        Text("Location").foregroundStyle(.primary)
+                        Spacer()
+                        Text(locationName.isEmpty ? "None" : locationName)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if !hasLocationTrigger {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.row)
+                if hasLocationTrigger {
+                    Button { locationRadius = 0; locationName = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(.tertiaryLabel))
+                    }
+                    .buttonStyle(.row)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
+
+            if hasLocationTrigger {
+                Divider().padding(.leading, 50)
+                VStack(spacing: 12) {
+                    Picker("", selection: $locationOnArrive) {
+                        Text("Arriving").tag(true)
+                        Text("Leaving").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Radius: \(radiusLabel)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Slider(value: $locationRadius, in: 30.48...1609.34, step: 30.48)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    // MARK: – Footer
+
+    private var footerSection: some View {
+        VStack(spacing: 0) {
+            Button {
+                templateName = title.isEmpty ? "" : title
+                showSaveTemplate = true
+            } label: {
+                Label("Save as template", systemImage: "square.stack")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.row)
+            .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+
+            if editing != nil {
+                Divider().padding(.horizontal, 20)
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Label("Delete reminder", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.row)
+                .foregroundStyle(.red)
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    // MARK: – Next fire refresh
+
+    private func refreshNextFires() async {
+        if let t = editing {
+            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
+            nextFireDates = await NotificationsManager.upcomingFireDates(
+                baseId: baseId, taskUid: t.uid, limit: 3
+            )
+        } else {
+            nextFireDates = NotificationsManager.previewFireDates(
+                kind: repeatKind,
+                dueDate: hasFireDate ? fireDate : nil,
+                endMinutes: stopMinutesValue,
+                limit: 3
+            )
+        }
+    }
+
+    // MARK: – Title suggestions
 
     private var titleSuggestions: [String] {
         let typed = title.trimmingCharacters(in: .whitespaces)
@@ -322,66 +691,8 @@ struct AddReminderView: View {
         return out
     }
 
-    // MARK: – When card
+    // MARK: – Quick date chips
 
-    private var whenCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header row: label + toggle
-            HStack {
-                Image(systemName: "bell")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(.secondary)
-                Text("Alert")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Toggle("Alert", isOn: $hasFireDate)
-                    .labelsHidden()
-                    .onChange(of: hasFireDate) { _, on in
-                        if on && fireDate < Date() {
-                            fireDate = Date().addingTimeInterval(3600)
-                        }
-                    }
-            }
-
-            if hasFireDate {
-                // Quick-pick date chips
-                quickDateChips
-
-                Divider()
-
-                // Date picker — compact tappable pill
-                HStack {
-                    Text("Date")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                    Spacer()
-                    DatePicker("Date", selection: $fireDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                }
-
-                // Time picker — compact tappable pill (always visible)
-                HStack {
-                    Text("Time")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                    Spacer()
-                    DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                }
-            } else {
-                Text("Pinned — stays at the top, no alert")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
-    }
-
-    // Quick date chip strip
     private var quickDateChips: some View {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -443,251 +754,6 @@ struct AddReminderView: View {
         return cal.date(byAdding: .day, value: daysUntilSat == 0 ? 7 : daysUntilSat, to: base) ?? base
     }
 
-    // MARK: – Repeat card
-
-    private var repeatCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Repeat row — tap to open full picker; X clears an existing repeat
-            HStack {
-                Button { showCustomRepeat = true } label: {
-                    HStack {
-                        Image(systemName: "repeat")
-                            .font(.system(size: 13, weight: .heavy))
-                            .foregroundStyle(.secondary)
-                        Text("Repeat")
-                            .font(.system(size: 13, weight: .heavy))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if !hasRepeat {
-                            Text("Never")
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text(repeatRowLabel)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.row)
-
-                if hasRepeat {
-                    Button { repeatKind = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Color(.tertiaryLabel))
-                            .font(.system(size: 18))
-                    }
-                    .buttonStyle(.row)
-                }
-            }
-
-            // Stop time — only for hourly cadences
-            if isCadenceKind {
-                Divider()
-                HStack {
-                    Text("Stop at")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if hasStopTime {
-                        DatePicker("", selection: $stopDate, displayedComponents: .hourAndMinute)
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                    }
-                    Toggle("", isOn: $hasStopTime)
-                        .labelsHidden()
-                }
-            }
-
-            // "Next fires" — reads actual pending notification center entries
-            // so snoozes and skips are reflected accurately.
-            if (hasRepeat || hasFireDate) && !nextFireDates.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("NEXT FIRES")
-                        .font(.system(size: 9, weight: .heavy))
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                    ForEach(Array(nextFireDates.enumerated()), id: \.offset) { _, d in
-                        (Text(d, style: .relative)
-                            .foregroundStyle(.secondary)
-                        + Text("  ·  ")
-                            .foregroundStyle(.tertiary)
-                        + Text(d, style: .time)
-                            .foregroundStyle(.secondary))
-                        .font(.system(size: 12))
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
-    }
-
-    // MARK: – Notify card
-
-    private var notifyCard: some View {
-        HStack {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(.secondary)
-            Text("Notify")
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Picker("Notify", selection: $assignee) {
-                Text("Everyone").tag("")
-                ForEach(familyMembers, id: \.uid) { m in
-                    Text(m.name).tag(m.name)
-                }
-            }
-            .pickerStyle(.menu)
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
-    }
-
-    // MARK: – Advanced card (disclosure)
-
-    private var advancedCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Disclosure toggle header
-            Button {
-                withAnimation { showAdvanced.toggle() }
-            } label: {
-                HStack {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                    Text("More options")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Image(systemName: showAdvanced ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.row)
-            .padding(14)
-
-            if showAdvanced {
-                Divider().padding(.horizontal, 14)
-
-                // ── Location ──────────────────────────────────────────
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Location")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        Spacer()
-                        Button(locationName.isEmpty ? "Set place" : locationName) {
-                            showLocationPicker = true
-                        }
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        if hasLocationTrigger {
-                            Button { locationRadius = 0; locationName = "" } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.row)
-                        }
-                    }
-                    if hasLocationTrigger {
-                        // Arrive / Leave
-                        Picker("", selection: $locationOnArrive) {
-                            Text("Arriving").tag(true)
-                            Text("Leaving").tag(false)
-                        }
-                        .pickerStyle(.segmented)
-
-                        // Radius slider (100 ft → 1 mi in feet, stored as meters)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Radius: \(radiusLabel)")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Slider(
-                                value: $locationRadius,
-                                in: 30.48...1609.34,    // 100 ft … 1 mi in meters
-                                step: 30.48             // 100 ft steps
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-
-                Divider().padding(.horizontal, 14)
-
-                // ── Photo ─────────────────────────────────────────────
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Photo")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        Spacer()
-                        PhotosPicker(selection: $pickerItem, matching: .images) {
-                            Text(pendingPhoto == nil ? "Add photo" : "Change")
-                                .font(.subheadline)
-                        }
-                        if pendingPhoto != nil {
-                            Button { pendingPhoto = nil } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.row)
-                        }
-                    }
-                    if let img = pendingPhoto {
-                        Image(uiImage: img)
-                            .resizable().scaledToFill()
-                            .frame(height: 120).frame(maxWidth: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-
-                Divider().padding(.horizontal, 14)
-
-                // ── Color tag ─────────────────────────────────────────
-                HStack {
-                    Text("Tag")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Spacer()
-                    Button { showColorWheel = true } label: {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(colorTag == .none ? Color(.tertiarySystemFill) : colorTag.swiftUIColor)
-                                .frame(width: 20, height: 20)
-                                .overlay(Circle().stroke(.secondary.opacity(0.3), lineWidth: 0.5))
-                            Text(colorTag == .none ? "None" : colorTag.label)
-                                .font(.subheadline)
-                        }
-                    }
-                    .buttonStyle(.row)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-
-                Divider().padding(.horizontal, 14)
-
-                // ── Sound ─────────────────────────────────────────────
-                HStack {
-                    Text("Sound")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Spacer()
-                    Toggle("Sound", isOn: $playSound)
-                        .labelsHidden()
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-            }
-        }
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
-    }
-
     // MARK: – Template persistence
 
     private func persistTemplate() {
@@ -731,6 +797,7 @@ struct AddReminderView: View {
             editing.locationRadius = locationRadius
             editing.locationOnArrive = locationOnArrive
             editing.locationName = locationName
+            editing.reminderPriority = priority
             target = editing
         } else {
             let item = TaskItem(
@@ -750,6 +817,7 @@ struct AddReminderView: View {
             item.locationRadius = locationRadius
             item.locationOnArrive = locationOnArrive
             item.locationName = locationName
+            item.reminderPriority = priority
             if let h = households.preferredTarget {
                 moc.assign(item, toStoreOf: h)
                 item.household = h

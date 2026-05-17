@@ -307,6 +307,9 @@ final class CasaCoreDataStack {
             attr("locationRadius", .doubleAttributeType, def: 0.0),
             attr("locationOnArrive", .booleanAttributeType, def: true),
             attr("locationName", .stringAttributeType, def: ""),
+            // Reminder priority: 0=none, 1=low, 2=medium, 3=high.
+            // Schema redeploy required before this syncs in Production.
+            attr("reminderPriority", .integer64AttributeType, def: Int64(0)),
         ]
 
         // ------- FamilyGoal attributes -------

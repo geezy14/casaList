@@ -1,0 +1,9 @@
+What's New in 1.8.1
+
+Bug Fix: Swipe-back gesture now works on all screens in the app. Previously the left-edge swipe to go back did not fire reliably (it lost the gesture race to scroll views). Rebuilt with a UIKit gesture recognizer that runs alongside scroll views instead of competing with them.
+
+What to Test
+
+- Open any reminder or task detail screen
+- Swipe from the left edge of the screen to go back
+- Should dismiss the screen smoothly, including when the page is scrollable

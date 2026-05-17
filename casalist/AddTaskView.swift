@@ -19,8 +19,9 @@ struct AddTaskView: View {
     @State private var taskName = ""
     @State private var assigneeName: String = ""
     @State private var category: String
-    @State private var dueDate = Date()
+    @State private var dueDate = Calendar.current.startOfDay(for: Date())
     @State private var hasDueDate: Bool = true
+    @State private var hasTime: Bool = false
     @State private var points: Int = 10
     @State private var repeatKind: String = ""
 
@@ -95,9 +96,40 @@ struct AddTaskView: View {
                 }
 
                 Section("When") {
-                    Toggle("Has a due date", isOn: $hasDueDate)
+                    HStack {
+                        Text("Date")
+                        Spacer()
+                        if hasDueDate {
+                            DatePicker("", selection: $dueDate, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                        }
+                        Toggle("", isOn: $hasDueDate)
+                            .labelsHidden()
+                            .onChange(of: hasDueDate) { _, on in
+                                if !on { hasTime = false }
+                            }
+                    }
                     if hasDueDate {
-                        DatePicker("Due", selection: $dueDate)
+                        HStack {
+                            Text("Time")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if hasTime {
+                                DatePicker("", selection: $dueDate, displayedComponents: .hourAndMinute)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                            }
+                            Toggle("", isOn: $hasTime)
+                                .labelsHidden()
+                                .onChange(of: hasTime) { _, on in
+                                    if !on {
+                                        dueDate = Calendar.current.startOfDay(for: dueDate)
+                                    } else if dueDate < Date() {
+                                        dueDate = Date().addingTimeInterval(3600)
+                                    }
+                                }
+                        }
                     }
                 }
 

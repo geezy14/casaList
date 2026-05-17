@@ -26,6 +26,8 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var locationRadius: Double
     @NSManaged public var locationOnArrive: Bool
     @NSManaged public var locationName: String
+    /// 0=none  1=low  2=medium  3=high
+    @NSManaged public var reminderPriority: Int64
     @NSManaged public var household: Household?
 
     var hasLocationTrigger: Bool { locationRadius > 0 }
