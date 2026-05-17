@@ -27,12 +27,11 @@ Start as a pilot — apply to one or two surfaces first (dashboard tiles, family
 Detailed in [`docs/v2-backlog.md`](v2-backlog.md):
 
 - **Notification scheduling rework + Skip-next-occurrence** — Swap repeating triggers for rolling one-shots so we can cancel a specific instance. Unlocks Skip, accurate quiet-hours, "next 3 fires" preview.
-- **Rewards overhaul** — Replace placeholder inbox tray icon, smoother goal request/approval flow, hero-goal view for kids.
+- **Rewards overhaul** — Replace placeholder inbox tray icon, smoother goal request/approval flow, hero-goal view for kids. Adds a **Prizes page** — a curated catalog of pre-priced rewards stocked by owner/admin (kids browse the page and tap to claim, no approval round trip; admin still confirms delivery). Backed by a new `Prize` Core Data entity. Supports household-wide and per-member scoping. Includes **points → cash conversion** (settings rate like "1 pt = $0.05"; rewards/prizes show both currencies; optional scheduled allowance payouts).
 - **Starfield (kid mode) overhaul** — Age-aware variants, integration with Personal Stats Card, theme/palette options.
 - **Personal Stats Card** — Baseball-card-style trophy view on dashboard photo tap. Lifetime + season-to-date stats, shareable as image.
 - **Family-wide stats view** — Household rollup companion to Personal Card.
 - **Kick member flow** — Finish the parked 1.5 work. `share.removeParticipant` + soft-delete + confirm dialog.
-- **Two-way Apple Reminders sync** — Completing in Apple Reminders.app marks done in Casalist.
 - **App-icon badge count** — Pending-reminder count on the home-screen icon.
 - **Photo sync verification** — Re-test cross-account FamilyMember.photoBlob sync now that schema is in Prod.
 
@@ -150,11 +149,11 @@ CloudKit Production schema deploy (2026-05-16) bundled the 1.6 FamilyMember loca
 
 Bigger reworks and brand-new surfaces. See [`docs/v2-backlog.md`](v2-backlog.md). Currently includes:
 
+- **iPad app** — NavigationSplitView shell, multi-column dashboard, keyboard shortcuts, drag-and-drop, Stage Manager friendly
 - Notification scheduling rework + Skip-next-occurrence
 - Kick member flow (closes the parked 1.5 issue)
 - Photo sync verification + fix (FamilyMember.photoBlob)
 - App-icon badge count
-- Two-way Apple Reminders sync
 - Family-wide stats view
 - Rewards overhaul
 - Starfield (kid mode) overhaul

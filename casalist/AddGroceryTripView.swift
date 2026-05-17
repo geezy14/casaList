@@ -48,7 +48,8 @@ struct AddGroceryTripView: View {
             task: name.trimmingCharacters(in: .whitespaces),
             dueDate: hasDate ? tripDate : nil,
             category: "groceries",
-            points: 0,
+            points: -1, // container sentinel — see TaskItem.isContainer
+
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
         if let h = households.preferredTarget {

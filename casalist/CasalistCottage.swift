@@ -996,6 +996,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(item: $pendingForKid) { m in pendingForKidSheet(m) }
             .celebration(visible: $celebrate, label: celebrateLabel, emoji: celebrateEmoji)
+            .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
 
         /// Pending FamilyGoals owned by this member (PENDING:<name> pattern),
@@ -1184,7 +1185,7 @@ public enum CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Family Leaderboard 🏆").font(.system(size: 28, weight: .heavy))
+                    Text("Rewards 🏆").font(.system(size: 28, weight: .heavy))
                 }
                 podium
                 standings
@@ -1785,6 +1786,7 @@ extension CasalistCottage {
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
             .celebration(visible: $celebrate, label: celebrateLabel)
+            .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
 
         private func completeTask(_ t: TaskItem) {
@@ -2091,17 +2093,20 @@ extension CasalistCottage {
         public init() {}
 
         private var groceryTasks: [TaskItem] { allTasks.filter { $0.category.lowercased() == "groceries" } }
-        // A "trip" is a top-level grocery task with a dueDate (shows in agenda).
+        // A "trip" is a top-level grocery task that's either explicitly
+        // a container (created via AddGroceryTripView, stamped points = -1)
+        // OR has a dueDate (legacy outings created before the sentinel).
         private var trips: [TaskItem] {
-            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate != nil }
+            groceryTasks.filter { $0.parentUid.isEmpty && ($0.isContainer || $0.dueDate != nil) }
                 .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
         }
-        // Flat items: top-level grocery tasks without a dueDate (the existing quick-add behavior).
+        // Flat items: top-level quick-add grocery items (no parent,
+        // no date, not a container). Stays in the existing inline-add bucket.
         private var flatActive: [TaskItem] {
-            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && !$0.isCompleted }
+            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && !$0.isContainer && !$0.isCompleted }
         }
         private var flatBought: [TaskItem] {
-            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && $0.isCompleted }
+            groceryTasks.filter { $0.parentUid.isEmpty && $0.dueDate == nil && !$0.isContainer && $0.isCompleted }
         }
         private func items(in trip: TaskItem) -> [TaskItem] {
             groceryTasks.filter { $0.parentUid == trip.uid }

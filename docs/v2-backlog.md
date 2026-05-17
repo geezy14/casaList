@@ -8,6 +8,42 @@ Newest first.
 
 ---
 
+## v2.0 — iPad app (proposed 2026-05-16)
+
+Ship a real iPad experience alongside iPhone in v2. Today the
+target is iPhone-only; running on iPad falls back to a scaled-up
+iPhone window which wastes the screen.
+
+Scope:
+- Add iPad to the supported device families in the casalist target.
+- Adopt `NavigationSplitView` (sidebar + content + detail) for the
+  adult shell on regular size class, falling back to today's tab
+  layout on compact (iPhone, iPad in Slide Over).
+- Sidebar lists the primary tabs (Home, My To-Do, Grocery,
+  Schedule, Family, Rewards, Settings). Middle column lists items
+  in the selected section. Detail column shows the active reminder
+  / task / event.
+- Multi-column dashboard — surface today's reminders, upcoming
+  events, family agenda side-by-side instead of stacked.
+- Keyboard support — `⌘N` new reminder, `⌘F` search, `⌘1..n` jump
+  to sidebar section, `Space` to mark done, arrow-key navigation
+  in lists.
+- Pointer hover states on cards + buttons (already mostly free via
+  SwiftUI defaults; needs a polish pass).
+- Drag-and-drop between sections (drag a grocery item into a
+  reminder, drag a task between family members).
+- Stage Manager / external display friendly — resize-aware layouts
+  end-to-end. No fixed-width assumptions.
+- Widget extension already universal — confirm widget renders on
+  iPad home screen at all sizes.
+- Live Activities on iPad Lock Screen — confirm parity.
+
+Open question: do we want a Mac (Designed for iPad / Catalyst)
+build at the same time? Probably yes-with-caveats — same binary
+runs as a window on macOS via "Designed for iPad" with zero extra
+work, but a real Catalyst pass would need its own menu bar +
+window restoration story. Park the Mac question; iPad-first.
+
 ## v2.0 — Notification scheduling rework + Skip-next-occurrence (proposed 2026-05-16)
 
 Today reminder notifications use `UNCalendarNotificationTrigger(repeats: true)` and `UNTimeIntervalNotificationTrigger(repeats: true)` — iOS manages the recurrence internally and delivers on every component match. That works great for "always fires" but means we can't surgically skip a single occurrence.
@@ -43,12 +79,6 @@ If it still doesn't sync after a real two-account test, the bug is deeper (proba
 
 Show pending-reminder count on the home-screen Casalist icon via `UNUserNotificationCenter.current().setBadgeCount(_:)`. Update at app launch, on every reminder save/complete, and when notifications fire. Pair with a Settings toggle ("Show reminder count on app icon — On/Off") because some people hate badges.
 
-## v2.0 — Two-way Apple Reminders sync (proposed 2026-05-16)
-
-Today the Apple Reminders mirror is one-way (Casalist → Apple). Make completing in iOS Reminders.app mark done in Casalist. Subscribe to `EKEventStoreChanged` notifications, diff the mirror against the source, propagate completions back into Core Data.
-
-Cost: needs careful loop-prevention (Casalist writes to Apple → fires EKEventStoreChanged → Casalist reads back and writes again).
-
 ## v2.0 — Family-wide stats view (proposed 2026-05-16)
 
 Companion to the Personal Stats Card. Household-wide rollup: total chores done this week, who's leading, MVP per category, week-over-week trend. Already have the data; just needs the view.
@@ -67,6 +97,61 @@ don't accidentally polish the placeholder. Specifics get nailed
 down when v2 starts.
 
 Known starting points:
+- **Points → cash conversion (proposed 2026-05-16)** — Today points
+  are abstract — chores award them, rewards cost them, and prices
+  are picked ad-hoc by admins at approval time. Layer a real
+  conversion rate on top: settings → "1 point = $0.05" (or
+  whatever the household decides). Once set:
+  - Every reward / prize price displays in BOTH points and dollars
+    side by side ("250 pts · $12.50")
+  - Kids can see "lifetime earned: $84.20" — a real, motivating
+    number instead of just a point total
+  - Optional: convert accumulated points into an allowance payout
+    on a schedule (weekly Sunday, monthly first-of-month). Admin
+    confirms the payout, points zero out (or reduce by paid amount).
+    Cash payout is just a record — the actual money handoff
+    happens IRL, Casalist just tracks it.
+  - Stretch: per-chore "dollar value override" — most chores stay
+    on the conversion rate, but a big-deal task (mow the lawn) can
+    be priced directly in dollars by the admin and back-converted
+    to points at award time.
+
+  Stored on `Household` (single rate per household,
+  `pointsToCentsRate: Int` — store as cents per point to avoid
+  Double-precision drift). Settings → POINTS section gets a "$
+  per point" row. Surface in admin Reward stocking form (live
+  preview: "$12.50") and the Prizes catalog tile.
+
+- **Prizes page (catalog of pre-chosen rewards, proposed 2026-05-16)**
+  — Today rewards are entirely request-driven: kid asks for X,
+  admin sets a price, kid redeems when they hit it. Add a dedicated
+  **Prizes page** showing a curated catalog stocked by the owner/
+  admin ("$5 — extra screen time hour", "$20 — pick a movie night",
+  "$50 — sleepover with a friend"). Family members browse the
+  catalog tiles and tap to claim — no approval round trip needed
+  because the admin already pre-approved by stocking it. Admin
+  still confirms delivery at redemption time.
+
+  **Data model — Option B (locked in)**: separate `Prize` entity
+  (Core Data NSManagedObject), NOT a flag on `FamilyGoal`. Prizes
+  and personal goals are conceptually different surfaces — keeping
+  them in different tables means no list-screen accidentally mixes
+  them up, and Prize can grow fields personal goals don't need
+  (stock count, expiration date, hide/retire state, scoping rules)
+  without bloating FamilyGoal. Schema fields (initial sketch):
+  `uid`, `title`, `cost` (Int), `emoji` / `imageData`, `createdBy`
+  (admin name), `scopeMemberUid` (nil = household-wide, else the
+  member who can claim), `sortIndex`, `isHidden`, `isRetired`,
+  `household` (relationship), `deletedAt`. Plus a way to track
+  claims — either a `PrizeClaim` join table OR re-use the existing
+  redemption flow on FamilyGoal by creating a goal from a prize at
+  claim time.
+
+  UI: new "Prizes" surface (likely a tab or a top-bar shortcut in
+  the Rewards screen). Admin sees a stocking view with add/edit/
+  reorder/hide. Members see a grid of tiles; tap to claim, locked
+  state shown if they can't afford it yet. Catalog items can be
+  household-wide (anyone can claim) or per-member (Donovan only).
 - Rework the inbox/tray icon on the Leaderboard (placeholder today)
 - Smoother goal request flow — fewer taps, better request-context
   capture, optional photo / reason at request time

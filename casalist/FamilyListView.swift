@@ -44,14 +44,20 @@ public struct FamilyListView: View {
     private var dark: Bool { darkOverride ?? (sys == .dark) }
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(dark) }
 
-    /// Trips are family tasks with a non-nil dueDate AND no parentUid.
-    /// They act as containers — other items nest under them via parentUid.
-    /// Trips themselves are never claimable, so we don't filter by assignee.
+    /// Trips/outings are family tasks at the top level (no parentUid)
+    /// that act as containers — children nest under them via parentUid.
+    /// A task is recognized as a container if EITHER:
+    ///   • it was created with `points = -1` via `AddFamilyTripView`
+    ///     (the new sentinel — works regardless of whether a date was
+    ///     scheduled), OR
+    ///   • it has a non-nil dueDate (legacy: pre-sentinel outings on
+    ///     existing devices were stamped that way).
+    /// Trips themselves are never claimable, so no assignee filter.
     private var trips: [TaskItem] {
         allTasks.filter {
             $0.category.lowercased() == "family"
-                && $0.dueDate != nil
                 && $0.parentUid.isEmpty
+                && ($0.isContainer || $0.dueDate != nil)
                 && !$0.isCompleted
         }.sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
     }
@@ -65,12 +71,16 @@ public struct FamilyListView: View {
                 && !$0.isCompleted
         }.sorted { $0.createdAt < $1.createdAt }
     }
-    /// Loose items — no trip parent, no dueDate, UNCLAIMED.
+    /// Loose items — no trip parent, no dueDate, UNCLAIMED, and not
+    /// itself a container (a dateless outing has dueDate == nil but
+    /// is marked `isContainer`; we exclude it here so it renders as
+    /// a trip card instead of a loose row).
     private var looseItems: [TaskItem] {
         allTasks.filter {
             $0.category.lowercased() == "family"
                 && $0.parentUid.isEmpty
                 && $0.dueDate == nil
+                && !$0.isContainer
                 && !$0.isCompleted
                 && ($0.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
         }.sorted { $0.createdAt > $1.createdAt }
@@ -84,7 +94,8 @@ public struct FamilyListView: View {
             $0.category.lowercased() == "family"
                 && !$0.isCompleted
                 && $0.parentUid.isEmpty       // not nested in a trip
-                && $0.dueDate == nil          // not a trip itself
+                && $0.dueDate == nil          // not a dated trip
+                && !$0.isContainer            // not a dateless outing
                 && ($0.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
         }.sorted { $0.createdAt > $1.createdAt }
     }
@@ -129,6 +140,7 @@ public struct FamilyListView: View {
         .sheet(item: $editingTask) { t in TaskDetailView(task: t) }
         .sheet(item: $editingAnnouncement) { a in StatusPingSheet(editing: a) }
         .celebration(visible: $celebrate, label: celebrateLabel)
+        .swipeBack { if let onHome { onHome() } else { dismiss() } }
     }
 
     private var inboxBadgeCount: Int {

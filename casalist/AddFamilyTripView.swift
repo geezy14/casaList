@@ -5,6 +5,12 @@ import CoreData
 /// TaskItem (category = "family") that other family-tab items can nest
 /// under via `parentUid`. Title doubles as the "trip" or "outing"
 /// label; optional date attaches the trip to a calendar moment.
+///
+/// Container sentinel: outings/trips are stamped with `points = -1`
+/// so the family/grocery filters can recognize them as containers
+/// regardless of whether a date was set. Without this marker, a
+/// dateless outing falls through to the loose-items bucket and
+/// can't have children nested under it. See `TaskItem.isContainer`.
 struct AddFamilyTripView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
@@ -53,7 +59,8 @@ struct AddFamilyTripView: View {
             task: name.trimmingCharacters(in: .whitespaces),
             dueDate: hasDate ? tripDate : nil,
             category: "family",
-            points: 0,
+            points: -1, // container sentinel — see TaskItem.isContainer
+
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
         if let h = households.preferredTarget {

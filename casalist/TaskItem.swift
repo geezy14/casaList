@@ -32,6 +32,16 @@ public final class TaskItem: NSManagedObject {
 
     var isLive: Bool { deletedAt == nil }
 
+    /// Family outings and grocery trips are stamped with `points = -1`
+    /// at creation (`AddFamilyTripView`, `AddGroceryTripView`). This
+    /// makes them recognizable as containers even when no date was
+    /// scheduled — otherwise a dateless outing/trip would fall into
+    /// the loose-items bucket and couldn't host nested children.
+    /// Backward-compat: pre-existing outings created before this flag
+    /// (points = 0, dueDate set) are still treated as containers via
+    /// the explicit `dueDate != nil` clause in the trip filters.
+    var isContainer: Bool { points == -1 && parentUid.isEmpty }
+
     public override func awakeFromInsert() {
         super.awakeFromInsert()
         setPrimitiveValue(UUID().uuidString, forKey: "uid")
