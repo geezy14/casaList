@@ -206,6 +206,7 @@ public enum CasalistCottage {
         @State private var showFamilyList = false
         @State private var selectedAgendaTask: TaskItem? = nil
         @State private var showProfilePhoto = false
+        @State private var showPersonalCard = false
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
@@ -263,6 +264,7 @@ public enum CasalistCottage {
             .sheet(item: $selectedAgendaTask) { t in TaskDetailView(task: t) }
             .sheet(item: $selectedSearchTask) { t in TaskDetailView(task: t) }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
+            .fullScreenCover(isPresented: $showPersonalCard) { PersonalCardView() }
         }
 
         // MARK: – Search bar
@@ -668,7 +670,7 @@ public enum CasalistCottage {
         /// uploaded photo when their matching FamilyMember has one, otherwise
         /// the person.crop.circle.fill glyph. Tap to pick/replace photo.
         private var profileIcon: some View {
-            Button { showProfilePhoto = true } label: {
+            Button { showPersonalCard = true } label: {
                 ZStack {
                     Circle()
                         .fill(Color(red: 0.12, green: 0.12, blue: 0.18))
