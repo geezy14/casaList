@@ -74,11 +74,12 @@ private struct SmallView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             CasalistHero()
-            // Faded bell as texture anchor.
+            // Faded bell as texture anchor — clipped to the card's
+            // rounded shape via the outer .clipShape below.
             Image(systemName: "bell.fill")
-                .font(.system(size: 88))
-                .foregroundStyle(.white.opacity(0.10))
-                .offset(x: 70, y: 40)
+                .font(.system(size: 78))
+                .foregroundStyle(.white.opacity(0.12))
+                .offset(x: 60, y: 40)
                 .rotationEffect(.degrees(14))
 
             if open.isEmpty {
@@ -117,6 +118,7 @@ private struct SmallView: View {
                 .padding(14)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var emptySmall: some View {
@@ -138,25 +140,25 @@ private struct MediumView: View {
     let open: [TodayReminderSnapshot.Entry]
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Hero column (gradient + count)
+        HStack(spacing: 10) {
+            // Hero card (rounded, clipped so the pin doesn't slip out)
             ZStack(alignment: .topLeading) {
                 CasalistHero()
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 110))
-                    .foregroundStyle(.white.opacity(0.10))
-                    .offset(x: 30, y: 50)
-                    .rotationEffect(.degrees(-20))
+                    .font(.system(size: 92))
+                    .foregroundStyle(.white.opacity(0.12))
+                    .offset(x: 38, y: 56)
+                    .rotationEffect(.degrees(-18))
                 VStack(alignment: .leading, spacing: 0) {
                     pinkLabel("TODAY")
                     Text("\(open.count)")
-                        .font(.system(size: 64, weight: .black, design: .rounded))
+                        .font(.system(size: 60, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
-                        .padding(.top, -8)
+                        .padding(.top, -6)
                     Text(open.count == 1 ? "reminder" : "reminders")
                         .font(.system(size: 11, weight: .heavy))
                         .foregroundStyle(.white.opacity(0.85))
-                        .padding(.top, -6)
+                        .padding(.top, -4)
                     Spacer(minLength: 0)
                     Text(weekdayLabel(Date()).uppercased())
                         .font(.system(size: 9, weight: .heavy)).tracking(1.2)
@@ -164,7 +166,8 @@ private struct MediumView: View {
                 }
                 .padding(14)
             }
-            .frame(width: 145)
+            .frame(width: 138)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
             // List column
             VStack(alignment: .leading, spacing: 8) {
@@ -204,9 +207,9 @@ private struct LargeView: View {
             ZStack(alignment: .topLeading) {
                 CasalistHero()
                 Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 140))
-                    .foregroundStyle(.white.opacity(0.10))
-                    .offset(x: 200, y: 0)
+                    .font(.system(size: 120))
+                    .foregroundStyle(.white.opacity(0.12))
+                    .offset(x: 160, y: -10)
                     .rotationEffect(.degrees(14))
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 0) {
@@ -222,7 +225,7 @@ private struct LargeView: View {
                         Text("\(open.count)")
                             .font(.system(size: 44, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
-                        Text(open.count == 1 ? "open" : "open")
+                        Text("open")
                             .font(.system(size: 10, weight: .heavy)).tracking(1.0)
                             .foregroundStyle(.white.opacity(0.85))
                     }
@@ -230,6 +233,8 @@ private struct LargeView: View {
                 .padding(.horizontal, 16).padding(.vertical, 14)
             }
             .frame(height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.horizontal, 10).padding(.top, 10)
 
             if open.isEmpty {
                 Spacer()
