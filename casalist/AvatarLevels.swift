@@ -1,22 +1,74 @@
 import SwiftUI
 
-/// A "level" derived from a member's current point total. Levels visually
-/// upgrade a member's avatar with a colored ring + emblem so growth is
-/// felt everywhere their face appears.
-enum AvatarLevel: Int, CaseIterable {
-    case rookie = 0    // 0–49 pts: no ring
-    case bronze = 1    // 50–149 pts
-    case silver = 2    // 150–299 pts
-    case gold = 3      // 300–499 pts
-    case platinum = 4  // 500+ pts
+/// Level thresholds keyed on LIFETIME points earned (never decremented on
+/// redemption). Index = level number (1-based, so index 0 = lvl 1 starts at 0).
+/// Aligned with the app's point economy:
+///   quick task = 5 pts, normal = 10 pts, hard = 15 pts
+///   small reward ≈ 150-300 pts, medium ≈ 500-800 pts, large ≈ 1000-2000 pts
+private let levelThresholds: [Int] = [
+    0,     // Lvl 1 — Rookie
+    100,   // Lvl 2 — Learner
+    250,   // Lvl 3 — Helper
+    450,   // Lvl 4 — Doer
+    700,   // Lvl 5 — Go-Getter
+    1000,  // Lvl 6 — Achiever
+    1350,  // Lvl 7 — Pro
+    1750,  // Lvl 8 — Expert
+    2200,  // Lvl 9 — Master
+    2700,  // Lvl 10 — Legend
+]
 
-    init(points: Int) {
-        switch points {
-        case 0..<10:    self = .rookie
-        case 10..<75:   self = .bronze
-        case 75..<200:  self = .silver
-        case 200..<400: self = .gold
-        default:        self = .platinum
+private let levelLabels: [String] = [
+    "Rookie", "Learner", "Helper", "Doer", "Go-Getter",
+    "Achiever", "Pro", "Expert", "Master", "Legend",
+]
+
+/// Returns the 1-based level number (1–10) for the given lifetime points.
+func levelNumber(for lifetimePoints: Int) -> Int {
+    var level = 1
+    for (i, threshold) in levelThresholds.enumerated() {
+        if lifetimePoints >= threshold { level = i + 1 }
+    }
+    return level
+}
+
+/// XP progress (0.0–1.0) toward the next level.
+func xpProgress(for lifetimePoints: Int) -> CGFloat {
+    let lvl = levelNumber(for: lifetimePoints)
+    let current = levelThresholds[lvl - 1]
+    let next = lvl < levelThresholds.count ? levelThresholds[lvl] : current + 1000
+    guard next > current else { return 1.0 }
+    return CGFloat(lifetimePoints - current) / CGFloat(next - current)
+}
+
+/// Points needed to reach the next level threshold (or nil at max level).
+func nextLevelThreshold(for lifetimePoints: Int) -> Int? {
+    let lvl = levelNumber(for: lifetimePoints)
+    guard lvl < levelThresholds.count else { return nil }
+    return levelThresholds[lvl]
+}
+
+func levelLabel(for lifetimePoints: Int) -> String {
+    let idx = min(levelNumber(for: lifetimePoints) - 1, levelLabels.count - 1)
+    return levelLabels[max(0, idx)]
+}
+
+/// Visual tier based on level bracket — drives ring color/emblem.
+enum AvatarLevel: Int, CaseIterable {
+    case rookie = 0    // Lvl 1
+    case bronze = 1    // Lvl 2-3
+    case silver = 2    // Lvl 4-5
+    case gold = 3      // Lvl 6-7
+    case platinum = 4  // Lvl 8-10
+
+    init(lifetimePoints: Int) {
+        let lvl = levelNumber(for: lifetimePoints)
+        switch lvl {
+        case 1:     self = .rookie
+        case 2...3: self = .bronze
+        case 4...5: self = .silver
+        case 6...7: self = .gold
+        default:    self = .platinum
         }
     }
 
@@ -30,7 +82,6 @@ enum AvatarLevel: Int, CaseIterable {
         }
     }
 
-    /// Secondary color for a gradient (platinum gets a multi-stop ring).
     var ringHighlight: Color {
         switch self {
         case .platinum: return Color(rgb: 0x6FA8D0)
@@ -57,30 +108,17 @@ enum AvatarLevel: Int, CaseIterable {
         case .platinum: return "Platinum"
         }
     }
-
-    /// Lower bound of the *next* tier; nil if at top.
-    var nextThreshold: Int? {
-        switch self {
-        case .rookie:   return 50
-        case .bronze:   return 150
-        case .silver:   return 300
-        case .gold:     return 500
-        case .platinum: return nil
-        }
-    }
 }
 
-/// A drop-in replacement for CLAvatar that adds a level ring + emblem
-/// derived from the member's current points. Identical sizing/center.
+/// Drop-in replacement for CLAvatar with a level ring + emblem derived from
+/// the member's lifetime points.
 struct LeveledAvatar: View {
     let member: FamilyMember
     let size: CGFloat
-    /// Whether to show the small medal emblem in the corner. Suppressed on
-    /// the standings row because the rank medals on the left already do
-    /// that job and the two compete visually.
+    /// Whether to show the small medal emblem in the corner.
     var showEmblem: Bool = true
 
-    private var level: AvatarLevel { AvatarLevel(points: Int(member.points)) }
+    private var level: AvatarLevel { AvatarLevel(lifetimePoints: Int(member.lifetimePoints)) }
 
     var body: some View {
         let ringWidth: CGFloat = max(2, size * 0.07)

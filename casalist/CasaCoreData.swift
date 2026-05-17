@@ -240,6 +240,7 @@ final class CasaCoreDataStack {
             attr("role", .stringAttributeType, def: ""),
             attr("colorHex", .integer64AttributeType, def: 0xC97357),
             attr("points", .integer64AttributeType, def: 0),
+            attr("lifetimePoints", .integer64AttributeType, def: 0),
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("roleLevel", .stringAttributeType, def: "standard"),
             // Inline binary (no external storage / CKAsset) — NSPersistentCloudKitContainer

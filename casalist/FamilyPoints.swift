@@ -56,6 +56,7 @@ enum FamilyPoints {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         member.points += t.points
+        member.lifetimePoints += t.points
         if let ctx = member.managedObjectContext {
             FamilyProgress.recordCompletion(member: member, context: ctx)
         }

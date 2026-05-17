@@ -1485,12 +1485,12 @@ public enum CasalistCottage {
                 if let me = myMember {
                     let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
                     let streak = StreakTracker.effectiveCurrent(for: me.uid)
-                    let level = max(1, min(50, Int(me.points) / 100 + 1))
-                    let nextLevelPts = level * 100
-                    let prevLevelPts = (level - 1) * 100
-                    let xpProgress = nextLevelPts > prevLevelPts
-                        ? CGFloat(Int(me.points) - prevLevelPts) / CGFloat(nextLevelPts - prevLevelPts)
-                        : 1.0
+                    let lp = Int(me.lifetimePoints)
+                    let level = levelNumber(for: lp)
+                    let nextLevelPts = nextLevelThreshold(for: lp) ?? (lp + 1000)
+                    let prevLevelPts = nextLevelPts - 1  // only used for display; progress fn handles thresholds
+                    let xpProgress = xpProgress(for: lp)
+                    let _ = prevLevelPts  // suppress unused warning
                     let accentColor = me.color
 
                     VStack(spacing: 14) {
@@ -1517,7 +1517,7 @@ public enum CasalistCottage {
                                     }
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text("LVL \(level)").font(.system(size: 22, weight: .heavy)).foregroundStyle(P.peach)
-                                        Text("LEVEL").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                        Text(levelLabel(for: lp).uppercased()).font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
                                     }
                                 }
                             }
@@ -1527,7 +1527,7 @@ public enum CasalistCottage {
                             HStack {
                                 Text("XP").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
                                 Spacer()
-                                Text("\(Int(me.points)) / \(nextLevelPts) pts").font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textMuted)
+                                Text("\(lp) / \(nextLevelPts) pts").font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textMuted)
                             }
                             GeometryReader { geo in
                                 RoundedRectangle(cornerRadius: 5).fill(P.surfaceAlt)

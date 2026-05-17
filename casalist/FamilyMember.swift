@@ -9,6 +9,9 @@ public final class FamilyMember: NSManagedObject {
     @NSManaged public var role: String
     @NSManaged public var colorHex: Int64
     @NSManaged public var points: Int64
+    /// All-time points ever earned — never decremented on redemption.
+    /// Drives the level system so levels never regress.
+    @NSManaged public var lifetimePoints: Int64
     @NSManaged public var createdAt: Date
     @NSManaged public var roleLevel: String
     @NSManaged public var photoBlob: Data?
