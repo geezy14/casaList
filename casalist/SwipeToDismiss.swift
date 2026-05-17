@@ -5,14 +5,12 @@ import UIKit
 /// modally presented views (fullScreenCovers don't get the native swipe
 /// the way pushed NavigationStack screens do).
 ///
-/// Implementation: overlays a UIKit `UIScreenEdgePanGestureRecognizer`
-/// at the left edge via a `UIViewRepresentable`. Going through UIKit
-/// is required because SwiftUI's `DragGesture` loses the race against
-/// any underlying `ScrollView` pan — the scroll view's gesture
-/// recognizer captures the touch first and never relinquishes it.
-/// `UIScreenEdgePanGestureRecognizer` is a system-level recognizer
-/// that wins the gesture arbitration the same way Apple's own
-/// navigation back-swipe does.
+/// Implementation: overlays a full-height UIKit pan recognizer that only
+/// activates when the gesture STARTS within 44 pt of the left edge. A
+/// plain UIPanGestureRecognizer is used instead of the system-level
+/// UIScreenEdgePanGestureRecognizer because iOS 26 intercepts edge pans
+/// at the window level (for the new navigation chrome) before our
+/// UIViewRepresentable view can see them.
 ///
 /// When `action` is supplied, that runs instead of `dismiss()` —
 /// useful for TabView pages where "back" means switching the visible
@@ -22,13 +20,11 @@ struct SwipeToDismissModifier: ViewModifier {
     var action: (() -> Void)? = nil
 
     func body(content: Content) -> some View {
-        ZStack(alignment: .leading) {
-            content
-            EdgeSwipeBackView { triggerBack() }
-                .frame(width: 24)
-                .frame(maxHeight: .infinity)
+        content.overlay(
+            EdgePanView { triggerBack() }
                 .allowsHitTesting(true)
-        }
+                .ignoresSafeArea()
+        )
     }
 
     private func triggerBack() {
@@ -36,39 +32,61 @@ struct SwipeToDismissModifier: ViewModifier {
     }
 }
 
-/// Invisible UIKit-backed strip at the left edge of its parent. Hosts
-/// a `UIScreenEdgePanGestureRecognizer` so it can race a SwiftUI
-/// `ScrollView` for the touch and reliably win.
-private struct EdgeSwipeBackView: UIViewRepresentable {
+/// Full-size transparent UIKit view that intercepts left-edge pans.
+/// Uses `shouldRecognizeSimultaneously` so it never blocks scroll views.
+private struct EdgePanView: UIViewRepresentable {
     var onTrigger: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onTrigger: onTrigger) }
 
-    func makeUIView(context: Context) -> UIView {
+    func makeUIView(context: Context) -> PassthroughView {
         let v = PassthroughView()
         v.backgroundColor = .clear
         v.isUserInteractionEnabled = true
-        let recognizer = UIScreenEdgePanGestureRecognizer(
+        let pan = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handle(_:))
         )
-        recognizer.edges = .left
-        v.addGestureRecognizer(recognizer)
+        pan.delegate = context.coordinator
+        // Allow simultaneous recognition with scroll views so we
+        // don't accidentally steal scroll events.
+        v.addGestureRecognizer(pan)
         return v
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: PassthroughView, context: Context) {
         context.coordinator.onTrigger = onTrigger
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onTrigger: () -> Void
+        private var startLocation: CGPoint = .zero
+
         init(onTrigger: @escaping () -> Void) { self.onTrigger = onTrigger }
 
-        @objc func handle(_ g: UIScreenEdgePanGestureRecognizer) {
-            // Fire on .ended once the user has dragged past a sensible
-            // threshold horizontally (matches Apple's nav-back feel).
+        // Allow our pan to coexist with UIScrollView's pan — we only
+        // TRIGGER if the gesture started at the left edge, so even if
+        // we run alongside a scroll gesture we won't actually fire.
+        func gestureRecognizer(
+            _ g: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool { true }
+
+        // Require that the gesture starts near the left edge of the
+        // containing view. The touch threshold (44pt) matches Apple's
+        // own interactive-pop zone on NavigationStack.
+        func gestureRecognizer(
+            _ g: UIGestureRecognizer,
+            shouldReceive touch: UITouch
+        ) -> Bool {
+            startLocation = touch.location(in: g.view)
+            return startLocation.x < 44
+        }
+
+        @objc func handle(_ g: UIPanGestureRecognizer) {
             guard g.state == .ended else { return }
+            // Guard again: must have started at left edge.
+            guard startLocation.x < 44 else { return }
             let t = g.translation(in: g.view)
             let v = g.velocity(in: g.view)
             let crossedThreshold = t.x > 60 || v.x > 400
@@ -79,17 +97,15 @@ private struct EdgeSwipeBackView: UIViewRepresentable {
         }
     }
 
-    /// UIView that only swallows touches that hit the edge recognizer —
-    /// regular taps inside the 24pt strip should still pass to SwiftUI.
-    private final class PassthroughView: UIView {
+    /// Transparent pass-through view — taps fall through to SwiftUI;
+    /// only the pan recognizer captures input (and only when it starts
+    /// at the left edge).
+    final class PassthroughView: UIView {
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            // Only claim the touch when one of our recognizers wants it;
-            // otherwise let the underlying SwiftUI view receive taps.
-            // The gesture recognizer attaches its own state machine, so
-            // returning self here lets it begin tracking; SwiftUI controls
-            // beneath this 24pt strip remain reachable because the
-            // recognizer only activates on a screen-edge pan.
-            return self
+            // Return self so the pan recognizer can begin, but only for
+            // touches that start in the left 44pt zone. Touches outside
+            // that zone fall through to underlying views.
+            return point.x < 44 ? self : nil
         }
     }
 }
