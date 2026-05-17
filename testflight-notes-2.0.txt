@@ -1,0 +1,26 @@
+Version 2.0 -- Reminders redesign
+
+What's New:
+
+- Reminders sheet completely rebuilt in Apple Reminders style. Date & Time,
+  Repeat, Details, and Location are always visible as grouped cards -- no
+  icon strip to tap through. Set a date without a time (fires at 9 AM) or
+  flip the Time toggle to pick a specific hour.
+
+- Priority on reminders. Set None / Low / Medium / High from the Details
+  card. Cards show a colored badge (! / !! / !!!) in the header.
+
+- Task due dates now support date-only mode too. Toggle Time off to mark
+  something due today without locking to a specific time.
+
+- Reminder cards have rounder corners.
+
+- Swipe-back gesture works reliably on iOS 26 (hotfix from 1.8.1 carried
+  forward).
+
+What to Test:
+
+- Create a reminder with Date on, Time off -- confirm it fires at 9 AM
+- Set priority High on a reminder -- confirm !!! badge appears on the card
+- Edit an existing reminder -- confirm all panels show populated values
+- Add a task due "today" with no time set -- confirm it saves cleanly
