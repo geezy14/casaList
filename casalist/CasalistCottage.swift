@@ -221,6 +221,9 @@ public enum CasalistCottage {
         }
         @State private var quickAddPing: String? = nil
         @State private var quickAddTick: Int = 0
+        @State private var searchText: String = ""
+        @FocusState private var searchFocused: Bool
+        @State private var selectedSearchTask: TaskItem? = nil
         @Environment(\.managedObjectContext) private var modelContext
         private var inboxBadgeCount: Int {
             let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
@@ -239,9 +242,6 @@ public enum CasalistCottage {
                     ScrollView { content }
                         .scrollIndicators(.hidden)
                         .refreshable {
-                            // Pull-to-refresh: wait briefly so CloudKit can
-                            // land pending shared-zone changes, then drop
-                            // cached objects so @FetchRequests re-read.
                             try? await Task.sleep(for: .seconds(2))
                             modelContext.refreshAllObjects()
                         }
@@ -261,7 +261,209 @@ public enum CasalistCottage {
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
             .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
             .sheet(item: $selectedAgendaTask) { t in TaskDetailView(task: t) }
+            .sheet(item: $selectedSearchTask) { t in TaskDetailView(task: t) }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
+        }
+
+        // MARK: – Search bar
+
+        private var searchBar: some View {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(searchText.isEmpty ? P.textMuted : P.peach)
+                TextField("Search tasks, reminders, events…", text: $searchText)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(P.text)
+                    .focused($searchFocused)
+                    .autocorrectionDisabled()
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(P.textMuted)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.2), value: searchText.isEmpty)
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(searchFocused ? P.peach.opacity(0.5) : P.border, lineWidth: searchFocused ? 2 : 1.5))
+        }
+
+        // MARK: – Search results
+
+        private struct SearchResult: Identifiable {
+            let id: String
+            let title: String
+            let subtitle: String
+            let category: String
+            let color: Color
+            let taskItem: TaskItem?
+            let isEvent: Bool
+        }
+
+        private func searchResultColor(_ category: String) -> Color {
+            switch category.lowercased() {
+            case "chores":     return P.mint
+            case "home", "maintenance": return P.lavender
+            case "groceries":  return P.mint
+            case "reminders":  return P.coral
+            case "family":     return Color(rgb: 0xE67E22)
+            case "event":      return P.sky
+            default:           return P.textDim
+            }
+        }
+
+        private func categoryLabel(_ raw: String) -> String {
+            switch raw.lowercased() {
+            case "chores":      return "Chore"
+            case "home":        return "Home"
+            case "maintenance": return "Home"
+            case "groceries":   return "Grocery"
+            case "reminders":   return "Reminder"
+            case "family":      return "Family"
+            case "event":       return "Event"
+            default:            return raw.capitalized
+            }
+        }
+
+        private var allSearchResults: [SearchResult] {
+            let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !q.isEmpty else { return [] }
+
+            let dateFmt = DateFormatter()
+            dateFmt.dateFormat = "MMM d"
+
+            let taskResults: [SearchResult] = allTodos.compactMap { t in
+                guard t.task.lowercased().contains(q) else { return nil }
+                var sub = ""
+                if let a = t.assignee, !a.isEmpty { sub = a }
+                if let d = t.dueDate {
+                    let ds = dateFmt.string(from: d)
+                    sub = sub.isEmpty ? ds : "\(sub) · \(ds)"
+                }
+                if t.points > 0 { sub = sub.isEmpty ? "⭐\(t.points)" : "\(sub) · ⭐\(t.points)" }
+                return SearchResult(
+                    id: t.uid,
+                    title: t.task,
+                    subtitle: sub,
+                    category: t.category,
+                    color: searchResultColor(t.category),
+                    taskItem: t,
+                    isEvent: false
+                )
+            }
+
+            let eventResults: [SearchResult] = allEvents.compactMap { e in
+                guard e.title.lowercased().contains(q) else { return nil }
+                var sub = dateFmt.string(from: e.startDate)
+                if !e.attendees.isEmpty { sub += " · \(e.attendees)" }
+                return SearchResult(
+                    id: e.uid.uuidString,
+                    title: e.title,
+                    subtitle: sub,
+                    category: "event",
+                    color: searchResultColor("event"),
+                    taskItem: nil,
+                    isEvent: true
+                )
+            }
+
+            return (taskResults + eventResults)
+                .sorted { $0.title.lowercased() < $1.title.lowercased() }
+        }
+
+        private func sectionedResults() -> [(label: String, results: [SearchResult])] {
+            let all = allSearchResults
+            let order = ["Reminder", "Chore", "Grocery", "Home", "Family", "Event"]
+            var grouped: [String: [SearchResult]] = [:]
+            for r in all {
+                let label = categoryLabel(r.category)
+                grouped[label, default: []].append(r)
+            }
+            var out: [(String, [SearchResult])] = []
+            for key in order {
+                if let rows = grouped[key], !rows.isEmpty { out.append((key, rows)) }
+            }
+            // Any unexpected categories at the end
+            for (key, rows) in grouped where !order.contains(key) {
+                out.append((key, rows))
+            }
+            return out
+        }
+
+        @ViewBuilder
+        private var searchResults: some View {
+            let sections = sectionedResults()
+            VStack(alignment: .leading, spacing: 20) {
+                if sections.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 32)).foregroundStyle(P.textMuted)
+                        Text("No results for \"\(searchText)\"")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(P.textDim)
+                    }
+                    .frame(maxWidth: .infinity).padding(.top, 60)
+                } else {
+                    ForEach(sections, id: \.label) { section in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(section.label.uppercased())
+                                .font(.system(size: 11, weight: .heavy))
+                                .tracking(1.2)
+                                .foregroundStyle(P.textDim)
+                                .padding(.leading, 4)
+                            VStack(spacing: 0) {
+                                ForEach(Array(section.results.enumerated()), id: \.element.id) { i, r in
+                                    Button {
+                                        searchFocused = false
+                                        if let t = r.taskItem {
+                                            selectedSearchTask = t
+                                        } else if r.isEvent {
+                                            showSchedule = true
+                                        }
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            RoundedRectangle(cornerRadius: 3)
+                                                .fill(r.color)
+                                                .frame(width: 4, height: 36)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(r.title)
+                                                    .font(.system(size: 14, weight: .heavy))
+                                                    .foregroundStyle(P.text)
+                                                    .lineLimit(1)
+                                                if !r.subtitle.isEmpty {
+                                                    Text(r.subtitle)
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                        .foregroundStyle(P.textMuted)
+                                                        .lineLimit(1)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(P.textMuted)
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 11)
+                                        .overlay(alignment: .top) {
+                                            if i > 0 {
+                                                Rectangle().fill(P.border).frame(height: 1).padding(.leading, 30)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+                        }
+                    }
+                }
+            }
         }
 
         private var userMember: FamilyMember? {
@@ -301,15 +503,27 @@ public enum CasalistCottage {
             }.padding(.horizontal, 20).padding(.bottom, 12)
         }
 
+        /// True when every "Around the House" tile has something in it —
+        /// only then is there content worth searching.
+        private var hasSearchableContent: Bool {
+            groceryActiveCount > 0 || homeTileCount > 0 || openTodoCount > 0
+            || reminderCount > 0 || scheduleUpcomingCount > 0 || familyListOpenCount > 0
+        }
+
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 greetingCard
-                stickyAgenda
-                quickAdd
-                if canManage { quickAddChips }
-                star
-                tiles
-                whatsNew
+                if hasSearchableContent { searchBar }
+                if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    stickyAgenda
+                    quickAdd
+                    if canManage { quickAddChips }
+                    star
+                    tiles
+                    whatsNew
+                } else {
+                    searchResults
+                }
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
