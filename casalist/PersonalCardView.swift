@@ -280,35 +280,91 @@ struct PersonalCardView: View {
         }
     }
 
-    // ── 4 hero stat boxes ─────────────────────────────────────────────────────
+    // ── STATS & AWARDS card ───────────────────────────────────────────────────
 
     private var heroStatRow: some View {
-        HStack(spacing: 8) {
-            statBox(value: "\(myCompletedTasks.count)", label: "TASKS\nDONE")
-            statBox(value: "\(completedChores)", label: "CHORES\nDONE")
-            statBox(value: "\(avgRate)%", label: "AVG\nRATE")
-            statBox(value: mvpCategory, label: "MVP\nCATEGORY", small: true)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("STATS & AWARDS")
+                .font(.system(size: 12, weight: .heavy))
+                .tracking(1.8)
+                .foregroundStyle(.white)
+
+            HStack(spacing: 0) {
+                awardsCol(
+                    icon: "checkmark",
+                    circleColor: P.sky,
+                    value: "\(myCompletedTasks.count)",
+                    line1: "ALL TIME",
+                    line2: "TASKS DONE"
+                )
+                awardsCol(
+                    icon: "sparkles",
+                    circleColor: P.mint,
+                    value: "\(completedChores)",
+                    line1: "ALL TIME",
+                    line2: "CHORES DONE"
+                )
+                awardsCol(
+                    icon: "chart.bar.fill",
+                    circleColor: P.butter,
+                    value: "\(avgRate)%",
+                    line1: "AVG",
+                    line2: "COMPLETION"
+                )
+                awardsCol(
+                    icon: "trophy.fill",
+                    circleColor: P.coral,
+                    value: mvpCategory,
+                    line1: "MVP",
+                    line2: "CATEGORY",
+                    smallValue: true
+                )
+            }
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 18)
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.18), lineWidth: 1))
     }
 
-    private func statBox(value: String, label: String, small: Bool = false) -> some View {
-        VStack(spacing: 5) {
+    private func awardsCol(
+        icon: String,
+        circleColor: Color,
+        value: String,
+        line1: String,
+        line2: String,
+        smallValue: Bool = false
+    ) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(circleColor)
+                    .frame(width: 48, height: 48)
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
             Text(value)
-                .font(.system(size: small ? 13 : 22, weight: .heavy))
+                .font(.system(size: smallValue ? 14 : 22, weight: .heavy))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .frame(maxWidth: .infinity)
-            Text(label)
-                .font(.system(size: 9, weight: .heavy))
-                .tracking(0.4)
-                .foregroundStyle(.white.opacity(0.55))
-                .multilineTextAlignment(.center)
+
+            VStack(spacing: 1) {
+                Text(line1)
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.45))
+                Text(line2)
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 14).padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.18), lineWidth: 1))
     }
 
     // ── Splits card ───────────────────────────────────────────────────────────
@@ -432,13 +488,23 @@ private struct CardSnapshotView: View {
                         .font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(.white.opacity(0.5))
                 }
 
-                // 4 hero boxes
-                HStack(spacing: 8) {
-                    snapStatBox(value: "\(tasksCompleted)", label: "TASKS\nDONE")
-                    snapStatBox(value: "\(choреsDone)", label: "CHORES\nDONE")
-                    snapStatBox(value: "\(avgRate)%", label: "AVG\nRATE")
-                    snapStatBox(value: mvpCategory, label: "MVP\nCATEGORY", small: true)
-                }.padding(.horizontal, 20)
+                // STATS & AWARDS
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("STATS & AWARDS")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(1.8)
+                        .foregroundStyle(.white)
+                    HStack(spacing: 0) {
+                        snapAwardsCol(icon: "checkmark", circleColor: palette.sky, value: "\(tasksCompleted)", line1: "ALL TIME", line2: "TASKS DONE")
+                        snapAwardsCol(icon: "sparkles", circleColor: palette.mint, value: "\(choреsDone)", line1: "ALL TIME", line2: "CHORES DONE")
+                        snapAwardsCol(icon: "chart.bar.fill", circleColor: palette.butter, value: "\(avgRate)%", line1: "AVG", line2: "COMPLETION")
+                        snapAwardsCol(icon: "trophy.fill", circleColor: palette.coral, value: mvpCategory, line1: "MVP", line2: "CATEGORY", smallValue: true)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.1)))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.18), lineWidth: 1))
+                .padding(.horizontal, 20)
 
                 // Splits
                 snapCard(title: "\(currentYear) SPLITS") {
@@ -462,18 +528,20 @@ private struct CardSnapshotView: View {
         .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
     }
 
-    private func snapStatBox(value: String, label: String, small: Bool = false) -> some View {
-        VStack(spacing: 5) {
+    private func snapAwardsCol(icon: String, circleColor: Color, value: String, line1: String, line2: String, smallValue: Bool = false) -> some View {
+        VStack(spacing: 7) {
+            ZStack {
+                Circle().fill(circleColor).frame(width: 42, height: 42)
+                Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+            }
             Text(value)
-                .font(.system(size: small ? 13 : 20, weight: .heavy))
-                .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: .infinity)
-            Text(label)
-                .font(.system(size: 9, weight: .heavy)).tracking(0.4)
-                .foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
-        }
-        .padding(.vertical, 12).padding(.horizontal, 4).frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.18), lineWidth: 1))
+                .font(.system(size: smallValue ? 12 : 20, weight: .heavy))
+                .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
+            VStack(spacing: 1) {
+                Text(line1).font(.system(size: 7, weight: .heavy)).tracking(0.5).foregroundStyle(.white.opacity(0.45))
+                Text(line2).font(.system(size: 7, weight: .heavy)).tracking(0.5).foregroundStyle(.white.opacity(0.45))
+            }.multilineTextAlignment(.center)
+        }.frame(maxWidth: .infinity)
     }
 
     private func snapCard<C: View>(title: String, @ViewBuilder content: () -> C) -> some View {
