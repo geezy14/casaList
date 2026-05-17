@@ -47,7 +47,7 @@ struct PersonalCardView: View {
         guard let d = me?.createdAt else { return "—" }
         let f = DateFormatter()
         f.dateFormat = "MMM d, yyyy"
-        return f.string(from: d).uppercased()
+        return f.string(from: d)
     }
 
     // ── Stat computations ─────────────────────────────────────────────────────
@@ -87,7 +87,6 @@ struct PersonalCardView: View {
         return winner.capitalized
     }
 
-    // Year splits
     private var cal: Calendar { Calendar.current }
     private var currentYear: Int { cal.component(.year, from: Date()) }
 
@@ -112,7 +111,6 @@ struct PersonalCardView: View {
         }.count
     }
 
-    // Projections
     private var dayOfYear: Int { cal.ordinality(of: .day, in: .year, for: Date()) ?? 1 }
     private var daysInYear: Int { cal.range(of: .day, in: .year, for: Date())?.count ?? 365 }
 
@@ -130,32 +128,29 @@ struct PersonalCardView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            heroBackground.ignoresSafeArea()
+            Color(rgb: 0x080808).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
                     .padding(.top, 56)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 10)
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 18) {
-                        photoAndName
-                        heroStatRow
+                    VStack(spacing: 10) {
+                        heroHeader
+                        statsAwardsCard
                         splitsCard
                         projectionsCard
-                        Spacer(minLength: 20)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 40)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 48)
                 }
             }
         }
         .sheet(isPresented: $showEditPhoto) { ProfilePhotoSheet() }
         .sheet(isPresented: $showShareSheet) {
-            if let img = shareImage {
-                ShareSheet(items: [img])
-            }
+            if let img = shareImage { ShareSheet(items: [img]) }
         }
     }
 
@@ -165,17 +160,242 @@ struct PersonalCardView: View {
         HStack {
             Button { dismiss() } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .font(.system(size: 28))
+                    .foregroundStyle(.white.opacity(0.55))
             }
             Spacer()
             Button { renderAndShare() } label: {
                 Image(systemName: "square.and.arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .font(.system(size: 28))
+                    .foregroundStyle(.white.opacity(0.55))
             }
         }
     }
+
+    // ── Profile header (compact — no hero photo background) ──────────────────
+
+    private var heroHeader: some View {
+        HStack(spacing: 14) {
+            // photo circle with pencil badge
+            ZStack(alignment: .bottomTrailing) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                        .frame(width: 66, height: 66)
+                    if let data = me?.photoBlob, let ui = UIImage(data: data) {
+                        Image(uiImage: ui)
+                            .resizable().scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipShape(Circle())
+                    } else {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
+
+                Button { showEditPhoto = true } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(Color.black.opacity(0.7)))
+                        .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+                }
+                .offset(x: 2, y: 2)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(myName)
+                    .font(.system(size: 24, weight: .heavy))
+                    .foregroundStyle(.white)
+                Text("MEMBER SINCE")
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.45))
+                Text(memberSince)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
+    }
+
+    // ── STATS & AWARDS card ───────────────────────────────────────────────────
+
+    private var statsAwardsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("STATS & AWARDS")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(0.5)
+                .foregroundStyle(.white)
+
+            HStack(spacing: 0) {
+                awardCol(
+                    icon: "checkmark.circle.fill",
+                    color: P.sky,
+                    value: "\(myCompletedTasks.count)",
+                    line1: "ALL TIME",
+                    line2: "TASKS DONE"
+                )
+                awardCol(
+                    icon: "sparkles",
+                    color: P.mint,
+                    value: "\(completedChores)",
+                    line1: "ALL TIME",
+                    line2: "CHORES DONE"
+                )
+                awardCol(
+                    icon: "chart.bar.fill",
+                    color: P.butter,
+                    value: "\(avgRate)%",
+                    line1: "AVG",
+                    line2: "\(myCompletedTasks.count) OF \(myAssignedTasks.count)"
+                )
+                awardCol(
+                    icon: "trophy.fill",
+                    color: P.lavender,
+                    value: mvpCategory,
+                    line1: "MVP",
+                    line2: "CATEGORY",
+                    smallValue: true
+                )
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
+    }
+
+    private func awardCol(
+        icon: String,
+        color: Color,
+        value: String,
+        line1: String,
+        line2: String,
+        smallValue: Bool = false
+    ) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(color)
+
+            Text(value)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(smallValue ? 0.5 : 1.0)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 1) {
+                Text(line1)
+                    .font(.system(size: 7.5, weight: .heavy))
+                    .tracking(0.4)
+                    .foregroundStyle(.white.opacity(0.45))
+                Text(line2)
+                    .font(.system(size: 7.5, weight: .heavy))
+                    .tracking(0.4)
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // ── Splits card ───────────────────────────────────────────────────────────
+
+    private var splitsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("SPLITS")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(0.5)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("\(String(currentYear)) · YOUR YEAR IN TASKS")
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+
+            Text(String(currentYear))
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(.white)
+
+            HStack(spacing: 0) {
+                splitCol(value: "\(thisYearCompleted.count)", label: "TASKS\nDONE")
+                splitCol(value: "\(pointsThisYear)", label: "POINTS\nEARNED")
+                splitCol(value: "\(goalsRedeemedThisYear)", label: "GOALS\nREDEEMED")
+            }
+            .padding(.top, 2)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
+    }
+
+    private func splitCol(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(.white)
+            Text(label)
+                .font(.system(size: 7.5, weight: .heavy))
+                .tracking(0.4)
+                .foregroundStyle(.white.opacity(0.45))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // ── Projections card ──────────────────────────────────────────────────────
+
+    private var projectionsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("PROJECTIONS")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(0.5)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("YEAR END FORECAST")
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+
+            Text(String(currentYear))
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(.white)
+
+            HStack(spacing: 0) {
+                projCol(value: "\(projectedCompletions)", label: "TASKS", color: P.coral)
+                projCol(value: "\(projectedPoints)", label: "POINTS", color: P.mint)
+            }
+            .padding(.top, 2)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
+    }
+
+    private func projCol(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 28, weight: .heavy))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            Text(label)
+                .font(.system(size: 7.5, weight: .heavy))
+                .tracking(0.4)
+                .foregroundStyle(.white.opacity(0.45))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // ── Share / render ────────────────────────────────────────────────────────
 
     private func renderAndShare() {
         let photo: UIImage? = {
@@ -187,8 +407,9 @@ struct PersonalCardView: View {
             memberSince: memberSince,
             photo: photo,
             tasksCompleted: myCompletedTasks.count,
-            choреsDone: completedChores,
+            choresDone: completedChores,
             avgRate: avgRate,
+            assignedCount: myAssignedTasks.count,
             mvpCategory: mvpCategory,
             currentYear: currentYear,
             thisYearTasks: thisYearCompleted.count,
@@ -198,234 +419,12 @@ struct PersonalCardView: View {
             projectedPoints: projectedPoints,
             palette: P
         )
-        let renderer = ImageRenderer(content: snapshot.frame(width: 390, height: 760))
+        let renderer = ImageRenderer(content: snapshot.frame(width: 390, height: 780))
         renderer.scale = 3
         if let img = renderer.uiImage {
             shareImage = img
             showShareSheet = true
         }
-    }
-
-    // ── Hero background ───────────────────────────────────────────────────────
-
-    @ViewBuilder
-    private var heroBackground: some View {
-        if let data = me?.photoBlob, let ui = UIImage(data: data) {
-            GeometryReader { geo in
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    .clipped()
-                    .blur(radius: 28)
-                    .overlay(
-                        LinearGradient(
-                            colors: [Color.black.opacity(0.5), Color.black.opacity(0.82)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-            }
-        } else {
-            LinearGradient(
-                colors: [P.peach.opacity(0.9), P.coral, Color(rgb: 0x12202E)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-        }
-    }
-
-    // ── Photo + name header ───────────────────────────────────────────────────
-
-    private var photoAndName: some View {
-        VStack(spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.12))
-                        .frame(width: 100, height: 100)
-                    if let data = me?.photoBlob, let ui = UIImage(data: data) {
-                        Image(uiImage: ui)
-                            .resizable().scaledToFill()
-                            .frame(width: 98, height: 98)
-                            .clipShape(Circle())
-                    } else {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 52))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                }
-                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 2.5))
-                .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
-
-                Button { showEditPhoto = true } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Color.black.opacity(0.55)))
-                        .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
-                }
-                .offset(x: 4, y: 4)
-            }
-            .padding(.top, 8)
-
-            Text(myName.uppercased())
-                .font(.system(size: 30, weight: .heavy))
-                .tracking(2.5)
-                .foregroundStyle(.white)
-
-            Text("MEMBER SINCE \(memberSince)")
-                .font(.system(size: 10, weight: .heavy))
-                .tracking(1.4)
-                .foregroundStyle(.white.opacity(0.5))
-        }
-    }
-
-    // ── STATS & AWARDS card ───────────────────────────────────────────────────
-
-    private var heroStatRow: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("STATS & AWARDS")
-                .font(.system(size: 12, weight: .heavy))
-                .tracking(1.8)
-                .foregroundStyle(.white)
-
-            HStack(spacing: 0) {
-                awardsCol(
-                    icon: "checkmark",
-                    circleColor: P.sky,
-                    value: "\(myCompletedTasks.count)",
-                    line1: "ALL TIME",
-                    line2: "TASKS DONE"
-                )
-                awardsCol(
-                    icon: "sparkles",
-                    circleColor: P.mint,
-                    value: "\(completedChores)",
-                    line1: "ALL TIME",
-                    line2: "CHORES DONE"
-                )
-                awardsCol(
-                    icon: "chart.bar.fill",
-                    circleColor: P.butter,
-                    value: "\(avgRate)%",
-                    line1: "AVG",
-                    line2: "COMPLETION"
-                )
-                awardsCol(
-                    icon: "trophy.fill",
-                    circleColor: P.coral,
-                    value: mvpCategory,
-                    line1: "MVP",
-                    line2: "CATEGORY",
-                    smallValue: true
-                )
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.18), lineWidth: 1))
-    }
-
-    private func awardsCol(
-        icon: String,
-        circleColor: Color,
-        value: String,
-        line1: String,
-        line2: String,
-        smallValue: Bool = false
-    ) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(circleColor)
-                    .frame(width: 48, height: 48)
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-
-            Text(value)
-                .font(.system(size: smallValue ? 14 : 22, weight: .heavy))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-
-            VStack(spacing: 1) {
-                Text(line1)
-                    .font(.system(size: 8, weight: .heavy))
-                    .tracking(0.6)
-                    .foregroundStyle(.white.opacity(0.45))
-                Text(line2)
-                    .font(.system(size: 8, weight: .heavy))
-                    .tracking(0.6)
-                    .foregroundStyle(.white.opacity(0.45))
-            }
-            .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // ── Splits card ───────────────────────────────────────────────────────────
-
-    private var splitsCard: some View {
-        sectionCard(title: "\(currentYear) SPLITS") {
-            statRow(label: "Tasks completed", value: "\(thisYearCompleted.count)")
-            divider
-            statRow(label: "Points earned", value: "\(pointsThisYear) pts")
-            divider
-            statRow(label: "Goals redeemed", value: "\(goalsRedeemedThisYear)")
-        }
-    }
-
-    // ── Projections card ──────────────────────────────────────────────────────
-
-    private var projectionsCard: some View {
-        sectionCard(title: "YEAR-END PROJECTIONS") {
-            statRow(label: "Tasks at current pace", value: "\(projectedCompletions)")
-            divider
-            statRow(label: "Points at current pace", value: "\(projectedPoints) pts")
-        }
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.system(size: 11, weight: .heavy))
-                .tracking(1.5)
-                .foregroundStyle(.white.opacity(0.45))
-                .padding(.horizontal, 18)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-            content()
-                .padding(.bottom, 8)
-        }
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.18), lineWidth: 1))
-    }
-
-    private func statRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-            Spacer()
-            Text(value)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-    }
-
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.12))
-            .frame(height: 1)
-            .padding(.horizontal, 18)
     }
 }
 
@@ -436,8 +435,9 @@ private struct CardSnapshotView: View {
     let memberSince: String
     let photo: UIImage?
     let tasksCompleted: Int
-    let choреsDone: Int
+    let choresDone: Int
     let avgRate: Int
+    let assignedCount: Int
     let mvpCategory: String
     let currentYear: Int
     let thisYearTasks: Int
@@ -448,95 +448,138 @@ private struct CardSnapshotView: View {
     let palette: CasalistCottage.Palette
 
     var body: some View {
-        ZStack {
-            // Background
-            if let photo {
-                Image(uiImage: photo)
-                    .resizable().scaledToFill()
-                    .blur(radius: 28)
-                    .overlay(LinearGradient(
-                        colors: [Color.black.opacity(0.5), Color.black.opacity(0.82)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-            } else {
-                LinearGradient(
-                    colors: [palette.peach.opacity(0.9), palette.coral, Color(rgb: 0x12202E)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-            }
+        ZStack(alignment: .top) {
+            Color(rgb: 0x080808)
 
-            VStack(spacing: 16) {
-                // Photo + name
-                VStack(spacing: 8) {
-                    ZStack {
-                        Circle().fill(Color.white.opacity(0.12)).frame(width: 88, height: 88)
+            VStack(spacing: 10) {
+                // hero header
+                ZStack(alignment: .bottomLeading) {
+                    Group {
                         if let photo {
                             Image(uiImage: photo)
                                 .resizable().scaledToFill()
-                                .frame(width: 86, height: 86).clipShape(Circle())
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 200)
+                                .clipped()
                         } else {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 46)).foregroundStyle(.white.opacity(0.6))
+                            LinearGradient(
+                                colors: [palette.peach.opacity(0.9), palette.coral, Color(rgb: 0x12202E)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                            .frame(height: 200)
                         }
                     }
-                    .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 2.5))
-                    .padding(.top, 24)
 
-                    Text(name.uppercased())
-                        .font(.system(size: 26, weight: .heavy)).tracking(2.5).foregroundStyle(.white)
-                    Text("MEMBER SINCE \(memberSince)")
-                        .font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(.white.opacity(0.5))
+                    LinearGradient(
+                        colors: [Color.black.opacity(0), Color.black.opacity(0.72)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 200)
+
+                    HStack(alignment: .bottom, spacing: 14) {
+                        ZStack {
+                            Circle().fill(Color.white.opacity(0.15)).frame(width: 76, height: 76)
+                            if let photo {
+                                Image(uiImage: photo)
+                                    .resizable().scaledToFill()
+                                    .frame(width: 74, height: 74).clipShape(Circle())
+                            } else {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .font(.system(size: 40)).foregroundStyle(.white.opacity(0.6))
+                            }
+                        }
+                        .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 2))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(name)
+                                .font(.system(size: 30, weight: .heavy)).foregroundStyle(.white)
+                            Text("MEMBER SINCE")
+                                .font(.system(size: 8, weight: .heavy)).tracking(1.4)
+                                .foregroundStyle(.white.opacity(0.55))
+                            Text(memberSince)
+                                .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 18).padding(.bottom, 18)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
                 // STATS & AWARDS
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("STATS & AWARDS")
-                        .font(.system(size: 11, weight: .heavy))
-                        .tracking(1.8)
-                        .foregroundStyle(.white)
+                        .font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                     HStack(spacing: 0) {
-                        snapAwardsCol(icon: "checkmark", circleColor: palette.sky, value: "\(tasksCompleted)", line1: "ALL TIME", line2: "TASKS DONE")
-                        snapAwardsCol(icon: "sparkles", circleColor: palette.mint, value: "\(choреsDone)", line1: "ALL TIME", line2: "CHORES DONE")
-                        snapAwardsCol(icon: "chart.bar.fill", circleColor: palette.butter, value: "\(avgRate)%", line1: "AVG", line2: "COMPLETION")
-                        snapAwardsCol(icon: "trophy.fill", circleColor: palette.coral, value: mvpCategory, line1: "MVP", line2: "CATEGORY", smallValue: true)
+                        snapAwardCol(icon: "checkmark.circle.fill", color: palette.sky,
+                                     value: "\(tasksCompleted)", line1: "ALL TIME", line2: "TASKS DONE")
+                        snapAwardCol(icon: "sparkles", color: palette.mint,
+                                     value: "\(choresDone)", line1: "ALL TIME", line2: "CHORES DONE")
+                        snapAwardCol(icon: "chart.bar.fill", color: palette.butter,
+                                     value: "\(avgRate)%", line1: "AVG",
+                                     line2: "\(tasksCompleted) OF \(assignedCount)")
+                        snapAwardCol(icon: "trophy.fill", color: palette.lavender,
+                                     value: mvpCategory, line1: "MVP", line2: "CATEGORY", smallValue: true)
                     }
                 }
-                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 16)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.1)))
-                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.18), lineWidth: 1))
-                .padding(.horizontal, 20)
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color(rgb: 0x1C1C1E)))
 
-                // Splits
-                snapCard(title: "\(currentYear) SPLITS") {
-                    snapRow("Tasks completed", "\(thisYearTasks)")
-                    snapDivider
-                    snapRow("Points earned", "\(thisYearPoints) pts")
-                    snapDivider
-                    snapRow("Goals redeemed", "\(goalsRedeemed)")
-                }.padding(.horizontal, 20)
+                // SPLITS
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("SPLITS").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                        Spacer()
+                        Text("\(currentYear) · YOUR YEAR IN TASKS")
+                            .font(.system(size: 8, weight: .heavy)).tracking(0.7)
+                            .foregroundStyle(.white.opacity(0.35))
+                    }
+                    Text(String(currentYear))
+                        .font(.system(size: 22, weight: .heavy)).foregroundStyle(.white)
+                    HStack(spacing: 0) {
+                        snapSplitCol(value: "\(thisYearTasks)", label: "TASKS\nDONE")
+                        snapSplitCol(value: "\(thisYearPoints)", label: "POINTS\nEARNED")
+                        snapSplitCol(value: "\(goalsRedeemed)", label: "GOALS\nREDEEMED")
+                    }
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color(rgb: 0x1C1C1E)))
 
-                // Projections
-                snapCard(title: "YEAR-END PROJECTIONS") {
-                    snapRow("Tasks at current pace", "\(projectedTasks)")
-                    snapDivider
-                    snapRow("Points at current pace", "\(projectedPoints) pts")
-                }.padding(.horizontal, 20)
+                // PROJECTIONS
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("PROJECTIONS").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                        Spacer()
+                        Text("YEAR END FORECAST")
+                            .font(.system(size: 8, weight: .heavy)).tracking(0.7)
+                            .foregroundStyle(.white.opacity(0.35))
+                    }
+                    Text(String(currentYear))
+                        .font(.system(size: 22, weight: .heavy)).foregroundStyle(.white)
+                    HStack(spacing: 0) {
+                        snapProjCol(value: "\(projectedTasks)", label: "TASKS", color: palette.coral)
+                        snapProjCol(value: "\(projectedPoints)", label: "POINTS", color: palette.mint)
+                    }
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color(rgb: 0x1C1C1E)))
 
                 Spacer(minLength: 0)
             }
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
         }
         .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
     }
 
-    private func snapAwardsCol(icon: String, circleColor: Color, value: String, line1: String, line2: String, smallValue: Bool = false) -> some View {
+    private func snapAwardCol(icon: String, color: Color, value: String,
+                               line1: String, line2: String, smallValue: Bool = false) -> some View {
         VStack(spacing: 7) {
-            ZStack {
-                Circle().fill(circleColor).frame(width: 42, height: 42)
-                Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
-            }
+            Image(systemName: icon).font(.system(size: 22, weight: .semibold)).foregroundStyle(color)
             Text(value)
-                .font(.system(size: smallValue ? 12 : 20, weight: .heavy))
-                .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(.white).lineLimit(1)
+                .minimumScaleFactor(smallValue ? 0.5 : 1.0)
+                .multilineTextAlignment(.center)
             VStack(spacing: 1) {
                 Text(line1).font(.system(size: 7, weight: .heavy)).tracking(0.5).foregroundStyle(.white.opacity(0.45))
                 Text(line2).font(.system(size: 7, weight: .heavy)).tracking(0.5).foregroundStyle(.white.opacity(0.45))
@@ -544,28 +587,21 @@ private struct CardSnapshotView: View {
         }.frame(maxWidth: .infinity)
     }
 
-    private func snapCard<C: View>(title: String, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.system(size: 11, weight: .heavy)).tracking(1.5)
+    private func snapSplitCol(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value).font(.system(size: 24, weight: .heavy)).foregroundStyle(.white)
+            Text(label).font(.system(size: 7, weight: .heavy)).tracking(0.5)
+                .foregroundStyle(.white.opacity(0.45)).multilineTextAlignment(.center)
+        }.frame(maxWidth: .infinity)
+    }
+
+    private func snapProjCol(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value).font(.system(size: 30, weight: .heavy)).foregroundStyle(color)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(label).font(.system(size: 8, weight: .heavy)).tracking(0.5)
                 .foregroundStyle(.white.opacity(0.45))
-                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
-            content().padding(.bottom, 8)
-        }
-        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.18), lineWidth: 1))
-    }
-
-    private func snapRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
-            Spacer()
-            Text(value).font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-        }.padding(.horizontal, 16).padding(.vertical, 10)
-    }
-
-    private var snapDivider: some View {
-        Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1).padding(.horizontal, 16)
+        }.frame(maxWidth: .infinity)
     }
 }
 

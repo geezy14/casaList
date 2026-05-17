@@ -321,7 +321,7 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(P.peach)
                         .padding(.horizontal, 16).padding(.vertical, 12)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
             .cardBg(P)
@@ -357,7 +357,7 @@ struct SettingsView: View {
                 .frame(width: 30, height: 30)
                 .background(Circle().fill((muted ? P.coral : P.textMuted).opacity(0.12)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 
     private func memberRow(_ m: FamilyMember) -> some View {
@@ -387,7 +387,7 @@ struct SettingsView: View {
                         .foregroundStyle(P.peach)
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(P.peach.opacity(0.12)))
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
             if !isMe {
                 muteMenu(for: m)
@@ -398,7 +398,7 @@ struct SettingsView: View {
                         .foregroundStyle(P.textMuted)
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(P.textMuted.opacity(0.08)))
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -450,7 +450,7 @@ struct SettingsView: View {
                                     .frame(maxWidth: .infinity).padding(.vertical, 8)
                                     .background(Capsule().fill(step >= 0 ? P.peach.opacity(0.18) : P.surfaceAlt))
                                     .foregroundStyle(step >= 0 ? P.peach : P.textMuted)
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.row)
                         }
                     }
 
@@ -459,7 +459,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity).padding(.vertical, 8)
                             .background(Capsule().fill(P.surfaceAlt))
                             .foregroundStyle(P.text)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                         .disabled(current == 0)
 
                     Spacer(minLength: 0)
@@ -536,7 +536,7 @@ struct SettingsView: View {
                 }
             } label: {
                 roleBadge(.owner)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         } else if iAmAdmin {
             // Owner and admin can both retag any non-owner member.
             Menu {
@@ -602,7 +602,7 @@ struct SettingsView: View {
                                         Spacer()
                                         Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(P.textMuted)
                                     }.padding(.horizontal, 14).padding(.vertical, 10)
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                                 if m.uid != members.filter({ !$0.isOwner }).last?.uid { divider }
                             }
                         }.cardBg(P)
@@ -1148,7 +1148,7 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(active ? P.peach : P.border, lineWidth: active ? 2 : 1)
             )
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 
     // MARK: About
@@ -1170,7 +1170,7 @@ struct SettingsView: View {
                         Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(P.textMuted)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
                 divider
                 HStack {
                     Text("Build").font(.system(size: 14, weight: .semibold))
@@ -1292,7 +1292,7 @@ struct SettingsView: View {
                         Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(P.textMuted)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
                 if iAmAdmin {
                     divider
                     Button(role: .destructive) { confirmWipe = true } label: {
@@ -1309,7 +1309,7 @@ struct SettingsView: View {
                             Spacer()
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
                 if let wipeMessage {
                     divider
@@ -1551,7 +1551,7 @@ struct SettingsView: View {
             }
             .foregroundStyle(P.text)
             .padding(.horizontal, 16).padding(.vertical, 12)
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 
     private var divider: some View {

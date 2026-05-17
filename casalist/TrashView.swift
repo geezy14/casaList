@@ -166,7 +166,7 @@ struct TrashView: View {
                 .font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(Capsule().fill(P.mint))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))

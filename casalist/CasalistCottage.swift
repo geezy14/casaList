@@ -457,7 +457,7 @@ public enum CasalistCottage {
                                             }
                                         }
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.row)
                                 }
                             }
                             .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
@@ -595,7 +595,7 @@ public enum CasalistCottage {
                 .background(Capsule().fill(P.surface))
                 .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .contextMenu {
                 Button(role: .destructive) {
                     QuickAddHistory.remove(e)
@@ -670,7 +670,14 @@ public enum CasalistCottage {
         /// uploaded photo when their matching FamilyMember has one, otherwise
         /// the person.crop.circle.fill glyph. Tap to pick/replace photo.
         private var profileIcon: some View {
-            Button { showPersonalCard = true } label: {
+            // PersonalCardView is hidden until v2 ships — only accessible in DEBUG builds.
+            Button {
+                #if DEBUG
+                showPersonalCard = true
+                #else
+                showProfilePhoto = true
+                #endif
+            } label: {
                 ZStack {
                     Circle()
                         .fill(Color(red: 0.12, green: 0.12, blue: 0.18))
@@ -687,7 +694,7 @@ public enum CasalistCottage {
                             .foregroundColor(Color(red: 0.27, green: 0.52, blue: 1.0).opacity(0.85))
                     }
                 }
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         private struct AgendaTile: Identifiable {
@@ -816,7 +823,7 @@ public enum CasalistCottage {
                                 .padding(14).frame(width: 130, alignment: .leading)
                                 .background(RoundedRectangle(cornerRadius: 20).fill(i % 2 == 0 ? P.surface : P.surfaceAlt))
                                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.row)
                         }
                     }.padding(.vertical, 4)
                 }
@@ -834,7 +841,7 @@ public enum CasalistCottage {
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(Capsule().fill(P.surface))
                 .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         private var star: some View {
@@ -861,7 +868,7 @@ public enum CasalistCottage {
                 .frame(maxWidth: .infinity).padding(24)
                 .background(P.butter)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         private var starCard: some View {
@@ -943,22 +950,22 @@ public enum CasalistCottage {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     Button { showGrocery = true } label: {
                         tile(bg: P.mint, emoji: "🛒", label: "Grocery", big: "\(groceryActiveCount)", suffix: "to get", sub: groceryNextItems)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button { showMaintenance = true } label: {
                         tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button { showMyToDo = true } label: {
                         tile(bg: P.butter, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button { showReminders = true } label: {
                         tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button { showSchedule = true } label: {
                         tile(bg: P.sky, emoji: "📅", label: "Schedule", big: "\(scheduleUpcomingCount)", suffix: "upcoming", sub: nextEventTitle)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button { showFamilyList = true } label: {
                         tile(bg: Color(rgb: 0xE67E22), emoji: "🪴", label: "Family List", big: "\(familyListOpenCount)", suffix: "up for grabs", sub: familyListNextItem)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
         }
@@ -1356,7 +1363,7 @@ public enum CasalistCottage {
                         Text("Deny").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
                             .background(Capsule().fill(Color.red.opacity(0.8)))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button {
                         GoalApproval.approve(goal, targetPoints: draftPrice)
                         try? moc.save()
@@ -1365,7 +1372,7 @@ public enum CasalistCottage {
                             .font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
                             .background(Capsule().fill(P.mint))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     .disabled(draftPrice < 10)
                 }
             }
@@ -1491,7 +1498,7 @@ public enum CasalistCottage {
                                     }
                                 }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                             .disabled(!canApprove)
                             VStack(spacing: 5) {
                                 HStack(spacing: 8) {
@@ -1511,7 +1518,7 @@ public enum CasalistCottage {
                                                 .frame(width: 22, height: 22)
                                                 .background(Circle().fill(P.surfaceAlt))
                                                 .foregroundStyle(P.text)
-                                        }.buttonStyle(.plain)
+                                        }.buttonStyle(.row)
                                     }
                                     Text("\(m.points) pts").font(.system(size: 14, weight: .heavy)).foregroundStyle(m.color).monospacedDigit()
                                     if canManagePoints {
@@ -1520,7 +1527,7 @@ public enum CasalistCottage {
                                                 .frame(width: 22, height: 22)
                                                 .background(Circle().fill(P.peach.opacity(0.2)))
                                                 .foregroundStyle(P.peach)
-                                        }.buttonStyle(.plain)
+                                        }.buttonStyle(.row)
                                     }
                                 }
                                 GeometryReader { g in
@@ -1571,7 +1578,7 @@ public enum CasalistCottage {
                         .frame(maxWidth: .infinity).padding(20)
                         .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                         ForEach(activeGoals) { g in
@@ -1602,7 +1609,7 @@ public enum CasalistCottage {
                             try? modelContext.save()
                         } label: {
                             Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.row)
                     }
                 }
                 Text(g.label).font(.system(size: 13, weight: .bold)).foregroundStyle(P.text)
@@ -1622,7 +1629,7 @@ public enum CasalistCottage {
                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                         .background(Capsule().fill(color))
                         .foregroundStyle(.white)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     .padding(.top, 4)
                 }
             }
@@ -1714,7 +1721,7 @@ public enum CasalistCottage {
                                             try? modelContext.save()
                                         } label: {
                                             Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(P.textMuted)
-                                        }.buttonStyle(.plain)
+                                        }.buttonStyle(.row)
                                     }
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -1845,7 +1852,7 @@ public enum CasalistCottage {
                             .frame(width: 30, height: 30)
                             .background(Circle().fill(P.peach))
                             .foregroundStyle(.white)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -2133,7 +2140,7 @@ extension CasalistCottage {
                         .foregroundStyle(active ? .white : P.textDim)
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(Capsule().fill(active ? P.coral : P.surfaceAlt))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
                 Spacer()
             }
@@ -2188,7 +2195,7 @@ extension CasalistCottage {
                 .foregroundStyle(active ? .white : P.textDim)
                 .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(Capsule().fill(active ? P.peach : P.surfaceAlt))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         private func kindChip(_ label: String, icon: String, color: Color) -> some View {
@@ -2205,7 +2212,7 @@ extension CasalistCottage {
                 .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(Capsule().fill(active ? color : P.surfaceAlt))
                 .overlay(Capsule().stroke(active ? color : P.border, lineWidth: 1.5))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         // MARK: – Task list
@@ -2228,7 +2235,7 @@ extension CasalistCottage {
                         .frame(maxWidth: .infinity).padding(24)
                         .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 } else {
                     VStack(spacing: 10) {
                         ForEach(visibleItems, id: \.uid) { t in
@@ -2264,7 +2271,7 @@ extension CasalistCottage {
                                 Circle().stroke(color, lineWidth: 2).frame(width: 24, height: 24)
                                 Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(color).opacity(0.4)
                             }
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.row)
 
                         // Text
                         VStack(alignment: .leading, spacing: 3) {
@@ -2299,7 +2306,7 @@ extension CasalistCottage {
                 .background(P.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         // MARK: – Recently done
@@ -2533,7 +2540,7 @@ extension CasalistCottage {
                         try? modelContext.save()
                     } label: {
                         Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
                 if tripItems.isEmpty {
                     Text("No items yet — add below").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted).padding(.leading, 4)
@@ -2547,7 +2554,7 @@ extension CasalistCottage {
                                     } else {
                                         Circle().stroke(P.mint, lineWidth: 2).frame(width: 20, height: 20)
                                     }
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                                 Text(t.task)
                                     .font(.system(size: 13, weight: .semibold))
                                     .strikethrough(t.isCompleted)
@@ -2555,7 +2562,7 @@ extension CasalistCottage {
                                 Spacer()
                                 Button { t.softDelete(); try? modelContext.save() } label: {
                                     Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                             }.padding(.vertical, 9)
                             .overlay(alignment: .top) {
                                 if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
@@ -2589,7 +2596,7 @@ extension CasalistCottage {
                 Button { addItem(to: trip) } label: {
                     Image(systemName: "arrow.up").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                         .frame(width: 26, height: 26).background(Circle().fill(P.mint))
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
             .padding(.horizontal, 12).padding(.vertical, 4).padding(.trailing, 4)
             .background(Capsule().fill(P.surfaceAlt))
@@ -2651,12 +2658,12 @@ extension CasalistCottage {
             HStack(spacing: 12) {
                 Button { FamilyPoints.toggle(t, in: members); try? modelContext.save() } label: {
                     Circle().stroke(P.mint, lineWidth: 2).frame(width: 22, height: 22)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
                 Text(t.task).font(.system(size: 14, weight: .heavy))
                 Spacer()
                 Button { t.softDelete(); try? modelContext.save() } label: {
                     Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }.padding(.vertical, 12)
             .overlay(alignment: .top) {
                 if !isFirst { Rectangle().fill(P.border).frame(height: 1) }
@@ -2679,7 +2686,7 @@ extension CasalistCottage {
                             HStack(spacing: 12) {
                                 Button { FamilyPoints.toggle(t, in: members); try? modelContext.save() } label: {
                                     Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(P.mint)
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                                 Text(t.task).font(.system(size: 13, weight: .semibold)).strikethrough().foregroundStyle(P.textDim)
                                 Spacer()
                             }.padding(.vertical, 10)
@@ -2774,7 +2781,7 @@ extension CasalistCottage {
                         .foregroundStyle(active ? .white : P.textDim)
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(Capsule().fill(active ? P.lavender : P.surfaceAlt))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
                 Spacer()
             }
@@ -2847,7 +2854,7 @@ extension CasalistCottage {
                 .frame(maxWidth: .infinity).padding(24)
                 .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                 .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         @ViewBuilder
@@ -2868,7 +2875,7 @@ extension CasalistCottage {
                                     } else {
                                         Circle().stroke(color, lineWidth: 2).frame(width: 22, height: 22)
                                     }
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(t.task).font(.system(size: 14, weight: .heavy))
                                         .strikethrough(completed)
@@ -2883,7 +2890,7 @@ extension CasalistCottage {
                                 Spacer()
                                 Button { t.softDelete() } label: {
                                     Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(.row)
                             }.padding(.vertical, 11)
                             .overlay(alignment: .top) {
                                 if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
@@ -3347,7 +3354,7 @@ extension CasalistCottage {
                         .foregroundStyle(P.textDim)
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(Capsule().fill(P.surfaceAlt))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
         }
@@ -3371,7 +3378,7 @@ extension CasalistCottage {
                                 .frame(width: 24, height: 24)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     .disabled(struckOut)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(t.task)
@@ -3401,7 +3408,7 @@ extension CasalistCottage {
                 .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .disabled(struckOut)
         }
 
@@ -3496,7 +3503,7 @@ extension CasalistCottage {
                                 }
                                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                             .contextMenu {
                                 Button {
                                     ReminderOrderStore.pinToTop(t.uid)
@@ -3736,7 +3743,7 @@ extension CasalistCottage {
                         .foregroundStyle(allActive ? .white : P.textDim)
                         .frame(width: 48, height: 56)
                         .background(RoundedRectangle(cornerRadius: 14).fill(allActive ? P.sky : P.surfaceAlt))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
 
                     ForEach(stripDays, id: \.self) { day in
                         let isSelected = selectedDay.map { isSameDay($0, day) } ?? false
@@ -3759,7 +3766,7 @@ extension CasalistCottage {
                             .background(RoundedRectangle(cornerRadius: 14)
                                 .fill(isSelected ? P.sky : (isToday ? P.sky.opacity(0.15) : P.surfaceAlt)))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(isToday && !isSelected ? P.sky : Color.clear, lineWidth: 1.5))
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.row)
                     }
                 }
             }
@@ -3860,7 +3867,7 @@ extension CasalistCottage {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
                 .opacity(isPast ? 0.6 : 1)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         // MARK: – Apple Calendar section
@@ -3921,7 +3928,7 @@ extension CasalistCottage {
                 .foregroundStyle(P.text).frame(maxWidth: .infinity).padding(24)
                 .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                 .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
 
         // MARK: – Helpers
@@ -4156,7 +4163,7 @@ extension CasalistCottage {
                             .fill(P.mint.opacity(0.12))
                             .frame(width: 46, height: 46)
                     }
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(t.task).font(.system(size: 17, weight: .heavy)).lineLimit(2)
                     if dueToday {
@@ -4242,7 +4249,7 @@ extension CasalistCottage {
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(Capsule().fill(P.surfaceAlt))
                     .foregroundStyle(P.text)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
         }
 
@@ -4294,7 +4301,7 @@ extension CasalistCottage {
                             }
                             .padding(.horizontal, 14).padding(.vertical, 9)
                             .background(Capsule().fill(P.butter)).foregroundStyle(Color(rgb: 0x1B1E4A))
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.row)
                     }
                 }
                 if !isPending && target > 0 {

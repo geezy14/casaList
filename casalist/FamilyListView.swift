@@ -268,7 +268,7 @@ public struct FamilyListView: View {
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: P.peach.opacity(0.35), radius: 14, y: 6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 
     private func expiryLabel(_ d: Date) -> String {
@@ -383,7 +383,7 @@ public struct FamilyListView: View {
             .frame(width: 130, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 20).fill(index % 2 == 0 ? P.surface : P.surfaceAlt))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 
     private func agendaSubtitle(_ t: TaskItem) -> String {
@@ -435,7 +435,7 @@ public struct FamilyListView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(P.textMuted)
                 }
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
             VStack(spacing: 6) {
                 ForEach(items(in: trip), id: \.uid) { it in
                     Button { editingTask = it } label: {
@@ -447,7 +447,7 @@ public struct FamilyListView: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(P.textMuted)
                         }
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
             HStack(spacing: 10) {
@@ -503,7 +503,7 @@ public struct FamilyListView: View {
             .frame(maxWidth: .infinity).padding(24)
             .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 
     private var hero: some View {
@@ -540,7 +540,7 @@ public struct FamilyListView: View {
                     .frame(maxWidth: .infinity).padding(24)
                     .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
                     .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             } else {
                 VStack(spacing: 8) {
                     ForEach(openItems, id: \.uid) { t in row(t) }
@@ -566,7 +566,7 @@ public struct FamilyListView: View {
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
         }
@@ -591,16 +591,16 @@ public struct FamilyListView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
             Button { claim(t) } label: {
                 Text("Claim").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Capsule().fill(P.peach))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
             Button { markDone(t) } label: {
                 Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                     .frame(width: 32, height: 32).background(Circle().fill(P.mint))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))

@@ -23,7 +23,7 @@ struct ReminderTemplatePicker: View {
                             Button { onPick(t) } label: {
                                 row(t)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                         .onDelete(perform: deleteRows)
                     }

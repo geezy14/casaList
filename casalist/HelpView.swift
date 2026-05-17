@@ -47,7 +47,7 @@ struct HelpView: View {
                                 Text("Next").font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
                                     .frame(maxWidth: .infinity).padding(.vertical, 14)
                                     .background(Capsule().fill(P.peach))
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.row)
                         } else {
                             Button {
                                 hasSeenTutorial = true
@@ -56,7 +56,7 @@ struct HelpView: View {
                                 Text("Got it").font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
                                     .frame(maxWidth: .infinity).padding(.vertical, 14)
                                     .background(Capsule().fill(P.mint))
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.row)
                         }
                         if page < pages.count - 1 {
                             Button {
@@ -64,7 +64,7 @@ struct HelpView: View {
                                 dismiss()
                             } label: {
                                 Text("Skip").font(.system(size: 13, weight: .semibold)).foregroundStyle(P.textMuted)
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.row)
                         }
                     }
                     .padding(.horizontal, 24).padding(.bottom, 20)

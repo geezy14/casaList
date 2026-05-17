@@ -108,12 +108,12 @@ struct AddEventView: View {
                                 } label: {
                                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.row)
                             }
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.system(size: 12, weight: .semibold))
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     if hasCoordinates {
                         LocationMiniMap(latitude: latitude, longitude: longitude, title: location)
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))

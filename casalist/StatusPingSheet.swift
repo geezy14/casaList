@@ -74,7 +74,7 @@ struct StatusPingSheet: View {
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         .disabled(locator.isWorking)
                         if let err = locationError {
                             Text(err).font(.caption).foregroundStyle(.red)
@@ -94,7 +94,7 @@ struct StatusPingSheet: View {
                                     Image(systemName: "paperplane.fill").foregroundStyle(.secondary)
                                 }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                 }

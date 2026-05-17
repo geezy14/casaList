@@ -149,7 +149,7 @@ struct RoutinesView: View {
                 .background(Capsule().fill(P.peach))
                 .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .disabled(r.items.isEmpty)
             .padding(.top, 4)
         }

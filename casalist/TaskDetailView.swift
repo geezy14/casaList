@@ -131,7 +131,7 @@ struct TaskDetailView: View {
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(P.mint))
                         .foregroundStyle(.white)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                 }
             }
         }
@@ -231,7 +231,7 @@ struct TaskDetailView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
                     .background(Capsule().fill(task.isCompleted ? P.surfaceAlt : P.mint))
                     .foregroundStyle(task.isCompleted ? P.text : .white)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
             if canDelete {
                 Button(role: .destructive) { confirmDelete = true } label: {
@@ -242,7 +242,7 @@ struct TaskDetailView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(Capsule().fill(Color.red.opacity(0.85)))
                     .foregroundStyle(.white)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.row)
             }
         }
     }

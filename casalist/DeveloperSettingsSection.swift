@@ -22,6 +22,7 @@ struct DeveloperSettingsSection: View {
                 .padding(.leading, 4)
             VStack(spacing: 0) {
                 DevStatsBlock()
+                DevNotificationsDiagnosticBlock()
                 DevWidgetDiagnosticBlock()
                 DevSchemaBlock(message: $message)
                 DevShareInspectBlock(message: $message)
@@ -528,7 +529,7 @@ private struct DevActionRow: View {
                 Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 }
 
@@ -537,6 +538,91 @@ private struct DevActionRow: View {
 /// Surfaces the App Group state for the widget so we can tell at a
 /// glance whether the main app is writing the snapshot to the
 /// correct shared container (where the Widget Extension reads from).
+// MARK: – Notifications diagnostic
+
+private struct DevNotificationsDiagnosticBlock: View {
+    @State private var info: String = "(tap to check)"
+
+    var body: some View {
+        Group {
+            DevActionRow(title: "Notification permission check") { checkPermission() }
+            DevDivider()
+            DevActionRow(title: "Fire test notification (10s)") { fireTest() }
+            DevDivider()
+            DevActionRow(title: "List pending notifications") { listPending() }
+            DevDivider()
+            if !info.isEmpty {
+                Text(info)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+                DevDivider()
+            }
+        }
+    }
+
+    private func checkPermission() {
+        Task {
+            let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+            let label: String
+            switch status {
+            case .authorized: label = "authorized"
+            case .denied:     label = "DENIED"
+            case .notDetermined: label = "notDetermined"
+            case .provisional: label = "provisional"
+            case .ephemeral:  label = "ephemeral"
+            @unknown default: label = "unknown"
+            }
+            await MainActor.run { info = "Status: \(label)" }
+        }
+    }
+
+    private func fireTest() {
+        Task {
+            let granted = await NotificationsManager.requestAuth()
+            guard granted else {
+                await MainActor.run { info = "Permission denied — go to Settings > Notifications > Casalist Dev" }
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = "Notification test"
+            content.body = "Fired at \(Date().formatted(date: .omitted, time: .standard))"
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
+            let req = UNNotificationRequest(identifier: "dev-test-\(UUID().uuidString)", content: content, trigger: trigger)
+            do {
+                try await UNUserNotificationCenter.current().add(req)
+                await MainActor.run { info = "Test notification queued — lock screen in 10s" }
+            } catch {
+                await MainActor.run { info = "add() error: \(error)" }
+            }
+        }
+    }
+
+    private func listPending() {
+        Task {
+            let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
+            let taskNotifs = pending.filter { $0.identifier.hasPrefix("task-") }
+            var lines = ["Pending: \(pending.count) total, \(taskNotifs.count) task-*"]
+            for r in taskNotifs.prefix(10) {
+                let triggerDesc: String
+                if let t = r.trigger as? UNCalendarNotificationTrigger {
+                    let dc = t.dateComponents
+                    triggerDesc = "\(dc.year ?? 0)-\(dc.month ?? 0)-\(dc.day ?? 0) \(dc.hour ?? 0):\(String(format: "%02d", dc.minute ?? 0))"
+                } else if let t = r.trigger as? UNTimeIntervalNotificationTrigger {
+                    triggerDesc = "in \(Int(t.timeInterval))s"
+                } else {
+                    triggerDesc = "?"
+                }
+                lines.append("• \(r.identifier.suffix(20)) @ \(triggerDesc)")
+            }
+            if taskNotifs.count > 10 { lines.append("... +\(taskNotifs.count - 10) more") }
+            await MainActor.run { info = lines.joined(separator: "\n") }
+        }
+    }
+}
+
 private struct DevWidgetDiagnosticBlock: View {
     @State private var info: String = "(tap to check)"
 

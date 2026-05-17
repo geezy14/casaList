@@ -67,7 +67,7 @@ struct SavedLocationsSettingsSection: View {
             } label: {
                 Image(systemName: "trash").foregroundStyle(.red)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
     }

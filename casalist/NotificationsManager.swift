@@ -472,22 +472,36 @@ enum NotificationsManager {
     // MARK: – Upcoming fire date queries
 
     /// Returns the next `limit` fire dates already queued in the notification
-    /// center for a task. Uses the IDs of pending one-shot triggers.
-    static func upcomingFireDates(baseId: String, limit: Int = 3) async -> [Date] {
+    /// center for a task. Covers both rolling one-shot (task-*~*) and any
+    /// active snooze (reminder-snooze-{uid}) so the edit view reflects the
+    /// real upcoming fire, not just the pattern schedule.
+    static func upcomingFireDates(baseId: String, taskUid: String = "", limit: Int = 3) async -> [Date] {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         let cal = Calendar.current
         let now = Date()
-        return pending
-            .filter { $0.identifier.hasPrefix("\(baseId)~") }
-            .compactMap { req -> Date? in
-                guard let t = req.trigger as? UNCalendarNotificationTrigger else { return nil }
-                return cal.nextDate(after: now, matching: t.dateComponents,
-                                    matchingPolicy: .nextTime)
+
+        var dates: [Date] = []
+
+        for req in pending {
+            let id = req.identifier
+            // Regular rolling one-shot: task-{ms}~{date}
+            let isRegular = id.hasPrefix("\(baseId)~")
+            // Snooze: reminder-snooze-{uid}
+            let isSnooze = !taskUid.isEmpty && id == "reminder-snooze-\(taskUid)"
+            guard isRegular || isSnooze else { continue }
+
+            if let t = req.trigger as? UNCalendarNotificationTrigger,
+               let d = cal.nextDate(after: now, matching: t.dateComponents,
+                                    matchingPolicy: .nextTime) {
+                dates.append(d)
+            } else if let t = req.trigger as? UNTimeIntervalNotificationTrigger {
+                // Snooze uses UNTimeIntervalNotificationTrigger
+                dates.append(now.addingTimeInterval(t.timeInterval))
             }
-            .sorted()
-            .prefix(limit)
-            .map { $0 }
+        }
+
+        return dates.sorted().prefix(limit).map { $0 }
     }
 
     /// Computes upcoming fire dates without touching the notification center.

@@ -84,7 +84,7 @@ struct LocationPickerSheet: View {
                                     }
                                 }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                 } else if !completer.query.isEmpty {

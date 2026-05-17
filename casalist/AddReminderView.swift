@@ -43,6 +43,7 @@ struct AddReminderView: View {
     @State private var playSound: Bool
     @State private var showColorWheel: Bool = false
     @State private var showAdvanced: Bool = false
+    @State private var nextFireDates: [Date] = []
 
     init(editing: TaskItem? = nil, template: ReminderTemplate? = nil) {
         self.editing = editing
@@ -174,7 +175,7 @@ struct AddReminderView: View {
                             .padding(.vertical, 14)
                             .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
 
                     if editing != nil {
@@ -185,7 +186,7 @@ struct AddReminderView: View {
                                 .background(Capsule().fill(Color.red.opacity(0.12)))
                                 .foregroundStyle(.red)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
                 .padding(16)
@@ -237,6 +238,30 @@ struct AddReminderView: View {
                     }
                 }
             }
+            // Populate "Next Fires" from the actual notification center so
+            // snoozes, skips, and real queued fires are reflected accurately.
+            // Runs on appear and whenever the repeat/date config changes.
+            .task(id: "\(repeatKind)|\(hasFireDate)|\(fireDate.timeIntervalSince1970.rounded())") {
+                await refreshNextFires()
+            }
+        }
+    }
+
+    private func refreshNextFires() async {
+        if let t = editing {
+            // Edit mode: read what's actually pending (includes snoozes).
+            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
+            nextFireDates = await NotificationsManager.upcomingFireDates(
+                baseId: baseId, taskUid: t.uid, limit: 3
+            )
+        } else {
+            // New reminder: compute from pattern since nothing is queued yet.
+            nextFireDates = NotificationsManager.previewFireDates(
+                kind: repeatKind,
+                dueDate: hasFireDate ? fireDate : nil,
+                endMinutes: stopMinutesValue,
+                limit: 3
+            )
         }
     }
 
@@ -260,7 +285,7 @@ struct AddReminderView: View {
                                     .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                                     .lineLimit(1)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                 }
@@ -401,7 +426,7 @@ struct AddReminderView: View {
                 .foregroundStyle(isOn ? Color.white : Color.primary)
                 .background(Capsule().fill(isOn ? Color.accentColor : Color(.tertiarySystemBackground)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 
     private func defaultTimeOnTodayOrLater() -> Date {
@@ -422,24 +447,41 @@ struct AddReminderView: View {
 
     private var repeatCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Repeat row
-            Button { showCustomRepeat = true } label: {
-                HStack {
-                    Image(systemName: "repeat")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                    Text("Repeat")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(repeatRowLabel)
-                        .foregroundStyle(.primary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+            // Repeat row — tap to open full picker; X clears an existing repeat
+            HStack {
+                Button { showCustomRepeat = true } label: {
+                    HStack {
+                        Image(systemName: "repeat")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(.secondary)
+                        Text("Repeat")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if !hasRepeat {
+                            Text("Never")
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text(repeatRowLabel)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.row)
+
+                if hasRepeat {
+                    Button { repeatKind = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color(.tertiaryLabel))
+                            .font(.system(size: 18))
+                    }
+                    .buttonStyle(.row)
                 }
             }
-            .buttonStyle(.plain)
 
             // Stop time — only for hourly cadences
             if isCadenceKind {
@@ -459,21 +501,16 @@ struct AddReminderView: View {
                 }
             }
 
-            // "Next fires" preview
-            let nextDates = NotificationsManager.previewFireDates(
-                kind: repeatKind,
-                dueDate: hasFireDate ? fireDate : nil,
-                endMinutes: stopMinutesValue,
-                limit: 3
-            )
-            if hasRepeat && !nextDates.isEmpty {
+            // "Next fires" — reads actual pending notification center entries
+            // so snoozes and skips are reflected accurately.
+            if (hasRepeat || hasFireDate) && !nextFireDates.isEmpty {
                 Divider()
                 VStack(alignment: .leading, spacing: 4) {
                     Text("NEXT FIRES")
                         .font(.system(size: 9, weight: .heavy))
                         .tracking(0.8)
                         .foregroundStyle(.secondary)
-                    ForEach(Array(nextDates.enumerated()), id: \.offset) { _, d in
+                    ForEach(Array(nextFireDates.enumerated()), id: \.offset) { _, d in
                         (Text(d, style: .relative)
                             .foregroundStyle(.secondary)
                         + Text("  ·  ")
@@ -532,8 +569,9 @@ struct AddReminderView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .padding(14)
 
             if showAdvanced {
@@ -555,7 +593,7 @@ struct AddReminderView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                     if hasLocationTrigger {
@@ -598,7 +636,7 @@ struct AddReminderView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                     if let img = pendingPhoto {
@@ -628,7 +666,7 @@ struct AddReminderView: View {
                                 .font(.subheadline)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)

@@ -78,6 +78,6 @@ private struct PrivacyOpenSettingsRow: View {
                 Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-        }.buttonStyle(.plain)
+        }.buttonStyle(.row)
     }
 }

@@ -56,7 +56,7 @@ private struct ReminderLinkPickRow: View {
             .padding(.vertical, 6).padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 }
 

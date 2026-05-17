@@ -167,7 +167,7 @@ struct InboxView: View {
                         Text("Deny").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(Capsule().fill(Color.red.opacity(0.8)))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     Button {
                         if needsPrice {
                             GoalApproval.approve(goal, targetPoints: draftPrice)
@@ -180,7 +180,7 @@ struct InboxView: View {
                             .font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(Capsule().fill(P.mint))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.row)
                     .disabled(needsPrice && draftPrice < 10)
                 }
             }
@@ -246,7 +246,7 @@ struct InboxView: View {
                 Text("Cancel").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.peach)
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(Capsule().fill(P.peach.opacity(0.15)))
-            }.buttonStyle(.plain)
+            }.buttonStyle(.row)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
