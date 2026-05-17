@@ -1,0 +1,30 @@
+Casalist 1.8 -- Home-screen widgets + status ping Live Activities
+
+What's new
+
+Today's Reminders widget
+- Long-press the home screen, tap +, find Casalist, pick a size (small, medium, or large). The widget shows your reminders firing today, sorted by fire time, with their color-tag stripes and a count of how many are open.
+- Small: hero count + the next reminder up.
+- Medium: count on the left, next three reminders on the right.
+- Large: full day header + up to six reminders with bigger typography and assignee chips.
+- Refreshes automatically when you add, edit, or complete a reminder in the app.
+
+Status ping Live Activities
+- When a family member sends a status ping with an expiry (megaphone icon on the Family tab, custom announcement), the receiver's Lock Screen now shows it as a Live Activity card -- sender name, color stripe, emoji, message, and a countdown to the expiry.
+- On phones with Dynamic Island (iPhone 14 Pro and newer), the activity also appears in the island as a compact + expanded variant.
+- Long-press the island to see the full message. Tap to open Casalist.
+- Auto-dismisses when the announcement expires or the sender deletes it.
+
+Color tag picker
+- The color tag panel is now built around Apple's native color picker with Grid, Spectrum, and Sliders tabs (including a Hex input mode in the Sliders tab). Pick any color you want for any reminder.
+
+When / Location / Stop time
+- Opening the When chip on a reminder now shows the date picker, quick-pick chips (Today / Tomorrow / This weekend / Next week), and time picker immediately -- no extra "schedule an alert" tap to reveal them. Same for the Location chip and Stop time chip.
+
+Week starts on Saturday
+- All date pickers and (future) calendar grids now lead with Saturday as the first day of the week.
+
+What to test
+- Add the Today's Reminders widget at each size on your home screen. Confirm it shows today's reminders correctly and updates within a few seconds after adding or completing one in the app.
+- On a phone with Lock Screen access for Live Activities enabled, lock the phone, then have another family member send you a status ping with an expiry. Confirm the Live Activity card appears.
+- Tap the Color tag chip on a reminder, tap the color wheel, and try all three tabs (Grid, Spectrum, Sliders with Hex).
