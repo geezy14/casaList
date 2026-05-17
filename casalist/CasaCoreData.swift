@@ -310,6 +310,8 @@ final class CasaCoreDataStack {
             // Reminder priority: 0=none, 1=low, 2=medium, 3=high.
             // Schema redeploy required before this syncs in Production.
             attr("reminderPriority", .integer64AttributeType, def: Int64(0)),
+            // Optional end time for timed tasks (nil when no end time set).
+            attr("endDate", .dateAttributeType),
         ]
 
         // ------- FamilyGoal attributes -------
@@ -352,6 +354,8 @@ final class CasaCoreDataStack {
             attr("createdAt", .dateAttributeType, def: Date()),
             attr("createdBy", .stringAttributeType, def: ""),
             attr("deletedAt", .dateAttributeType),
+            // Optional end time for timed events (nil when isAllDay or no end set).
+            attr("endDate", .dateAttributeType),
         ]
 
         // ------- Relationships (Household is the share root) -------

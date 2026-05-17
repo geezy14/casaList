@@ -26,6 +26,7 @@ struct TaskDetailView: View {
     @State private var editDueDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var editHasDueDate: Bool = true
     @State private var editHasTime: Bool = false
+    @State private var editEndDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var confirmDelete: Bool = false
     @State private var celebrate: Bool = false
     @State private var celebrateLabel: String = ""
@@ -198,10 +199,14 @@ struct TaskDetailView: View {
         let cal = Calendar.current
         let comps = cal.dateComponents([.hour, .minute], from: d)
         let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+        let timeFmt = DateFormatter(); timeFmt.dateFormat = "h:mm a"
+        func endSuffix() -> String {
+            guard hasTime, let end = task.endDate else { return "" }
+            return " – \(timeFmt.string(from: end))"
+        }
         if cal.isDateInToday(d) {
             if hasTime {
-                let f = DateFormatter(); f.dateFormat = "'Today at' h:mm a"
-                return f.string(from: d)
+                return "Today at \(timeFmt.string(from: d))\(endSuffix())"
             }
             return "Today"
         }
@@ -210,8 +215,12 @@ struct TaskDetailView: View {
             return "Overdue · \(f.string(from: d))"
         }
         let f = DateFormatter()
-        f.dateFormat = hasTime ? "EEE MMM d 'at' h:mm a" : "EEE MMM d"
-        return f.string(from: d)
+        f.dateFormat = hasTime ? "EEE MMM d" : "EEE MMM d"
+        let dateStr = f.string(from: d)
+        if hasTime {
+            return "\(dateStr) at \(timeFmt.string(from: d))\(endSuffix())"
+        }
+        return dateStr
     }
     private var dueOverdue: Bool {
         guard !task.isCompleted, let d = task.dueDate else { return false }
@@ -332,8 +341,18 @@ struct TaskDetailView: View {
                                 .onChange(of: editHasTime) { _, on in
                                     if !on {
                                         editDueDate = Calendar.current.startOfDay(for: editDueDate)
+                                    } else {
+                                        editEndDate = editDueDate.addingTimeInterval(3600)
                                     }
                                 }
+                        }
+                    }
+                    if editHasTime {
+                        divider
+                        fieldRow("End time") {
+                            DatePicker("", selection: $editEndDate, displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
                         }
                     }
                 }
@@ -364,9 +383,11 @@ struct TaskDetailView: View {
             let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
             editHasTime = hasTime
             editDueDate = hasTime ? d : cal.startOfDay(for: d)
+            editEndDate = task.endDate ?? d.addingTimeInterval(3600)
         } else {
             editHasTime = false
             editDueDate = Calendar.current.startOfDay(for: Date())
+            editEndDate = Calendar.current.startOfDay(for: Date()).addingTimeInterval(3600)
         }
         editing = true
     }
@@ -378,8 +399,10 @@ struct TaskDetailView: View {
         task.points = Int64(editPoints)
         if editHasDueDate {
             task.dueDate = editHasTime ? editDueDate : Calendar.current.startOfDay(for: editDueDate)
+            task.endDate = editHasTime ? editEndDate : nil
         } else {
             task.dueDate = nil
+            task.endDate = nil
         }
         try? moc.save()
         editing = false

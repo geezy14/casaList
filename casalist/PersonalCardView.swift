@@ -152,6 +152,7 @@ struct PersonalCardView: View {
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage { ShareSheet(items: [img]) }
         }
+        .swipeToDismiss()
     }
 
     // ── Top bar ───────────────────────────────────────────────────────────────

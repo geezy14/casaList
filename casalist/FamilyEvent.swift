@@ -19,6 +19,8 @@ public final class FamilyEvent: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var createdBy: String
     @NSManaged public var deletedAt: Date?
+    /// Optional end time. nil when isAllDay or no end time was set.
+    @NSManaged public var endDate: Date?
     @NSManaged public var household: Household?
 
     var isLive: Bool { deletedAt == nil }

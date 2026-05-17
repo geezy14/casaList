@@ -23,6 +23,7 @@ struct AddFamilyTripView: View {
     @State private var hasDate: Bool = true
     @State private var hasTime: Bool = false
     @State private var tripDate: Date = Calendar.current.startOfDay(for: Date())
+    @State private var tripEndDate: Date = Calendar.current.startOfDay(for: Date()).addingTimeInterval(3600)
 
     var body: some View {
         NavigationStack {
@@ -36,12 +37,17 @@ struct AddFamilyTripView: View {
                         .onChange(of: hasDate) { _, on in if !on { hasTime = false } }
                     if hasDate {
                         DatePicker("Date", selection: $tripDate, displayedComponents: .date)
-                        Toggle("Specific time", isOn: $hasTime)
+                        Toggle("Specific time", isOn: $hasTime.animation())
                             .onChange(of: hasTime) { _, on in
                                 if !on { tripDate = Calendar.current.startOfDay(for: tripDate) }
+                                else { tripEndDate = tripDate.addingTimeInterval(3600) }
                             }
                         if hasTime {
-                            DatePicker("Time", selection: $tripDate, displayedComponents: .hourAndMinute)
+                            DatePicker("Starts", selection: $tripDate, displayedComponents: .hourAndMinute)
+                                .onChange(of: tripDate) { _, d in
+                                    if tripEndDate <= d { tripEndDate = d.addingTimeInterval(3600) }
+                                }
+                            DatePicker("Ends", selection: $tripEndDate, in: tripDate..., displayedComponents: .hourAndMinute)
                         }
                     }
                 }
@@ -69,9 +75,11 @@ struct AddFamilyTripView: View {
             dueDate: hasDate ? (hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)) : nil,
             category: "family",
             points: -1, // container sentinel — see TaskItem.isContainer
-
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
+        if hasDate && hasTime {
+            trip.endDate = tripEndDate
+        }
         if let h = households.preferredTarget {
             moc.assign(trip, toStoreOf: h)
             trip.household = h

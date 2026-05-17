@@ -803,8 +803,12 @@ public enum CasalistCottage {
                 let due = task.dueDate ?? Date()
                 let comps = cal.dateComponents([.hour, .minute], from: due)
                 let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+                var timeStr = hasTime ? timeFmt.string(from: due) : "Today"
+                if hasTime, let end = task.endDate {
+                    timeStr += " – \(timeFmt.string(from: end))"
+                }
                 return AgendaTile(
-                    timeText: hasTime ? timeFmt.string(from: due) : "Today",
+                    timeText: timeStr,
                     label: task.task,
                     sub: task.assignee ?? "",
                     symbol: tileSymbol(task.category),
@@ -1452,6 +1456,11 @@ public enum CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
+                Text("REWARDS")
+                    .font(.system(size: 14, weight: .heavy))
+                    .tracking(1.5)
+                    .foregroundStyle(P.text)
+                Spacer()
                 Button { showSettings = true } label: {
                     Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
@@ -1461,15 +1470,83 @@ public enum CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Rewards 🏆").font(.system(size: 28, weight: .heavy))
-                }
+                heroCard
                 podium
                 standings
                 goals
                 redeemed
                 available
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// Full-width card for the current user's stats.
+        private var heroCard: some View {
+            Group {
+                if let me = myMember {
+                    let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
+                    let streak = StreakTracker.effectiveCurrent(for: me.uid)
+                    let level = max(1, min(50, Int(me.points) / 100 + 1))
+                    let nextLevelPts = level * 100
+                    let prevLevelPts = (level - 1) * 100
+                    let xpProgress = nextLevelPts > prevLevelPts
+                        ? CGFloat(Int(me.points) - prevLevelPts) / CGFloat(nextLevelPts - prevLevelPts)
+                        : 1.0
+                    let accentColor = me.color
+
+                    VStack(spacing: 14) {
+                        HStack(spacing: 16) {
+                            LeveledAvatar(member: me, size: 64)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Text(me.name).font(.system(size: 20, weight: .heavy))
+                                    Text("#\(myRank)").font(.system(size: 13, weight: .heavy))
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Capsule().fill(accentColor.opacity(0.2)))
+                                        .foregroundStyle(accentColor)
+                                }
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("\(me.points)").font(.system(size: 22, weight: .heavy)).foregroundStyle(accentColor)
+                                        Text("POINTS").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                    }
+                                    if streak > 0 {
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text("🔥\(streak)").font(.system(size: 22, weight: .heavy))
+                                            Text("STREAK").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                        }
+                                    }
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("LVL \(level)").font(.system(size: 22, weight: .heavy)).foregroundStyle(P.peach)
+                                        Text("LEVEL").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                    }
+                                }
+                            }
+                            Spacer()
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("XP").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                Spacer()
+                                Text("\(Int(me.points)) / \(nextLevelPts) pts").font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textMuted)
+                            }
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 5).fill(P.surfaceAlt)
+                                    .overlay(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .fill(LinearGradient(colors: [accentColor, accentColor.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
+                                            .frame(width: geo.size.width * max(0, min(1, xpProgress)))
+                                    }
+                            }.frame(height: 8)
+                        }
+                    }
+                    .padding(18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(LinearGradient(colors: [accentColor.opacity(0.18), accentColor.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+                    .overlay(RoundedRectangle(cornerRadius: 28).stroke(accentColor.opacity(0.3), lineWidth: 1.5))
+                }
+            }
         }
 
         private var activeGoals: [FamilyGoal] { goalsQuery.filter { !$0.isRedeemed && !GoalApproval.isPending($0) } }
@@ -1506,14 +1583,16 @@ public enum CasalistCottage {
                                 LeveledAvatar(member: m, size: sz)
                                 Text(m.name).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(rgb: 0x3B2A22))
                                 Text("\(m.points) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
-                                Text(["🥇","🥈","🥉"][place - 1]).font(.system(size: 24, weight: .heavy))
+                                Text(["🥇","🥈","🥉"][place - 1]).font(.system(size: place == 1 ? 32 : 26, weight: .heavy))
                                     .frame(maxWidth: .infinity).frame(height: podH)
                                     .background(UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12).fill(podColor))
                             }.frame(maxWidth: .infinity)
                         }
                     }
                     .padding(.horizontal, 18).padding(.top, 20).padding(.bottom, 0)
-                    .background(RoundedRectangle(cornerRadius: 32).fill(P.butter))
+                    .background(RoundedRectangle(cornerRadius: 32).fill(
+                        LinearGradient(colors: [P.butter, P.peach.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    ))
                 } else {
                     VStack(spacing: 8) {
                         Text("🏆").font(.system(size: 40))
@@ -1521,14 +1600,16 @@ public enum CasalistCottage {
                     }
                     .foregroundStyle(Color(rgb: 0x3B2A22))
                     .frame(maxWidth: .infinity).padding(24)
-                    .background(RoundedRectangle(cornerRadius: 32).fill(P.butter))
+                    .background(RoundedRectangle(cornerRadius: 32).fill(
+                        LinearGradient(colors: [P.butter, P.peach.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    ))
                 }
             }
         }
 
         private var standings: some View {
             VStack(alignment: .leading, spacing: 8) {
-                Text("STANDINGS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                Text("LEADERBOARD 🏆").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                 VStack(spacing: 0) {
                     ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
                         let pendingCount = pendingForMember(m).count
@@ -1586,7 +1667,8 @@ public enum CasalistCottage {
                                 }
                                 GeometryReader { g in
                                     RoundedRectangle(cornerRadius: 3).fill(P.surfaceAlt).overlay(alignment: .leading) {
-                                        RoundedRectangle(cornerRadius: 3).fill(m.color)
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(LinearGradient(colors: [m.color, m.color.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
                                             .frame(width: g.size.width * CGFloat(m.points) / CGFloat(max(topScore, 1)))
                                     }
                                 }.frame(height: 6)
@@ -1605,6 +1687,8 @@ public enum CasalistCottage {
                 .background(RoundedRectangle(cornerRadius: 24).fill(P.surface))
                 .overlay(RoundedRectangle(cornerRadius: 24).stroke(P.border, lineWidth: 1.5))
             }
+            .padding(4)
+            .background(RoundedRectangle(cornerRadius: 28).fill(P.surface.opacity(0.5)))
         }
 
         private func memberFor(_ name: String) -> FamilyMember? {
@@ -1615,7 +1699,7 @@ public enum CasalistCottage {
         private var goals: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("SAVING UP FOR…").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("REWARD GOALS 🎁").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
                     Button { showAddGoal = true } label: {
                         Label("Add", systemImage: "plus")
@@ -1666,7 +1750,15 @@ public enum CasalistCottage {
                         }.buttonStyle(.row)
                     }
                 }
-                Text(g.label).font(.system(size: 13, weight: .bold)).foregroundStyle(P.text)
+                HStack(spacing: 6) {
+                    Text(g.label).font(.system(size: 13, weight: .bold)).foregroundStyle(P.text)
+                    Spacer()
+                    if canRedeem {
+                        Text("✅").font(.system(size: 14))
+                    } else {
+                        Text("🔒").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                    }
+                }
                 Text("\(progress) / \(g.targetPoints) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(P.textMuted)
                 GeometryReader { gg in
                     RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.15)).overlay(alignment: .leading) {
@@ -1790,7 +1882,7 @@ public enum CasalistCottage {
         private var available: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("EARN POINTS 💪").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("ACTIVE QUESTS ⚡").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                     Spacer()
                     Text("\(earningTasks.count) open").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
                 }
@@ -1894,9 +1986,9 @@ public enum CasalistCottage {
                     }
                 }
                 Spacer()
-                Text("⭐ \(t.points)").font(.system(size: 12, weight: .heavy))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(P.butter))
+                Text("⚡ \(t.points)").font(.system(size: 13, weight: .heavy))
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Capsule().fill(P.peach))
                     .foregroundStyle(.white)
                 if isMineOrIManage {
                     Button {
@@ -2405,7 +2497,13 @@ extension CasalistCottage {
         @Environment(\.managedObjectContext) private var modelContext
         @State private var darkOverride: Bool? = nil
         @State private var newItem: String = ""
-        @State private var showAdd = false
+        private enum TripSheet: Identifiable {
+            case new, edit(TaskItem)
+            var id: String {
+                switch self { case .new: return "new"; case .edit(let t): return t.uid }
+            }
+        }
+        @State private var tripSheet: TripSheet? = nil
         @State private var newItemByTrip: [String: String] = [:]
         @AppStorage("userName") private var userName: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
@@ -2460,7 +2558,12 @@ extension CasalistCottage {
             }
             .foregroundStyle(P.text)
             .preferredColorScheme(dark ? .dark : .light)
-            .sheet(isPresented: $showAdd) { AddGroceryTripView() }
+            .sheet(item: $tripSheet) { mode in
+                switch mode {
+                case .new: AddGroceryTripView()
+                case .edit(let trip): AddGroceryTripView(editing: trip)
+                }
+            }
             .swipeToDismiss()
         }
 
@@ -2474,7 +2577,7 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { showAdd = true } label: {
+                Button { tripSheet = .new } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.peach))
@@ -2633,6 +2736,8 @@ extension CasalistCottage {
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            .contentShape(RoundedRectangle(cornerRadius: 22))
+            .onTapGesture { tripSheet = .edit(trip) }
         }
 
         private func tripInlineAdd(_ trip: TaskItem) -> some View {

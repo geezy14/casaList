@@ -28,6 +28,8 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var locationName: String
     /// 0=none  1=low  2=medium  3=high
     @NSManaged public var reminderPriority: Int64
+    /// Optional end time. Only meaningful when dueDate has a time component.
+    @NSManaged public var endDate: Date?
     @NSManaged public var household: Household?
 
     var hasLocationTrigger: Bool { locationRadius > 0 }

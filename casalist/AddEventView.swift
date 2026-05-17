@@ -15,6 +15,7 @@ struct AddEventView: View {
 
     @State private var title: String
     @State private var startDate: Date
+    @State private var endDate: Date
     @State private var isAllDay: Bool
     @State private var location: String
     @State private var latitude: Double
@@ -37,6 +38,8 @@ struct AddEventView: View {
         self.editing = editing
         _title = State(initialValue: editing?.title ?? "")
         _startDate = State(initialValue: editing?.startDate ?? Date())
+        let start = editing?.startDate ?? Date()
+        _endDate = State(initialValue: editing?.endDate ?? start.addingTimeInterval(3600))
         _isAllDay = State(initialValue: editing?.isAllDay ?? false)
         _location = State(initialValue: editing?.location ?? "")
         _latitude = State(initialValue: editing?.latitude ?? 0)
@@ -64,10 +67,19 @@ struct AddEventView: View {
                         .textInputAutocapitalization(.sentences)
                 }
                 Section("When") {
-                    Toggle("All-day", isOn: $isAllDay)
+                    Toggle("All-day", isOn: $isAllDay.animation())
                     DatePicker(
-                        "Start",
+                        "Starts",
                         selection: $startDate,
+                        displayedComponents: isAllDay ? .date : [.date, .hourAndMinute]
+                    )
+                    .onChange(of: startDate) { _, newStart in
+                        if endDate <= newStart { endDate = newStart.addingTimeInterval(3600) }
+                    }
+                    DatePicker(
+                        "Ends",
+                        selection: $endDate,
+                        in: startDate...,
                         displayedComponents: isAllDay ? .date : [.date, .hourAndMinute]
                     )
                 }
@@ -181,6 +193,7 @@ struct AddEventView: View {
         if let editing {
             editing.title = trimmedTitle
             editing.startDate = startDate
+            editing.endDate = isAllDay ? nil : endDate
             editing.isAllDay = isAllDay
             editing.location = location.trimmingCharacters(in: .whitespaces)
             editing.latitude = latitude
@@ -202,6 +215,7 @@ struct AddEventView: View {
             )
             event.latitude = latitude
             event.longitude = longitude
+            event.endDate = isAllDay ? nil : endDate
             if let h = households.preferredTarget {
                 moc.assign(event, toStoreOf: h)
                 event.household = h
