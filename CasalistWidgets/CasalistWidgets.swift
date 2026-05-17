@@ -12,30 +12,61 @@ import SwiftUI
 struct TodayReminderEntry: TimelineEntry {
     let date: Date
     let snapshot: TodayReminderSnapshot?
+    /// Last ~50 chars of the App Group container URL the widget
+    /// actually got. Used to render a diagnostic line in the empty
+    /// state so we can tell whether the widget process is reading
+    /// the right shared container.
+    let containerPathTail: String
+    /// Whether the URL is the App Group container (good) or the
+    /// fallback Documents dir (App Group not entitled to widget).
+    let isFallback: Bool
 }
 
 struct TodayReminderProvider: TimelineProvider {
     func placeholder(in context: Context) -> TodayReminderEntry {
-        TodayReminderEntry(date: Date(), snapshot: sampleSnapshot)
+        TodayReminderEntry(
+            date: Date(),
+            snapshot: sampleSnapshot,
+            containerPathTail: "placeholder",
+            isFallback: false
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayReminderEntry) -> Void) {
+        let (snap, tail, fallback) = readWithDiagnostic(preview: context.isPreview)
         let entry = TodayReminderEntry(
             date: Date(),
-            snapshot: context.isPreview ? sampleSnapshot : TodayReminderSnapshot.load()
+            snapshot: context.isPreview ? sampleSnapshot : snap,
+            containerPathTail: tail,
+            isFallback: fallback
         )
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayReminderEntry>) -> Void) {
-        // Single-entry timeline: the snapshot is updated by the main
-        // app whenever reminders change, and WidgetCenter reloads us
-        // then. Refresh every 30 min as a backstop in case the user
-        // hasn't opened the app.
         let now = Date()
-        let entry = TodayReminderEntry(date: now, snapshot: TodayReminderSnapshot.load())
+        let (snap, tail, fallback) = readWithDiagnostic(preview: false)
+        let entry = TodayReminderEntry(
+            date: now,
+            snapshot: snap,
+            containerPathTail: tail,
+            isFallback: fallback
+        )
         let next = Calendar.current.date(byAdding: .minute, value: 30, to: now) ?? now.addingTimeInterval(1800)
         completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+
+    /// Read the snapshot and return diagnostic crumbs alongside it so
+    /// we can surface in the widget body whether the App Group is
+    /// reachable from the widget process.
+    private func readWithDiagnostic(preview: Bool) -> (TodayReminderSnapshot?, String, Bool) {
+        let url = AppGroup.containerURL
+        let urlString = url.absoluteString
+        let fallback = !urlString.contains("/Group/") &&
+                       !urlString.contains("Containers/Shared/AppGroup")
+        let tail = String(urlString.suffix(50))
+        let snap = preview ? nil : TodayReminderSnapshot.load()
+        return (snap, tail, fallback)
     }
 
     private var sampleSnapshot: TodayReminderSnapshot {
@@ -122,11 +153,27 @@ struct TodayRemindersEntryView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("All clear").font(.system(size: 13, weight: .heavy))
             Text("No reminders today")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
+            // Diagnostic: surface why the widget thinks the list is
+            // empty. Helps tell "main app didn't write" from "widget
+            // can't read the shared container."
+            if entry.isFallback {
+                Text("⚠️ App Group not linked")
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundStyle(.red)
+            } else if entry.snapshot == nil {
+                Text("No snapshot file at:")
+                    .font(.system(size: 7))
+                    .foregroundStyle(.tertiary)
+                Text(entry.containerPathTail)
+                    .font(.system(size: 7, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
         }
     }
 
@@ -189,15 +236,20 @@ struct TodayRemindersWidget: Widget {
 #Preview(as: .systemMedium) {
     TodayRemindersWidget()
 } timeline: {
-    TodayReminderEntry(date: .now, snapshot: TodayReminderSnapshot(
-        entries: [
-            .init(id: "1", title: "Take meds", fireAt: .now.addingTimeInterval(3600),
-                  isDone: false, colorTagRaw: "red", assignee: ""),
-            .init(id: "2", title: "Water plants", fireAt: .now.addingTimeInterval(7200),
-                  isDone: false, colorTagRaw: "green", assignee: ""),
-            .init(id: "3", title: "Trash out", fireAt: .now.addingTimeInterval(14400),
-                  isDone: false, colorTagRaw: "blue", assignee: "dakoda"),
-        ],
-        generatedAt: .now
-    ))
+    TodayReminderEntry(
+        date: .now,
+        snapshot: TodayReminderSnapshot(
+            entries: [
+                .init(id: "1", title: "Take meds", fireAt: .now.addingTimeInterval(3600),
+                      isDone: false, colorTagRaw: "red", assignee: ""),
+                .init(id: "2", title: "Water plants", fireAt: .now.addingTimeInterval(7200),
+                      isDone: false, colorTagRaw: "green", assignee: ""),
+                .init(id: "3", title: "Trash out", fireAt: .now.addingTimeInterval(14400),
+                      isDone: false, colorTagRaw: "blue", assignee: "dakoda"),
+            ],
+            generatedAt: .now
+        ),
+        containerPathTail: "preview",
+        isFallback: false
+    )
 }

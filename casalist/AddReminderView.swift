@@ -457,41 +457,32 @@ struct AddReminderView: View {
 
     private var tagPanel: some View {
         panelCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 panelHeader("Color tag", icon: "tag.fill")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(ReminderColorTag.presets) { tag in
-                            tagSwatch(tag)
-                        }
-                        // Color wheel — opens the native iOS ColorPicker
-                        // for arbitrary hex tags. Tinted with whatever
-                        // custom color is currently selected (or the
-                        // accent color as a default).
-                        colorWheelSwatch
+                HStack(spacing: 12) {
+                    colorWheelSwatch
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(colorTag.isCustom ? colorTag.swiftUIColor.hexString : "No tag set")
+                            .font(.system(size: 14, weight: .semibold, design: colorTag.isCustom ? .monospaced : .default))
+                        Text("Tap the wheel to pick a color")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
+                    Spacer()
                 }
-                Text("Pick a preset color or tap the color-wheel for a custom one. Shows as a stripe on the reminder card.")
+                if colorTag.isCustom {
+                    Button {
+                        colorTag = .none
+                    } label: {
+                        Label("Remove tag", systemImage: "xmark.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text("Adds a colored stripe to the reminder card so the family categorize at a glance.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func tagSwatch(_ tag: ReminderColorTag) -> some View {
-        Button { colorTag = tag } label: {
-            ZStack {
-                Circle().fill(tag.swiftUIColor).frame(width: 32, height: 32)
-                if colorTag == tag {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
-            }
-            .overlay(
-                Circle().stroke(Color.primary.opacity(colorTag == tag ? 0.4 : 0), lineWidth: 2)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     /// Color-wheel swatch. Tapping opens a sheet with a real
