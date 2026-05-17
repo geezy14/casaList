@@ -744,6 +744,37 @@ struct AddReminderView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+                // "Next fires" preview — shows the next 3 scheduled
+                // fire dates so the user can verify the cadence before
+                // saving. Only shown when a repeat is actually set.
+                if hasRepeat || (hasFireDate && !repeatKind.isEmpty) {
+                    let nextDates = NotificationsManager.previewFireDates(
+                        kind: repeatKind,
+                        dueDate: hasFireDate ? fireDate : nil,
+                        endMinutes: stopMinutesValue,
+                        limit: 3
+                    )
+                    if !nextDates.isEmpty {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("NEXT FIRES")
+                                .font(.system(size: 9, weight: .heavy))
+                                .tracking(0.8)
+                                .foregroundStyle(.secondary)
+                            ForEach(Array(nextDates.enumerated()), id: \.offset) { _, d in
+                                Text(d, style: .relative)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                + Text("  ·  ")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.tertiary)
+                                + Text(d, style: .time)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

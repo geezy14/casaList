@@ -37,9 +37,14 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             title: "Snooze until tomorrow",
             options: []
         )
+        let skip = UNNotificationAction(
+            identifier: "REMINDER_SKIP",
+            title: "Skip this one",
+            options: []
+        )
         let category = UNNotificationCategory(
             identifier: "REMINDER_FIRE",
-            actions: [done, snooze15, snooze1h, snoozeTomorrow],
+            actions: [done, snooze15, snooze1h, snoozeTomorrow, skip],
             intentIdentifiers: [],
             options: []
         )

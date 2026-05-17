@@ -29,6 +29,12 @@ enum ReminderActionHandler {
         case "REMINDER_SNOOZE_TOMORROW":
             snoozeUntilTomorrow(task)
             ReminderHistory.record(taskUid: task.uid, taskName: task.task, action: .snoozed)
+        case "REMINDER_SKIP":
+            // Cancel the next pending one-shot for this task so the following
+            // occurrence becomes the new "next fire." No history entry — a skip
+            // is intentional silence, not a snooze or a completion.
+            let baseId = "task-\(Int(task.createdAt.timeIntervalSince1970 * 1000))"
+            Task { await NotificationsManager.skipNextOccurrence(baseId: baseId) }
         default:
             // Default tap (UNNotificationDefaultActionIdentifier) or
             // dismiss — no-op, the app opens normally.

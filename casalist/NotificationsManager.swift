@@ -52,8 +52,18 @@ enum NotificationsManager {
             content.title = t.task
             content.body = subtitle(for: t)
             content.sound = .default
-            for (suffix, trigger) in triggers(for: t, now: now) {
-                let id = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))-\(suffix)"
+            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
+            let cal = Calendar.current
+            for date in nextOccurrenceDates(
+                kind: t.effectiveRepeatKind,
+                dueDate: t.dueDate,
+                now: now,
+                endMinutes: t.repeatEndMinutes
+            ) {
+                let id = "\(baseId)~\(occurrenceSuffix(date))"
+                var dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+                dc.second = 0
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
                 plans.append(NotificationPlan(id: id, content: content, trigger: trigger))
             }
         }
@@ -136,16 +146,24 @@ enum NotificationsManager {
         guard !isCompleted || isRecurring else { return }
 
         let now = Date()
-        let triggers = computeTriggers(kind: kind, dueDate: dueDate, now: now, endMinutes: endMinutes)
-        for (suffix, trigger) in triggers {
+        let isReminder = category == "reminders"
+        let cal = Calendar.current
+        // Compute rolling one-shot fire dates. Reminder-category items get
+        // each date shifted forward past the quiet-hours window so the user
+        // is never woken in the middle of the night by their own reminders.
+        let occurrences = nextOccurrenceDates(
+            kind: kind, dueDate: dueDate, now: now, endMinutes: endMinutes
+        ).map { isReminder ? quietAdjusted($0) : $0 }
+
+        for date in occurrences {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            // Reminders get action buttons (Mark done / Snooze) on the
+            // Reminders get action buttons (Mark done / Snooze / Skip) on the
             // lock screen via the REMINDER_FIRE category registered in
             // CasalistAppDelegate.registerReminderActions. Sound is
             // device-local: ReminderSoundStore tracks per-uid silence.
-            if category == "reminders" {
+            if isReminder {
                 content.categoryIdentifier = "REMINDER_FIRE"
                 content.userInfo = ["taskUid": taskUid]
                 content.sound = ReminderSoundStore.playsSound(for: taskUid) ? .default : nil
@@ -156,7 +174,10 @@ enum NotificationsManager {
             } else {
                 content.sound = .default
             }
-            let id = "\(baseId)-\(suffix)"
+            var dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            dc.second = 0
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+            let id = "\(baseId)~\(occurrenceSuffix(date))"
             let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
             try? await center.add(request)
         }
@@ -214,160 +235,271 @@ enum NotificationsManager {
         try? await center.add(req)
     }
 
-    private static func computeTriggers(kind: String, dueDate: Date?, now: Date, endMinutes: Int64 = 0) -> [(String, UNNotificationTrigger)] {
+    // MARK: – Rolling one-shot occurrence engine
+
+    /// Date formatter for compact occurrence IDs (e.g. "202605181430").
+    /// Using a let instead of a computed property avoids repeated allocation.
+    private static let occurrenceFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMddHHmm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        return f
+    }()
+
+    /// Compact date string used as the suffix in notification IDs.
+    /// e.g. Date(2026-05-18 14:30) → "202605181430"
+    private static func occurrenceSuffix(_ date: Date) -> String {
+        occurrenceFmt.string(from: date)
+    }
+
+    /// Core occurrence calculator. Returns up to `maxCount` upcoming fire
+    /// dates for a recurring (or one-shot) task, all strictly after `now`.
+    /// All `repeats: true` triggers have been replaced with lists of one-shot
+    /// calendar triggers so quiet-hours shifting, skip, and preview all work
+    /// on concrete dates rather than abstract patterns.
+    static func nextOccurrenceDates(
+        kind: String,
+        dueDate: Date?,
+        now: Date = Date(),
+        endMinutes: Int64 = 0,
+        maxCount: Int = 7
+    ) -> [Date] {
         let cal = Calendar.current
-        // Custom rule path. Hour/minute intervals → time-interval trigger.
-        // Day/Week/Month → one calendar trigger. "Every other Friday"
-        // schedules the next instance as a one-shot; foreground sync
-        // reschedules after fire.
+
+        // Custom RepeatRule ("custom:{...}") path.
         if let rule = RepeatRule.decode(kind) {
-            switch rule.unit {
-            case .minute:
-                let s = max(60, TimeInterval(rule.interval) * 60)
-                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: s, repeats: true))]
-            case .hour:
-                let s = max(3600, TimeInterval(rule.interval) * 3600)
-                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: s, repeats: true))]
-            case .day:
-                guard let due = dueDate else { return [] }
-                if rule.interval == 1 {
-                    let c = cal.dateComponents([.hour, .minute], from: due)
-                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-                }
-                let next = cal.date(byAdding: .day, value: rule.interval, to: max(due, now)) ?? due
-                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
-                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
-            case .week:
-                guard let due = dueDate else { return [] }
-                if rule.interval == 1, let wd = rule.weekday {
-                    var c = cal.dateComponents([.hour, .minute], from: due)
-                    c.weekday = wd
-                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-                }
-                if rule.interval == 1 {
-                    let c = cal.dateComponents([.weekday, .hour, .minute], from: due)
-                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-                }
-                let next = cal.date(byAdding: .weekOfYear, value: rule.interval, to: max(due, now)) ?? due
-                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
-                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
-            case .month:
-                guard let due = dueDate else { return [] }
-                if rule.interval == 1 {
-                    let c = cal.dateComponents([.day, .hour, .minute], from: due)
-                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-                }
-                let next = cal.date(byAdding: .month, value: rule.interval, to: max(due, now)) ?? due
-                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
-                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
-            case .year:
-                guard let due = dueDate else { return [] }
-                if rule.interval == 1 {
-                    let c = cal.dateComponents([.month, .day, .hour, .minute], from: due)
-                    return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-                }
-                let next = cal.date(byAdding: .year, value: rule.interval, to: max(due, now)) ?? due
-                let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next)
-                return [(kind, UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
-            }
+            return customRuleOccurrences(rule: rule, dueDate: dueDate, now: now, maxCount: maxCount, cal: cal)
         }
+
         switch kind {
         case "hourly", "every2h", "every4h", "every8h", "every12h":
             let step: Int = {
                 switch kind {
-                case "hourly":   return 1
-                case "every2h":  return 2
-                case "every4h":  return 4
-                case "every8h":  return 8
-                default:         return 12
+                case "hourly":  return 1
+                case "every2h": return 2
+                case "every4h": return 4
+                case "every8h": return 8
+                default:        return 12
                 }
             }()
             guard let due = dueDate else {
-                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
-            }
-            return cadenceTriggers(kind: kind, due: due, step: step, endMinutes: Int(endMinutes), cal: cal)
-        case "daily":
-            guard let due = dueDate else { return [] }
-            let c = cal.dateComponents([.hour, .minute], from: due)
-            return [("daily", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-        case "weekly":
-            guard let due = dueDate else { return [] }
-            let c = cal.dateComponents([.weekday, .hour, .minute], from: due)
-            return [("weekly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-        case "monthly":
-            guard let due = dueDate else { return [] }
-            let c = cal.dateComponents([.day, .hour, .minute], from: due)
-            return [("monthly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-        case "yearly":
-            guard let due = dueDate else { return [] }
-            let c = cal.dateComponents([.month, .day, .hour, .minute], from: due)
-            return [("yearly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
-        default:
-            guard let due = dueDate, due > now else { return [] }
-            let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: due)
-            return [("once", UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
-        }
-    }
-
-    /// Shared cadence-trigger builder. Generates one UNCalendarNotificationTrigger
-    /// per scheduled hour-of-day from the start time (`due`) onward in `step`
-    /// increments, clipped to a daytime window if `endMinutes` > 0 and > the
-    /// start's minute-of-day. Overnight ranges (stop < start) aren't
-    /// supported yet — endMinutes is ignored in that case.
-    private static func cadenceTriggers(kind: String, due: Date, step: Int, endMinutes: Int, cal: Calendar) -> [(String, UNNotificationTrigger)] {
-        let startMin = cal.component(.hour, from: due) * 60 + cal.component(.minute, from: due)
-        let hasStop = endMinutes > startMin
-        var out: [(String, UNNotificationTrigger)] = []
-        for offset in stride(from: 0, to: 24, by: step) {
-            let mod = (startMin + offset * 60) % (24 * 60)
-            if hasStop, mod < startMin || mod > endMinutes { continue }
-            var c = DateComponents()
-            c.hour = mod / 60
-            c.minute = mod % 60
-            out.append(("\(kind)-h\(mod/60)m\(mod%60)", UNCalendarNotificationTrigger(dateMatching: c, repeats: true)))
-        }
-        return out
-    }
-
-    private static func triggers(for t: TaskItem, now: Date) -> [(String, UNNotificationTrigger)] {
-        let cal = Calendar.current
-        let kind = t.effectiveRepeatKind
-        switch kind {
-        case "hourly", "every2h", "every4h", "every8h", "every12h":
-            let step: Int = {
-                switch kind {
-                case "hourly":   return 1
-                case "every2h":  return 2
-                case "every4h":  return 4
-                case "every8h":  return 8
-                default:         return 12
+                // No start time — fire relative to now at step intervals.
+                return (1...maxCount).map { i in
+                    now.addingTimeInterval(TimeInterval(i * step * 3600))
                 }
-            }()
-            guard let due = t.dueDate else {
-                return [(kind, UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(step * 3600), repeats: true))]
             }
-            return cadenceTriggers(kind: kind, due: due, step: step, endMinutes: Int(t.repeatEndMinutes), cal: cal)
+            return cadenceOccurrences(due: due, step: step,
+                                      endMinutes: Int(endMinutes),
+                                      now: now, maxCount: maxCount, cal: cal)
+
         case "daily":
-            guard let due = t.dueDate else { return [] }
-            let c = cal.dateComponents([.hour, .minute], from: due)
-            return [("daily", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+            guard let due = dueDate else { return [] }
+            return periodicOccurrences(due: due, now: now, maxCount: maxCount,
+                                       component: .day, value: 1, cal: cal)
+
         case "weekly":
-            guard let due = t.dueDate else { return [] }
-            let c = cal.dateComponents([.weekday, .hour, .minute], from: due)
-            return [("weekly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+            guard let due = dueDate else { return [] }
+            return periodicOccurrences(due: due, now: now, maxCount: maxCount,
+                                       component: .weekOfYear, value: 1, cal: cal)
+
         case "monthly":
-            guard let due = t.dueDate else { return [] }
-            let c = cal.dateComponents([.day, .hour, .minute], from: due)
-            return [("monthly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+            guard let due = dueDate else { return [] }
+            return periodicOccurrences(due: due, now: now, maxCount: min(maxCount, 4),
+                                       component: .month, value: 1, cal: cal)
+
         case "yearly":
-            guard let due = t.dueDate else { return [] }
-            let c = cal.dateComponents([.month, .day, .hour, .minute], from: due)
-            return [("yearly", UNCalendarNotificationTrigger(dateMatching: c, repeats: true))]
+            guard let due = dueDate else { return [] }
+            return periodicOccurrences(due: due, now: now, maxCount: min(maxCount, 2),
+                                       component: .year, value: 1, cal: cal)
+
         default:
-            guard let due = t.dueDate, due > now else { return [] }
-            let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: due)
-            return [("once", UNCalendarNotificationTrigger(dateMatching: c, repeats: false))]
+            // One-shot: fire once at dueDate if it's still in the future.
+            guard let due = dueDate, due > now else { return [] }
+            return [due]
         }
+    }
+
+    /// Advances `due` by (`component`, `value`) until it's past `now`,
+    /// then collects `maxCount` consecutive future dates.
+    private static func periodicOccurrences(
+        due: Date,
+        now: Date,
+        maxCount: Int,
+        component: Calendar.Component,
+        value: Int,
+        cal: Calendar
+    ) -> [Date] {
+        var cursor = due
+        while cursor <= now {
+            cursor = cal.date(byAdding: component, value: value, to: cursor)
+                ?? cursor.addingTimeInterval(86400)
+        }
+        var results: [Date] = []
+        for _ in 0..<maxCount {
+            results.append(cursor)
+            cursor = cal.date(byAdding: component, value: value, to: cursor)
+                ?? cursor.addingTimeInterval(86400)
+        }
+        return results
+    }
+
+    /// Hourly-cadence occurrences. Generates fire times for each `step`-hour
+    /// slot in a day window defined by `due` (start) and `endMinutes` (stop).
+    /// Scans up to 30 days forward to fill `maxCount` slots.
+    private static func cadenceOccurrences(
+        due: Date,
+        step: Int,
+        endMinutes: Int,
+        now: Date,
+        maxCount: Int,
+        cal: Calendar
+    ) -> [Date] {
+        let startMinOfDay = cal.component(.hour, from: due) * 60 + cal.component(.minute, from: due)
+        let hasStop = endMinutes > startMinOfDay
+
+        // Slots = minute-of-day values that should fire each day.
+        var slots: [Int] = []
+        var mod = startMinOfDay
+        while mod < 24 * 60 {
+            if !hasStop || mod <= endMinutes { slots.append(mod) }
+            mod += step * 60
+        }
+        guard !slots.isEmpty else { return [] }
+
+        var results: [Date] = []
+        let dayStart = cal.startOfDay(for: due)
+
+        for dayOffset in 0..<30 where results.count < maxCount {
+            guard let day = cal.date(byAdding: .day, value: dayOffset, to: dayStart) else { continue }
+            for slot in slots {
+                guard let fire = cal.date(bySettingHour: slot / 60, minute: slot % 60, second: 0, of: day),
+                      fire > now else { continue }
+                results.append(fire)
+                if results.count >= maxCount { break }
+            }
+        }
+        return results
+    }
+
+    /// Custom RepeatRule occurrence generator.
+    private static func customRuleOccurrences(
+        rule: RepeatRule,
+        dueDate: Date?,
+        now: Date,
+        maxCount: Int,
+        cal: Calendar
+    ) -> [Date] {
+        guard let due = dueDate else { return [] }
+        switch rule.unit {
+        case .minute:
+            let s = TimeInterval(max(1, rule.interval) * 60)
+            var c = due
+            while c <= now { c = c.addingTimeInterval(s) }
+            return (0..<maxCount).map { c.addingTimeInterval(s * TimeInterval($0)) }
+
+        case .hour:
+            let s = TimeInterval(max(1, rule.interval) * 3600)
+            var c = due
+            while c <= now { c = c.addingTimeInterval(s) }
+            return (0..<maxCount).map { c.addingTimeInterval(s * TimeInterval($0)) }
+
+        case .day:
+            return periodicOccurrences(due: due, now: now, maxCount: maxCount,
+                                       component: .day, value: rule.interval, cal: cal)
+        case .week:
+            return periodicOccurrences(due: due, now: now, maxCount: maxCount,
+                                       component: .weekOfYear, value: rule.interval, cal: cal)
+        case .month:
+            return periodicOccurrences(due: due, now: now, maxCount: min(maxCount, 4),
+                                       component: .month, value: rule.interval, cal: cal)
+        case .year:
+            return periodicOccurrences(due: due, now: now, maxCount: min(maxCount, 2),
+                                       component: .year, value: rule.interval, cal: cal)
+        }
+    }
+
+    // MARK: – Quiet-hours adjustment
+
+    /// Shifts `date` to the end of the quiet window when it falls inside one.
+    /// If quiet hours are disabled or the date is already outside the window,
+    /// returns `date` unchanged. Call this per-occurrence when scheduling
+    /// reminder-category tasks so pushes never fire during sleep.
+    static func quietAdjusted(_ date: Date) -> Date {
+        guard isWithinQuietHours(date) else { return date }
+        let defaults = UserDefaults.standard
+        let endHour = defaults.object(forKey: "quietHoursEnd") as? Int ?? 7
+        let cal = Calendar.current
+        // Build endHour:00 on the same calendar day.
+        var comps = cal.dateComponents([.year, .month, .day], from: date)
+        comps.hour = endHour
+        comps.minute = 0
+        comps.second = 0
+        guard var candidate = cal.date(from: comps) else { return date }
+        // If end-of-quiet already passed relative to `date`, bump to next day.
+        if candidate <= date {
+            candidate = cal.date(byAdding: .day, value: 1, to: candidate) ?? candidate
+        }
+        return candidate
+    }
+
+    // MARK: – Skip next occurrence
+
+    /// Cancels the earliest pending one-shot notification for a task
+    /// (identified by `baseId`). The next occurrence in the rolling window
+    /// becomes the new "next fire". After skipping, call `scheduleNow` to
+    /// backfill the removed slot with a fresh occurrence at the tail.
+    static func skipNextOccurrence(baseId: String) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        // New-format IDs use "~" separator; old-format used "-". Only skip
+        // new-format IDs (old ones will be cleaned up by the next sync).
+        let matching = pending
+            .filter { $0.identifier.hasPrefix("\(baseId)~") }
+            .compactMap { req -> (String, Date)? in
+                guard let cal = (req.trigger as? UNCalendarNotificationTrigger)
+                    .flatMap({ Calendar.current.nextDate(after: .distantPast,
+                                                        matching: $0.dateComponents,
+                                                        matchingPolicy: .nextTime) })
+                else { return nil }
+                return (req.identifier, cal)
+            }
+            .sorted { $0.1 < $1.1 }
+        guard let (earliestId, _) = matching.first else { return }
+        center.removePendingNotificationRequests(withIdentifiers: [earliestId])
+    }
+
+    // MARK: – Upcoming fire date queries
+
+    /// Returns the next `limit` fire dates already queued in the notification
+    /// center for a task. Uses the IDs of pending one-shot triggers.
+    static func upcomingFireDates(baseId: String, limit: Int = 3) async -> [Date] {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let cal = Calendar.current
+        let now = Date()
+        return pending
+            .filter { $0.identifier.hasPrefix("\(baseId)~") }
+            .compactMap { req -> Date? in
+                guard let t = req.trigger as? UNCalendarNotificationTrigger else { return nil }
+                return cal.nextDate(after: now, matching: t.dateComponents,
+                                    matchingPolicy: .nextTime)
+            }
+            .sorted()
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Computes upcoming fire dates without touching the notification center.
+    /// Use this in the edit sheet to show "Next fires: …" without async work.
+    static func previewFireDates(
+        kind: String,
+        dueDate: Date?,
+        endMinutes: Int64 = 0,
+        limit: Int = 3
+    ) -> [Date] {
+        nextOccurrenceDates(kind: kind, dueDate: dueDate, now: Date(),
+                            endMinutes: endMinutes, maxCount: limit)
     }
 
     private static func subtitle(for t: TaskItem) -> String {
