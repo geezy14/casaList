@@ -24,11 +24,30 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
-### 2026-05-16 — 1.6 + 1.7 both shipped to TF, schema deployed, 1.8 foundation laid
-Marathon all-day session. Shipped TWO TestFlight builds in one day
-(1.6 mid-session, 1.7 end-of-session) plus the Production CloudKit
-schema deploy that unblocks them, started 1.8 foundation work, and
-set up the dual-bundle (Casalist + Casalist Dev) dev workflow.
+### 2026-05-16 — 1.6 + 1.7 + 1.8 all shipped to TF in one day
+Marathon all-day session. Shipped THREE TestFlight builds in one day
+(1.6 mid-session, 1.7 mid-session, 1.8 end-of-session) plus the
+Production CloudKit schema deploy that unblocks them, set up the
+dual-bundle (Casalist + Casalist Dev) dev workflow, and shipped the
+Today's Reminders home-screen widget + Status Ping Live Activities.
+
+**1.8 shipped to TestFlight** at end of session. Delivery UUID
+`608db227-f25d-48cc-900a-f1e39eb8bdc4`, 5.4 MB transferred. Build
+state VALID, en-US notes posted cleanly (localization id
+`c026a761-32fc-4357-b262-30942da282a2`). Headline features:
+Today's Reminders widget (small/medium/large) with coral hero
+gradient + faded SF Symbol + rounded count, Status Ping Live
+Activities on Lock Screen + Dynamic Island, native
+UIColorPickerViewController (Grid/Spectrum/Sliders+Hex) wrapped
+for ReminderColorTag, When/Location/Stop-time chips auto-show
+controls (no more "schedule an alert" toggle), week starts on
+Saturday. Two diagnostic root-causes resolved during widget build:
+(1) `casalist.entitlements` had wrong App Group
+(`group.com.gbrown10.casabills2` from Xcode autocomplete) — fixed
+to `group.com.gbrown10.casalist`; (2) widget extension's Debug
+config had no `CODE_SIGN_ENTITLEMENTS` line, only Release — added
+to pbxproj. Notes kept short per new convention (2309 chars, pure
+ASCII, headline features only).
 
 **1.7 shipped to TestFlight** at end of session. Bumped
 CURRENT_PROJECT_VERSION 1.6 → 1.7 → 1.8 (1.8 already set for the
