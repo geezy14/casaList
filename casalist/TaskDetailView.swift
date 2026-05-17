@@ -23,8 +23,9 @@ struct TaskDetailView: View {
     @State private var editAssignee: String = ""
     @State private var editCategory: String = "Chores"
     @State private var editPoints: Int = 10
-    @State private var editDueDate: Date = Date()
+    @State private var editDueDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var editHasDueDate: Bool = true
+    @State private var editHasTime: Bool = false
     @State private var confirmDelete: Bool = false
     @State private var celebrate: Bool = false
     @State private var celebrateLabel: String = ""
@@ -194,13 +195,32 @@ struct TaskDetailView: View {
 
     private var dueText: String {
         guard let d = task.dueDate else { return "No due date" }
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.hour, .minute], from: d)
+        let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+        if cal.isDateInToday(d) {
+            if hasTime {
+                let f = DateFormatter(); f.dateFormat = "'Today at' h:mm a"
+                return f.string(from: d)
+            }
+            return "Today"
+        }
+        if cal.isDateInYesterday(d) || (d < cal.startOfDay(for: Date()) && !cal.isDateInToday(d)) {
+            let f = DateFormatter(); f.dateFormat = "EEE MMM d"
+            return "Overdue · \(f.string(from: d))"
+        }
         let f = DateFormatter()
-        f.dateFormat = Calendar.current.isDateInToday(d) ? "'Today' h:mm a" : "EEE MMM d 'at' h:mm a"
+        f.dateFormat = hasTime ? "EEE MMM d 'at' h:mm a" : "EEE MMM d"
         return f.string(from: d)
     }
     private var dueOverdue: Bool {
         guard !task.isCompleted, let d = task.dueDate else { return false }
-        return d < Date()
+        let cal = Calendar.current
+        // Date-only tasks (midnight) are only overdue if they're before today
+        let comps = cal.dateComponents([.hour, .minute], from: d)
+        let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+        if hasTime { return d < Date() }
+        return d < cal.startOfDay(for: Date())
     }
 
     // MARK: – Actions
@@ -282,13 +302,39 @@ struct TaskDetailView: View {
                     }
                 }
                 divider
-                fieldRow("Has due date") {
-                    Toggle("", isOn: $editHasDueDate).labelsHidden().tint(P.peach)
+                fieldRow("Date") {
+                    HStack(spacing: 10) {
+                        if editHasDueDate {
+                            DatePicker("", selection: $editDueDate, displayedComponents: .date)
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                        }
+                        Toggle("", isOn: $editHasDueDate)
+                            .labelsHidden()
+                            .tint(P.peach)
+                            .onChange(of: editHasDueDate) { _, on in
+                                if !on { editHasTime = false }
+                            }
+                    }
                 }
                 if editHasDueDate {
                     divider
-                    fieldRow("Due") {
-                        DatePicker("", selection: $editDueDate).labelsHidden()
+                    fieldRow("Time") {
+                        HStack(spacing: 10) {
+                            if editHasTime {
+                                DatePicker("", selection: $editDueDate, displayedComponents: .hourAndMinute)
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                            }
+                            Toggle("", isOn: $editHasTime)
+                                .labelsHidden()
+                                .tint(P.peach)
+                                .onChange(of: editHasTime) { _, on in
+                                    if !on {
+                                        editDueDate = Calendar.current.startOfDay(for: editDueDate)
+                                    }
+                                }
+                        }
                     }
                 }
             }
@@ -312,7 +358,16 @@ struct TaskDetailView: View {
         editCategory = task.category
         editPoints = Int(task.points)
         editHasDueDate = task.dueDate != nil
-        editDueDate = task.dueDate ?? Date()
+        if let d = task.dueDate {
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.hour, .minute, .second], from: d)
+            let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+            editHasTime = hasTime
+            editDueDate = hasTime ? d : cal.startOfDay(for: d)
+        } else {
+            editHasTime = false
+            editDueDate = Calendar.current.startOfDay(for: Date())
+        }
         editing = true
     }
 
@@ -321,7 +376,11 @@ struct TaskDetailView: View {
         task.assignee = editAssignee.isEmpty ? nil : editAssignee
         task.category = editCategory
         task.points = Int64(editPoints)
-        task.dueDate = editHasDueDate ? editDueDate : nil
+        if editHasDueDate {
+            task.dueDate = editHasTime ? editDueDate : Calendar.current.startOfDay(for: editDueDate)
+        } else {
+            task.dueDate = nil
+        }
         try? moc.save()
         editing = false
     }

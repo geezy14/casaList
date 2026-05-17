@@ -21,7 +21,8 @@ struct AddFamilyTripView: View {
 
     @State private var name: String = ""
     @State private var hasDate: Bool = true
-    @State private var tripDate: Date = Date().addingTimeInterval(3600)
+    @State private var hasTime: Bool = false
+    @State private var tripDate: Date = Calendar.current.startOfDay(for: Date())
 
     var body: some View {
         NavigationStack {
@@ -32,8 +33,16 @@ struct AddFamilyTripView: View {
                 }
                 Section("When") {
                     Toggle("Schedule this outing", isOn: $hasDate)
+                        .onChange(of: hasDate) { _, on in if !on { hasTime = false } }
                     if hasDate {
-                        DatePicker("Date & time", selection: $tripDate)
+                        DatePicker("Date", selection: $tripDate, displayedComponents: .date)
+                        Toggle("Specific time", isOn: $hasTime)
+                            .onChange(of: hasTime) { _, on in
+                                if !on { tripDate = Calendar.current.startOfDay(for: tripDate) }
+                            }
+                        if hasTime {
+                            DatePicker("Time", selection: $tripDate, displayedComponents: .hourAndMinute)
+                        }
                     }
                 }
                 Section {
@@ -57,7 +66,7 @@ struct AddFamilyTripView: View {
         let trip = TaskItem(
             context: moc,
             task: name.trimmingCharacters(in: .whitespaces),
-            dueDate: hasDate ? tripDate : nil,
+            dueDate: hasDate ? (hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)) : nil,
             category: "family",
             points: -1, // container sentinel — see TaskItem.isContainer
 

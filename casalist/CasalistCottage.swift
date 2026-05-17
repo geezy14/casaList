@@ -188,6 +188,66 @@ public enum CasalistCottage {
                 coral: Color(rgb: 0xFF8B5C)
             )
         }
+
+        /// Deep navy / teal ocean palette for the Kid starfield view.
+        static func starfieldOcean() -> Palette {
+            Palette(
+                bg: Color(rgb: 0x0A1628),
+                surface: Color(rgb: 0x0F2040),
+                surfaceAlt: Color(rgb: 0x163052),
+                surfaceHi: Color(rgb: 0x1E4068),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xE8F8FF),
+                textDim: Color(rgb: 0xE8F8FF).opacity(0.7),
+                textMuted: Color(rgb: 0xE8F8FF).opacity(0.45),
+                peach: Color(rgb: 0xFF7B6B),
+                mint: Color(rgb: 0x00CED4),
+                butter: Color(rgb: 0xFFD166),
+                lavender: Color(rgb: 0x7FCDFF),
+                sky: Color(rgb: 0x48D1CC),
+                coral: Color(rgb: 0xFF6B6B)
+            )
+        }
+
+        /// Deep forest green / warm nature palette for the Kid starfield view.
+        static func starfieldGarden() -> Palette {
+            Palette(
+                bg: Color(rgb: 0x1A2A1A),
+                surface: Color(rgb: 0x243A24),
+                surfaceAlt: Color(rgb: 0x2E4A2E),
+                surfaceHi: Color(rgb: 0x3A5A3A),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xFAF8EC),
+                textDim: Color(rgb: 0xFAF8EC).opacity(0.7),
+                textMuted: Color(rgb: 0xFAF8EC).opacity(0.45),
+                peach: Color(rgb: 0xFF8FA3),
+                mint: Color(rgb: 0x7ED96F),
+                butter: Color(rgb: 0xF9C846),
+                lavender: Color(rgb: 0xB5A7F5),
+                sky: Color(rgb: 0x6ECFCF),
+                coral: Color(rgb: 0xFF9F6B)
+            )
+        }
+
+        /// Dreamy pink / purple orchid palette for the Kid starfield view.
+        static func starfieldOrchid() -> Palette {
+            Palette(
+                bg: Color(rgb: 0x2A0A3A),
+                surface: Color(rgb: 0x3D1254),
+                surfaceAlt: Color(rgb: 0x4E1A6A),
+                surfaceHi: Color(rgb: 0x622280),
+                border: Color.white.opacity(0.12),
+                text: Color(rgb: 0xFFF0FA),
+                textDim: Color(rgb: 0xFFF0FA).opacity(0.7),
+                textMuted: Color(rgb: 0xFFF0FA).opacity(0.45),
+                peach: Color(rgb: 0xFF69B4),   // hot pink
+                mint: Color(rgb: 0xDA70D6),    // orchid
+                butter: Color(rgb: 0xFFD1DC),  // pastel pink
+                lavender: Color(rgb: 0xC77DFF),// bright lavender
+                sky: Color(rgb: 0xFF9ECD),     // pink-sky
+                coral: Color(rgb: 0xFF85A1)    // rose coral
+            )
+        }
     }
 
     public struct Home: View {
@@ -670,13 +730,9 @@ public enum CasalistCottage {
         /// uploaded photo when their matching FamilyMember has one, otherwise
         /// the person.crop.circle.fill glyph. Tap to pick/replace photo.
         private var profileIcon: some View {
-            // PersonalCardView is hidden until v2 ships — only accessible in DEBUG builds.
+            
             Button {
-                #if DEBUG
                 showPersonalCard = true
-                #else
-                showProfilePhoto = true
-                #endif
             } label: {
                 ZStack {
                     Circle()
@@ -3973,8 +4029,21 @@ extension CasalistCottage {
         @State private var confettiFlying: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var showSuggest: Bool = false
+        @AppStorage("starfieldTheme") private var themeName: String = "space"
+        @AppStorage("starfieldTier") private var tier: String = "tween"
+        @State private var completingUids: Set<String> = []
+        @State private var showSettings: Bool = false
+        @State private var showPersonalCard: Bool = false
 
-        private var P: Palette { Palette.starfield() }
+        private var P: Palette {
+            switch themeName {
+            case "ocean":    return Palette.starfieldOcean()
+            case "garden":   return Palette.starfieldGarden()
+            case "orchid": return Palette.starfieldOrchid()
+            default:         return Palette.starfield()
+            }
+        }
+        private var isLittle: Bool { tier == "little" }
 
         private var me: FamilyMember? {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
@@ -4012,14 +4081,15 @@ extension CasalistCottage {
 
         public var body: some View {
             ZStack {
-                LinearGradient(colors: [P.bg, Color(rgb: 0x2D1B6B)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [P.bg, P.surfaceHi], startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 22) {
                         header
                         choresSection
+                        if !isLittle { statsCard }
                         pointsSection
-                        familyPeekSection
+                        if !isLittle && !familyPeek.isEmpty { familyPeekSection }
                         winsSection
                         Spacer(minLength: 30)
                     }
@@ -4032,6 +4102,8 @@ extension CasalistCottage {
             .preferredColorScheme(.dark)
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
             .sheet(isPresented: $showSuggest) { suggestSheet }
+            .sheet(isPresented: $showSettings) { settingsSheet }
+            .fullScreenCover(isPresented: $showPersonalCard) { PersonalCardView() }
         }
 
         // MARK: – Suggest-a-goal (kid)
@@ -4134,16 +4206,25 @@ extension CasalistCottage {
 
         private var header: some View {
             HStack(spacing: 14) {
-                if let m = me {
-                    CLAvatar(m.asCLMember, size: 56)
-                } else {
-                    Circle().fill(P.peach).frame(width: 56, height: 56)
+                Button { showPersonalCard = true } label: {
+                    if let m = me {
+                        CLAvatar(m.asCLMember, size: 56)
+                    } else {
+                        Circle().fill(P.peach).frame(width: 56, height: 56)
+                    }
                 }
+                .buttonStyle(.row)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Hi, \(myName) 👋").font(.system(size: 22, weight: .heavy))
                     Text("Let's earn some points").font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
                 }
                 Spacer()
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(P.textMuted)
+                }
+                .buttonStyle(.row)
             }
             .padding(.top, 8)
         }
@@ -4153,6 +4234,10 @@ extension CasalistCottage {
                 sectionTitle("MY STUFF TO DO", emoji: "✨", color: P.butter)
                 if myChores.isEmpty {
                     emptyCard("🎉", title: "All caught up!", subtitle: "Nothing to do right now. Go play.", tint: P.mint)
+                } else if isLittle {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(myChores, id: \.uid) { littleChoreTile($0) }
+                    }
                 } else {
                     VStack(spacing: 10) { ForEach(myChores, id: \.uid) { choreTile($0) } }
                 }
@@ -4165,18 +4250,28 @@ extension CasalistCottage {
                 return d < Date().addingTimeInterval(-3600) && !Calendar.current.isDateInToday(d)
             }()
             let dueToday = t.dueDate.map { Calendar.current.isDateInToday($0) } ?? false
+            let completing = completingUids.contains(t.uid)
             return HStack(spacing: 14) {
                 Button { completeChore(t) } label: {
                     ZStack {
-                        // Empty outlined circle in the resting state — the kid
-                        // can clearly tell the chore isn't done yet.
-                        Circle()
-                            .stroke(P.mint, lineWidth: 3)
-                            .frame(width: 52, height: 52)
-                        // Faint inner mint fill so it still feels tappable.
-                        Circle()
-                            .fill(P.mint.opacity(0.12))
-                            .frame(width: 46, height: 46)
+                        if completing {
+                            Circle()
+                                .fill(P.mint)
+                                .frame(width: 52, height: 52)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            // Empty outlined circle in the resting state — the kid
+                            // can clearly tell the chore isn't done yet.
+                            Circle()
+                                .stroke(P.mint, lineWidth: 3)
+                                .frame(width: 52, height: 52)
+                            // Faint inner mint fill so it still feels tappable.
+                            Circle()
+                                .fill(P.mint.opacity(0.12))
+                                .frame(width: 46, height: 46)
+                        }
                     }
                 }.buttonStyle(.row)
                 VStack(alignment: .leading, spacing: 4) {
@@ -4200,14 +4295,20 @@ extension CasalistCottage {
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            .scaleEffect(completing ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: completing)
         }
 
         private func completeChore(_ t: TaskItem) {
             let pts = Int(t.points)
-            FamilyPoints.toggle(t, in: members)
-            try? moc.save()
-            if pts > 0 {
-                triggerCelebrate("+\(pts) pts!")
+            completingUids.insert(t.uid)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                FamilyPoints.toggle(t, in: members)
+                try? moc.save()
+                completingUids.remove(t.uid)
+                if pts > 0 { triggerCelebrate("+\(pts) pts!") }
             }
         }
 
@@ -4545,6 +4646,200 @@ extension CasalistCottage {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
             .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+        }
+
+        // MARK: – Little-mode tile (2-column grid)
+
+        private func littleChoreTile(_ t: TaskItem) -> some View {
+            let completing = completingUids.contains(t.uid)
+            return Button { completeChore(t) } label: {
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(completing ? P.mint : P.mint.opacity(0.2))
+                            .frame(width: 70, height: 70)
+                        if completing {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 30, weight: .heavy))
+                                .foregroundStyle(.white)
+                        } else {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(P.butter)
+                        }
+                    }
+                    Text(t.task)
+                        .font(.system(size: 16, weight: .heavy))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .foregroundStyle(P.text)
+                    Text("\(t.points) pts")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(P.butter)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(20)
+                .background(RoundedRectangle(cornerRadius: 24).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(P.border, lineWidth: 1.5))
+                .scaleEffect(completing ? 1.06 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.5), value: completing)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.row)
+        }
+
+        // MARK: – Stats card (tween only)
+
+        private var statsCard: some View {
+            let lc = myName.lowercased()
+            let allTimeChores = allTodos.filter { ($0.assignee ?? "").lowercased() == lc && $0.points > 0 && $0.completedAt != nil }.count
+            let weekAgo = Date().addingTimeInterval(-7 * 86400)
+            let weekPoints = allTodos.filter { t in
+                (t.assignee ?? "").lowercased() == lc
+                && t.points > 0
+                && (t.completedAt.map { $0 >= weekAgo } ?? false)
+            }.reduce(0) { $0 + Int($1.points) }
+            let currentStreak: Int = {
+                let completedDays: Set<String> = Set(
+                    allTodos.compactMap { t -> String? in
+                        guard (t.assignee ?? "").lowercased() == lc,
+                              t.points > 0,
+                              let d = t.completedAt else { return nil }
+                        let fmt = DateFormatter()
+                        fmt.dateFormat = "yyyy-MM-dd"
+                        return fmt.string(from: d)
+                    }
+                )
+                var streak = 0
+                var cal = Calendar.current
+                cal.firstWeekday = 1
+                var day = cal.startOfDay(for: Date())
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd"
+                while completedDays.contains(fmt.string(from: day)) {
+                    streak += 1
+                    day = cal.date(byAdding: .day, value: -1, to: day) ?? day.addingTimeInterval(-86400)
+                }
+                return streak
+            }()
+            return VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("MY STATS", emoji: "📊", color: P.sky)
+                HStack(spacing: 0) {
+                    statBubble(value: allTimeChores, label: "chores done")
+                    Divider().frame(height: 44).background(P.border)
+                    statBubble(value: weekPoints, label: "pts this week")
+                    Divider().frame(height: 44).background(P.border)
+                    statBubble(value: currentStreak, label: "day streak")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+            }
+        }
+
+        private func statBubble(value: Int, label: String) -> some View {
+            VStack(spacing: 4) {
+                Text("\(value)").font(.system(size: 28, weight: .heavy)).foregroundStyle(P.butter)
+                Text(label).font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+        }
+
+        // MARK: – Settings sheet (theme + tier)
+
+        private var settingsSheet: some View {
+            ZStack {
+                P.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Spacer().frame(height: 4)
+                        Text("My Settings")
+                            .font(.system(size: 22, weight: .heavy))
+                            .foregroundStyle(P.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // ── Theme section ──
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("THEME")
+                                .font(.system(size: 11, weight: .heavy))
+                                .tracking(1.4)
+                                .foregroundStyle(P.textMuted)
+
+                            ForEach([
+                                ("space",  "Space",  Color(rgb: 0x1B1E4A), Color(rgb: 0xB084F5)),
+                                ("ocean",  "Ocean",  Color(rgb: 0x0A1628), Color(rgb: 0x00CED4)),
+                                ("garden", "Garden", Color(rgb: 0x1A2A1A), Color(rgb: 0x7ED96F)),
+                                ("orchid", "Orchid", Color(rgb: 0x2A0A3A), Color(rgb: 0xFF69B4))
+                            ], id: \.0) { key, label, bgColor, accentColor in
+                                Button {
+                                    themeName = key
+                                } label: {
+                                    HStack(spacing: 14) {
+                                        ZStack {
+                                            Circle().fill(bgColor).frame(width: 40, height: 40)
+                                            Circle().fill(accentColor).frame(width: 18, height: 18)
+                                        }
+                                        Text(label)
+                                            .font(.system(size: 16, weight: .heavy))
+                                            .foregroundStyle(P.text)
+                                        Spacer()
+                                        if themeName == key {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 14, weight: .heavy))
+                                                .foregroundStyle(P.mint)
+                                        }
+                                    }
+                                    .padding(14)
+                                    .background(RoundedRectangle(cornerRadius: 18).fill(themeName == key ? P.surfaceAlt : P.surface))
+                                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(themeName == key ? P.mint.opacity(0.5) : P.border, lineWidth: 1.5))
+                                }
+                                .buttonStyle(.row)
+                            }
+                        }
+
+                        // ── Age / style section ──
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("MY STYLE")
+                                .font(.system(size: 11, weight: .heavy))
+                                .tracking(1.4)
+                                .foregroundStyle(P.textMuted)
+
+                            ForEach([
+                                ("little", "Simple", "Big buttons, just the fun stuff"),
+                                ("tween",  "Full",   "Stats, family, the whole thing")
+                            ], id: \.0) { key, label, subtitle in
+                                Button {
+                                    tier = key
+                                } label: {
+                                    HStack(spacing: 14) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(label).font(.system(size: 16, weight: .heavy)).foregroundStyle(P.text)
+                                            Text(subtitle).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                                        }
+                                        Spacer()
+                                        if tier == key {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 14, weight: .heavy))
+                                                .foregroundStyle(P.mint)
+                                        }
+                                    }
+                                    .padding(14)
+                                    .background(RoundedRectangle(cornerRadius: 18).fill(tier == key ? P.surfaceAlt : P.surface))
+                                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(tier == key ? P.mint.opacity(0.5) : P.border, lineWidth: 1.5))
+                                }
+                                .buttonStyle(.row)
+                            }
+                        }
+
+                        Spacer(minLength: 30)
+                    }
+                    .padding(20)
+                }
+            }
+            .foregroundStyle(P.text)
+            .preferredColorScheme(.dark)
+            .presentationDetents([.medium])
         }
 
         private func sectionTitle(_ text: String, emoji: String, color: Color) -> some View {

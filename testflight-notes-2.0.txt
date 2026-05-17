@@ -1,26 +1,25 @@
-Version 2.0 -- Reminders redesign
+Version 2.0 -- Build 1
 
 What's New:
 
-- Reminders sheet completely rebuilt in Apple Reminders style. Date & Time,
-  Repeat, Details, and Location are always visible as grouped cards -- no
-  icon strip to tap through. Set a date without a time (fires at 9 AM) or
-  flip the Time toggle to pick a specific hour.
+Starfield (kid mode) overhaul. Four themes: Space, Ocean, Garden, Orchid --
+kids pick their own in the gear menu. Two display modes: Simple (big buttons,
+just the chores) and Full (stats, family peek, wins). Completing a chore now
+animates the checkmark. Tapping your avatar opens your full stats card.
 
-- Priority on reminders. Set None / Low / Medium / High from the Details
-  card. Cards show a colored badge (! / !! / !!!) in the header.
+Personal stats card is now available to everyone. Tap your profile photo on
+the Home tab to see your points, streak, completions, and year-end projection.
 
-- Task due dates now support date-only mode too. Toggle Time off to mark
-  something due today without locking to a specific time.
+Reminders got a full redesign. Date & Time, Repeat, Details, and Location now
+show as grouped cards -- always visible, nothing hidden behind an icon strip.
 
-- Reminder cards have rounder corners.
-
-- Swipe-back gesture works reliably on iOS 26 (hotfix from 1.8.1 carried
-  forward).
+Priority on reminders. Set None / Low / Medium / High from the Details card.
+Cards show a colored badge (! / !! / !!!) in the header.
 
 What to Test:
 
-- Create a reminder with Date on, Time off -- confirm it fires at 9 AM
-- Set priority High on a reminder -- confirm !!! badge appears on the card
+- Switch a kid to Orchid theme -- confirm all four themes work
+- Tap avatar in kid mode -- confirm stats card opens
+- Tap profile photo on Home -- confirm stats card opens for adults too
+- Create a reminder with priority High -- confirm !!! badge appears on the card
 - Edit an existing reminder -- confirm all panels show populated values
-- Add a task due "today" with no time set -- confirm it saves cleanly

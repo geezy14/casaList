@@ -56,14 +56,14 @@ struct PersonalCardView: View {
         let name = myName.lowercased()
         return allTodos.filter {
             $0.completedAt != nil &&
-            (($0.assignee ?? "").lowercased() == name || $0.createdBy.lowercased() == name)
+            ($0.assignee ?? "").lowercased() == name
         }
     }
 
     private var myAssignedTasks: [TaskItem] {
         let name = myName.lowercased()
         return allTodos.filter {
-            ($0.assignee ?? "").lowercased() == name || $0.createdBy.lowercased() == name
+            ($0.assignee ?? "").lowercased() == name
         }
     }
 
