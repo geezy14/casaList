@@ -637,6 +637,9 @@ struct CasalistApp: App {
         WindowGroup {
             CasalistCottage.Root()
                 .environment(\.managedObjectContext, stack.context)
+                // Week starts on Saturday in every DatePicker / calendar
+                // grid descendant. See SaturdayFirstCalendar.swift.
+                .environment(\.calendar, .casalist)
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
                     LocationSharingService.shared.resumeIfPreviouslySharing()

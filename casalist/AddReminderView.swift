@@ -600,66 +600,113 @@ struct AddReminderView: View {
         panelCard {
             VStack(alignment: .leading, spacing: 10) {
                 panelHeader("When", icon: "calendar.badge.clock")
+                // Opening this panel implies "I want to set a time."
+                // Auto-promote pinned → scheduled with a sensible
+                // default so the user immediately sees the picker
+                // controls. Tapping "Make pinned" at the bottom is
+                // the explicit opt-out.
+                if !dailyOnlyTime {
+                    whenQuickPicks
+                }
+                if dailyOnlyTime {
+                    DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                } else {
+                    DatePicker("Date", selection: $fireDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                    DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                }
                 if repeatKind.isEmpty {
-                    Toggle("Schedule an alert", isOn: $hasFireDate)
-                }
-                if !isPinned {
-                    // Quick-set chips — most-common cases without
-                    // having to spin the date wheel. Today defaults
-                    // to "an hour from now"; Tomorrow / This Weekend /
-                    // Next Week each anchor at 9 AM. Chip is
-                    // highlighted when fireDate matches its target.
-                    if !dailyOnlyTime {
-                        whenQuickPicks
+                    Button {
+                        hasFireDate = false
+                        expandedChips.remove(.when)
+                    } label: {
+                        Label("Make pinned (no alert)", systemImage: "pin")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
-                    if dailyOnlyTime {
-                        DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
-                            .datePickerStyle(.compact)
-                    } else {
-                        DatePicker("Date", selection: $fireDate, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                        DatePicker("Time", selection: $fireDate, displayedComponents: .hourAndMinute)
-                            .datePickerStyle(.compact)
-                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
+            }
+        }
+        .onAppear {
+            // Auto-flip to scheduled on first sight of the panel —
+            // ensures pinned reminders aren't stuck in a chicken-and-
+            // egg state where the picker is shown but hasFireDate is
+            // still false.
+            if !hasFireDate && repeatKind.isEmpty {
+                hasFireDate = true
+                fireDate = defaultTimeOnTodayOrLater()
             }
         }
     }
 
     /// Horizontal scroller of quick-set date chips for the When panel.
-    /// Each one snaps `fireDate` to a sensible default, sets
-    /// `hasFireDate = true`, and highlights itself when the current
-    /// fireDate falls within its target day.
+    /// Each one snaps `fireDate` to a sensible default; the highlight
+    /// is mutually exclusive (priority: Today → Tomorrow → This
+    /// weekend → Next week → none).
     private var whenQuickPicks: some View {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
-        let weekendDay = nextSaturday(from: today, cal: cal)
+        let weekendDay = upcomingSaturday(from: today, cal: cal)
         let nextWeek = cal.date(byAdding: .day, value: 7, to: today) ?? today
+
+        // Compute which chip "wins" so highlights never collide
+        // (e.g. when today already IS Saturday, "Today" wins over
+        // "This weekend"; without this, both lit up).
+        let selected = selectedQuickPick(
+            cal: cal,
+            weekendDay: weekendDay,
+            nextWeek: nextWeek
+        )
+
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 whenChip(
                     label: "Today",
-                    isOn: cal.isDateInToday(fireDate),
+                    isOn: selected == .today,
                     target: defaultTimeOnTodayOrLater()
                 )
                 whenChip(
                     label: "Tomorrow",
-                    isOn: cal.isDateInTomorrow(fireDate),
+                    isOn: selected == .tomorrow,
                     target: cal.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
                 )
-                whenChip(
-                    label: "This weekend",
-                    isOn: cal.isDate(fireDate, inSameDayAs: weekendDay),
-                    target: cal.date(bySettingHour: 10, minute: 0, second: 0, of: weekendDay) ?? weekendDay
-                )
+                // Hide "This weekend" when today is Saturday or Sunday
+                // — the Today chip already covers the same date, so a
+                // separate chip is just redundant.
+                let todayWeekday = cal.component(.weekday, from: today)
+                let isAlreadyWeekend = (todayWeekday == 7 || todayWeekday == 1)
+                if !isAlreadyWeekend {
+                    whenChip(
+                        label: "This weekend",
+                        isOn: selected == .weekend,
+                        target: cal.date(bySettingHour: 10, minute: 0, second: 0, of: weekendDay) ?? weekendDay
+                    )
+                }
                 whenChip(
                     label: "Next week",
-                    isOn: cal.isDate(fireDate, inSameDayAs: nextWeek),
+                    isOn: selected == .nextWeek,
                     target: cal.date(bySettingHour: 9, minute: 0, second: 0, of: nextWeek) ?? nextWeek
                 )
             }
         }
+    }
+
+    private enum QuickPick { case today, tomorrow, weekend, nextWeek }
+
+    /// Pick the best-matching quick-pick for the current fireDate.
+    /// Priority is Today → Tomorrow → This weekend → Next week so
+    /// chips never light up simultaneously.
+    private func selectedQuickPick(cal: Calendar, weekendDay: Date, nextWeek: Date) -> QuickPick? {
+        if cal.isDateInToday(fireDate) { return .today }
+        if cal.isDateInTomorrow(fireDate) { return .tomorrow }
+        if cal.isDate(fireDate, inSameDayAs: weekendDay) { return .weekend }
+        if cal.isDate(fireDate, inSameDayAs: nextWeek) { return .nextWeek }
+        return nil
     }
 
     /// Returns an "Today" target time: the current time + 1 hour,
@@ -676,11 +723,13 @@ struct AddReminderView: View {
         return cal.date(bySettingHour: 23, minute: 0, second: 0, of: today) ?? now
     }
 
-    /// First Saturday >= today.
-    private func nextSaturday(from base: Date, cal: Calendar) -> Date {
+    /// First Saturday >= today. If today IS Saturday, returns today.
+    /// (The chip is hidden in that case anyway via the
+    /// `isAlreadyWeekend` check in whenQuickPicks.)
+    private func upcomingSaturday(from base: Date, cal: Calendar) -> Date {
         let weekday = cal.component(.weekday, from: base)   // 1 = Sun … 7 = Sat
-        let daysUntilSat = (7 - weekday + 7) % 7   // 0 if today IS Saturday
-        return cal.date(byAdding: .day, value: daysUntilSat == 0 ? 0 : daysUntilSat, to: base) ?? base
+        let daysUntilSat = (7 - weekday + 7) % 7
+        return cal.date(byAdding: .day, value: daysUntilSat, to: base) ?? base
     }
 
     private func whenChip(label: String, isOn: Bool, target: Date) -> some View {

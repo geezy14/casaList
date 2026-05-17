@@ -22,6 +22,7 @@ struct DeveloperSettingsSection: View {
                 .padding(.leading, 4)
             VStack(spacing: 0) {
                 DevStatsBlock()
+                DevWidgetDiagnosticBlock()
                 DevSchemaBlock(message: $message)
                 DevShareInspectBlock(message: $message)
                 DevShareResetBlock(message: $message)
@@ -528,5 +529,47 @@ private struct DevActionRow: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
         }.buttonStyle(.plain)
+    }
+}
+
+// MARK: - Widget diagnostic
+
+/// Surfaces the App Group state for the widget so we can tell at a
+/// glance whether the main app is writing the snapshot to the
+/// correct shared container (where the Widget Extension reads from).
+private struct DevWidgetDiagnosticBlock: View {
+    @State private var info: String = "(tap to check)"
+
+    var body: some View {
+        Group {
+            DevActionRow(title: "Widget App Group diagnostic") { run() }
+            DevDivider()
+            if !info.isEmpty {
+                Text(info)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+                DevDivider()
+            }
+        }
+    }
+
+    private func run() {
+        var lines: [String] = []
+        lines.append("group: \(AppGroup.identifier)")
+        let url = AppGroup.containerURL
+        let isFallback = !url.absoluteString.contains("/Group/") &&
+                         !url.absoluteString.contains("Containers/Shared/AppGroup")
+        lines.append("URL: \(url.lastPathComponent)/.../")
+        lines.append("path-tail: ...\(url.absoluteString.suffix(60))")
+        lines.append("fallback?: \(isFallback ? "YES (App Group NOT linked)" : "no (App Group OK)")")
+        if let snap = TodayReminderSnapshot.load() {
+            lines.append("snapshot: \(snap.entries.count) entries")
+            lines.append("written: \(snap.generatedAt.formatted(date: .omitted, time: .standard))")
+        } else {
+            lines.append("snapshot: not found at this path")
+        }
+        info = lines.joined(separator: "\n")
     }
 }
