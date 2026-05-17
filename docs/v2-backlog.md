@@ -8,6 +8,19 @@ Newest first.
 
 ---
 
+## v2.0 — Apple Watch complication (moved from 1.9, 2026-05-17)
+
+"Next reminder fires in 23 min" on the wrist. Requires a separate
+watchOS target in the Xcode project. Likely first surfaces:
+- Complication showing next reminder title + countdown
+- Complication showing today's task count
+- Glanceable family leaderboard (who's leading today)
+
+Bundle with the v2 design refresh so Watch and iPhone ship a cohesive
+look at the same time.
+
+---
+
 ## v2.0 — iPad app (proposed 2026-05-16)
 
 Ship a real iPad experience alongside iPhone in v2. Today the

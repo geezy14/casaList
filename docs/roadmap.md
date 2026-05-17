@@ -50,13 +50,13 @@ Designed-up overhaul of the four primary tabs in some v2 build. Each gets the sa
 
 ---
 
-## v1.9 — Search + Calendar + Watch (parked)
+## v1.9 — Skipped; rolled into v2
 
-Pulled out of 1.7's "what else can we add" pass because each is meaty enough to deserve its own ship.
+All three 1.9 items shipped early or were folded into v2:
 
-- **7-day calendar grid (Schedule tab)** — Schedule view currently sections as TODAY / THIS WEEK / UPCOMING / PAST. Add a visual 7-day grid for scanning at a glance.
-- **Global search** — search box on the dashboard that hits chores + reminders + events + groceries in one query.
-- **Apple Watch complication** — "next reminder fires in 23 min" on the wrist. Big lift (separate watchOS target). Bundle with Live Activities work in 1.8 if it makes sense, otherwise hold for 1.9.
+- **7-day calendar grid** — shipped in the 1.8 work window (Sat-first day strip on Schedule tab).
+- **Global search** — shipped in the 1.8 work window (Home dashboard, hides when all tiles are 0).
+- **Apple Watch complication** — moved to v2 backlog. Big lift (separate watchOS target); better bundled with the v2 design refresh.
 
 ---
 
