@@ -1159,7 +1159,14 @@ public enum CasalistCottage {
                         tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
                     }.buttonStyle(.row)
                     Button { showMyToDo = true } label: {
-                        tile(bg: P.peach, gradient: P.heroGradient, shadowColor: P.coral, useWhiteText: true,
+                        // Anchor keeps the My To-Do tile as a solid cobalt
+                        // primary — its blue has enough identity on its own
+                        // and the gradient washed it into the brick-red coral.
+                        // Every other palette gets the sunrise heroGradient.
+                        tile(bg: P.peach,
+                             gradient: paletteName == "anchor" ? nil : P.heroGradient,
+                             shadowColor: paletteName == "anchor" ? P.peach : P.coral,
+                             useWhiteText: true,
                              emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.row)
                     Button { showReminders = true } label: {
@@ -2645,8 +2652,16 @@ extension CasalistCottage {
                 Button { showAddTodo = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.heroGradient))
-                        .shadow(color: P.coral.opacity(0.45), radius: 8, y: 4)
+                        .background(
+                            Group {
+                                if paletteName == "anchor" {
+                                    Circle().fill(P.peach)
+                                } else {
+                                    Circle().fill(P.heroGradient)
+                                }
+                            }
+                        )
+                        .shadow(color: (paletteName == "anchor" ? P.peach : P.coral).opacity(0.45), radius: 8, y: 4)
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -2715,7 +2730,15 @@ extension CasalistCottage {
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(Capsule().fill(P.heroGradient))
+                    .background(
+                        Group {
+                            if paletteName == "anchor" {
+                                Capsule().fill(P.peach)
+                            } else {
+                                Capsule().fill(P.heroGradient)
+                            }
+                        }
+                    )
                 }.buttonStyle(.row)
                 Spacer()
             }
@@ -2753,9 +2776,19 @@ extension CasalistCottage {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 22).padding(.vertical, 22)
-            .background(P.heroGradient)
+            .background(
+                // Anchor keeps the hero on solid cobalt to match its tile;
+                // other themes get the brand sunrise gradient.
+                Group {
+                    if paletteName == "anchor" {
+                        P.peach
+                    } else {
+                        P.heroGradient
+                    }
+                }
+            )
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: P.coral.opacity(0.28), radius: 18, x: 0, y: 8)
+            .shadow(color: (paletteName == "anchor" ? P.peach : P.coral).opacity(0.28), radius: 18, x: 0, y: 8)
         }
 
         // MARK: – Scope toggle (admin only)
@@ -2791,7 +2824,16 @@ extension CasalistCottage {
                         .onSubmit(addInlineItem)
                     Button { addInlineItem() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(P.heroGradient))
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Group {
+                                    if paletteName == "anchor" {
+                                        Circle().fill(P.peach)
+                                    } else {
+                                        Circle().fill(P.heroGradient)
+                                    }
+                                }
+                            )
                     }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
