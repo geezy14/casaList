@@ -2419,12 +2419,13 @@ extension CasalistCottage {
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
-        /// MyToDo design exploration. "calm" (default), "cards", "rings".
-        /// Hidden behind Settings → Developer → My To-Do design until a
-        /// winner is picked. Idea-B (native Reminders list) lives on its
-        /// own branch -- not folded in here because it'd require swapping
-        /// the entire ScrollView host for a List.
-        @AppStorage("myToDoDesign") private var myToDoDesign: String = "calm"
+        /// MyToDo design exploration. "digest" (default, TF-visible),
+        /// "calm", "cards", "rings". Picker hidden behind Settings →
+        /// Developer; that section is wrapped in #if DEBUG so Release
+        /// builds only ever render the default. Idea-B (native Reminders
+        /// list) lives on its own branch -- folding it in here would
+        /// require swapping the ScrollView host for a List.
+        @AppStorage("myToDoDesign") private var myToDoDesign: String = "digest"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
@@ -3416,10 +3417,28 @@ extension CasalistCottage {
         @ViewBuilder
         private var content: some View {
             switch myToDoDesign {
+            case "calm":  calmContent
             case "cards": cardsContent
             case "rings": ringsContent
-            default:      calmContent
+            default:      digestContent
             }
+        }
+
+        /// Pre-design-exploration layout. The Daily Digest hero + the
+        /// rounded side-stripe task cards everyone had before the calm
+        /// overhaul. Used as the TF-visible default; A/C/D ride along
+        /// in the binary but only DEBUG builds can reach them.
+        /// kindFilters intentionally omitted -- chip row to revisit later.
+        private var digestContent: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                digestHero
+                if iAmAdmin { scopeToggle }
+                quickAddRow
+                taskList
+                recentlyDone
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 28)
         }
 
         /// Idea-A calm layout. Roomy rows with category color stripe.

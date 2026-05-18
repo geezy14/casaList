@@ -41,22 +41,23 @@ struct DeveloperSettingsSection: View {
 }
 
 /// Picker for the live MyToDo design exploration. Geezy is comparing
-/// three directions (calm / cards / rings) in place via this toggle.
-/// Hidden under DEVELOPER until a winner is picked.
+/// the original Daily Digest (default, ships to TF) against three
+/// candidate redesigns. Hidden under DEVELOPER until a winner is picked.
 private struct DevMyToDoDesignBlock: View {
-    @AppStorage("myToDoDesign") private var myToDoDesign: String = "calm"
+    @AppStorage("myToDoDesign") private var myToDoDesign: String = "digest"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("My To-Do design")
                 .font(.system(size: 14, weight: .heavy))
             Picker("My To-Do design", selection: $myToDoDesign) {
-                Text("Calm (A)").tag("calm")
-                Text("Cards (C)").tag("cards")
-                Text("Rings (D)").tag("rings")
+                Text("Digest").tag("digest")
+                Text("Calm").tag("calm")
+                Text("Cards").tag("cards")
+                Text("Rings").tag("rings")
             }
             .pickerStyle(.segmented)
-            Text("Live design exploration. Switch and reopen My To-Do to see the layout.")
+            Text("Default Digest matches the TF build. Other layouts are dev-only.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
