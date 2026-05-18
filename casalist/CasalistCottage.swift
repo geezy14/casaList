@@ -2405,9 +2405,11 @@ extension CasalistCottage {
         private func categoryColor(_ cat: String) -> Color {
             switch cat.lowercased() {
             case "chores": return P.mint
+            case "homework": return P.lavender
             case "home": return P.butter
             case "groceries": return P.coral
-            case "maintenance": return P.lavender
+            case "maintenance": return P.peach
+            case "family": return P.coral
             default: return P.peach
             }
         }
@@ -2585,6 +2587,7 @@ extension CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
+                greeting
                 progressHero
                 addPills
                 if iAmAdmin { scopeToggle }
@@ -2593,6 +2596,39 @@ extension CasalistCottage {
                 taskList
                 recentlyDone
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// First-name greeting that varies by time of day.
+        private var greeting: some View {
+            let hour = Calendar.current.component(.hour, from: Date())
+            let timeWord: String
+            let emoji: String
+            switch hour {
+            case 5..<12:  (timeWord, emoji) = ("Good morning", "☀️")
+            case 12..<17: (timeWord, emoji) = ("Good afternoon", "👋")
+            case 17..<22: (timeWord, emoji) = ("Good evening", "🌙")
+            default:      (timeWord, emoji) = ("Hey", "👋")
+            }
+            let firstName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces)
+                .split(separator: " ").first.map(String.init) ?? ""
+            let line = firstName.isEmpty ? "\(timeWord) \(emoji)" : "\(timeWord), \(firstName) \(emoji)"
+            return Text(line)
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(P.text)
+                .padding(.top, 4)
+                .padding(.leading, 4)
+        }
+
+        /// Subtitle for the progress hero that varies with how far you are.
+        private var heroSubtitle: String {
+            if totalTodayCount == 0 { return "Nothing due today 🌿" }
+            if doneTodayCount == 0 { return "Let's get started 💪" }
+            let pct = donePercent
+            if pct >= 1.0  { return "Crushing it 🎉" }
+            if pct >= 0.75 { return "Almost done!" }
+            if pct >= 0.5  { return "Halfway there 💪" }
+            return "\(doneTodayCount) of \(totalTodayCount) done today"
         }
 
         private var addPills: some View {
@@ -2622,15 +2658,15 @@ extension CasalistCottage {
                         .frame(width: 76, height: 76)
                     VStack(spacing: 0) {
                         Text("\(Int(donePercent * 100))%").font(.system(size: 18, weight: .heavy))
-                        Text("DONE").font(.system(size: 8, weight: .heavy)).tracking(0.8).opacity(0.85)
+                        Text("done").font(.system(size: 9, weight: .heavy)).opacity(0.85)
                     }
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(scopeAllowsEveryone ? "FAMILY TO-DO" : "MY TO-DO")
-                        .font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                    Text(scopeAllowsEveryone ? "Family to-do" : "My to-do")
+                        .font(.system(size: 13, weight: .heavy)).opacity(0.9)
                     Text("\(visibleItems.count) open").font(.system(size: 22, weight: .heavy))
-                    Text(totalTodayCount == 0 ? "Nothing due today" : "\(doneTodayCount) of \(totalTodayCount) done today")
-                        .font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                    Text(heroSubtitle)
+                        .font(.system(size: 12, weight: .semibold)).opacity(0.9)
                 }
                 Spacer(minLength: 0)
             }
@@ -2692,12 +2728,34 @@ extension CasalistCottage {
                     timeChip("Today", icon: "sun.max.fill")
                     timeChip("This week", icon: "calendar")
                     Divider().frame(height: 20).padding(.horizontal, 2)
-                    // Kind filters
-                    kindChip("Chores", icon: "checkmark.circle.fill", color: P.mint)
-                    kindChip("Home", icon: "house.fill", color: P.butter)
-                    kindChip("Maintenance", icon: "wrench.fill", color: P.lavender)
+                    // Kind filters — pulled from GameRulesStore so new
+                    // categories (Homework, etc.) automatically appear.
+                    ForEach(GameRulesStore.shared.rules.categoryRules) { rule in
+                        kindChip(rule.category,
+                                 icon: kindIcon(for: rule.category),
+                                 color: kindColor(for: rule.category))
+                    }
                 }
             }
+        }
+
+        /// SF Symbol per category. Falls back to a generic icon for
+        /// custom categories the user adds in GameRulesView.
+        private func kindIcon(for cat: String) -> String {
+            switch cat.lowercased() {
+            case "chores":      return "checkmark.circle.fill"
+            case "homework":    return "book.fill"
+            case "home":        return "house.fill"
+            case "maintenance": return "wrench.fill"
+            case "family":      return "person.3.fill"
+            default:            return "tag.fill"
+            }
+        }
+
+        /// Palette tint per category. Reuses categoryColor() under the
+        /// hood so the filter chip and the task-card stripe match.
+        private func kindColor(for cat: String) -> Color {
+            categoryColor(cat)
         }
 
         private func timeChip(_ label: String, icon: String) -> some View {
@@ -2737,16 +2795,17 @@ extension CasalistCottage {
         private var taskList: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(listHeader).font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text(listHeader).font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text).padding(.leading, 4)
                     Spacer()
-                    Text("\(visibleItems.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                    Text("\(visibleItems.count)").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
                 }
                 if visibleItems.isEmpty {
                     Button { showAddTodo = true } label: {
                         VStack(spacing: 8) {
-                            Text("📝").font(.system(size: 36))
-                            Text("Nothing here").font(.system(size: 14, weight: .heavy))
-                            Text("Tap + to add a task").font(.system(size: 11, weight: .semibold)).opacity(0.7)
+                            Text("✨").font(.system(size: 36))
+                            Text("All clear!").font(.system(size: 15, weight: .heavy))
+                            Text("Nothing on your plate. Tap + to add something.").font(.system(size: 12, weight: .semibold)).opacity(0.7)
+                                .multilineTextAlignment(.center)
                         }
                         .foregroundStyle(P.text)
                         .frame(maxWidth: .infinity).padding(24)
@@ -2768,11 +2827,11 @@ extension CasalistCottage {
         }
 
         private var listHeader: String {
-            let kind = kindFilter == "All" ? "" : kindFilter.uppercased() + " · "
+            let kind = kindFilter == "All" ? "" : kindFilter.capitalized + " · "
             switch timeFilter {
-            case "Today":     return "\(kind)TODAY"
-            case "This week": return "\(kind)THIS WEEK"
-            default:          return kindFilter == "All" ? "ALL OPEN" : kindFilter.uppercased()
+            case "Today":     return "\(kind)Today"
+            case "This week": return "\(kind)This week"
+            default:          return kindFilter == "All" ? "Open" : kindFilter.capitalized
             }
         }
 
@@ -2838,9 +2897,9 @@ extension CasalistCottage {
         private var bundlesInProgressSection: some View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("BUNDLES IN PROGRESS ⚡")
-                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
-                        .foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("Bundles in progress ⚡")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(P.text).padding(.leading, 4)
                     Spacer()
                     Text("\(bundlesInProgress.count)")
                         .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
@@ -3224,10 +3283,10 @@ extension CasalistCottage {
         private var recentlyDone: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("RECENTLY DONE").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                    Text("Recently done").font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text).padding(.leading, 4)
                     Spacer()
                     if !completed.isEmpty {
-                        Text("\(completed.count) done").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
+                        Text("\(completed.count) done").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.peach).padding(.trailing, 4)
                     }
                 }
                 if !completed.isEmpty {
