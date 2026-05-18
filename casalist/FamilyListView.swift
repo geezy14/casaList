@@ -581,9 +581,11 @@ public struct FamilyListView: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22).padding(.vertical, 22)
-        .background(P.heroGradient)
+        // Matches the orange Family List tile on the dashboard so the
+        // tile -> screen handoff is visually continuous.
+        .background(Color(rgb: 0xE67E22))
         .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .shadow(color: P.coral.opacity(0.28), radius: 18, x: 0, y: 8)
+        .shadow(color: Color(rgb: 0xE67E22).opacity(0.32), radius: 18, x: 0, y: 8)
     }
 
     private var openSection: some View {
