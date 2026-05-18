@@ -2433,7 +2433,23 @@ extension CasalistCottage {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
         private var scopeAllowsEveryone: Bool { iAmAdmin && scope == "Everyone" }
-        private func passesScope(_ t: TaskItem) -> Bool { scopeAllowsEveryone ? true : isMine(t) }
+
+        /// True if this reminder/task is targeted at me through any of
+        /// the routing rules. Used to decide if it belongs in my My To-Do.
+        ///   notifyMode "everyone" -> always in my My To-Do
+        ///   notifyMode "admins"   -> in my My To-Do if I'm owner/admin
+        ///   notifyMode ""         -> in my My To-Do if assignee == me
+        private func isTargetedAtMe(_ t: TaskItem) -> Bool {
+            switch t.notifyMode {
+            case "everyone": return true
+            case "admins":   return iAmAdmin
+            default:         return isMine(t)
+            }
+        }
+
+        private func passesScope(_ t: TaskItem) -> Bool {
+            scopeAllowsEveryone ? true : isTargetedAtMe(t)
+        }
 
         private var incomplete: [TaskItem] {
             // Regular open tasks (not module categories, not containers, not bundle children)
@@ -4511,7 +4527,19 @@ extension CasalistCottage {
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
-        private var allReminders: [TaskItem] { allTasks.filter { $0.category.lowercased() == "reminders" } }
+        /// Reminders tab now shows ONLY "loose" reminders -- no specific
+        /// person, no notifyMode group. Anything targeted (assigned to a
+        /// user, Everyone, or Admins) flows into the relevant member's
+        /// My To-Do instead. This makes the Reminders tab the catch-all
+        /// for "for the family / nobody specific" notes.
+        private var allReminders: [TaskItem] {
+            allTasks.filter { t in
+                guard t.category.lowercased() == "reminders" else { return false }
+                guard t.notifyMode.isEmpty else { return false }
+                let assignee = (t.assignee ?? "").trimmingCharacters(in: .whitespaces)
+                return assignee.isEmpty
+            }
+        }
         private var hourlyReminders: [TaskItem] {
             allReminders.filter { $0.effectiveRepeatKind == "hourly" }
         }
