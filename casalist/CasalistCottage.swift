@@ -2419,6 +2419,12 @@ extension CasalistCottage {
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        /// MyToDo design exploration. "calm" (default), "cards", "rings".
+        /// Hidden behind Settings → Developer → My To-Do design until a
+        /// winner is picked. Idea-B (native Reminders list) lives on its
+        /// own branch -- not folded in here because it'd require swapping
+        /// the entire ScrollView host for a List.
+        @AppStorage("myToDoDesign") private var myToDoDesign: String = "calm"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
@@ -2806,6 +2812,370 @@ extension CasalistCottage {
             }
         }
 
+        // MARK: – Cards layout (idea-C, sticky-note tile grid)
+
+        private var cardsContent: some View {
+            VStack(alignment: .leading, spacing: 28) {
+                calmHero
+                if iAmAdmin { calmScopeToggle }
+                calmQuickAdd
+                cardsTaskList
+                if !completed.isEmpty { cardsRecentlyDone }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 48)
+        }
+
+        /// Section header + bundles (full-width) + a 2-column tile grid
+        /// per bucket. Bundles render outside the LazyVGrid -- LazyVGrid
+        /// has no cross-column spanning mechanism.
+        private var cardsTaskList: some View {
+            VStack(alignment: .leading, spacing: 22) {
+                if visibleItems.isEmpty {
+                    calmEmptyState
+                } else {
+                    ForEach(bucketedItems, id: \.0) { (bucket, items) in
+                        let bundles = items.filter { $0.isChoreBundle }
+                        let regulars = items.filter { !$0.isChoreBundle }
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(digestSentence(bucket: bucket, count: items.count))
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(bucket == .overdue ? P.coral : P.textDim)
+                                .padding(.leading, 4)
+                            ForEach(bundles, id: \.uid) { bundle in
+                                choreBundleCard(bundle)
+                            }
+                            if !regulars.isEmpty {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible(), spacing: 12),
+                                    GridItem(.flexible(), spacing: 12),
+                                ], spacing: 12) {
+                                    ForEach(regulars, id: \.uid) { t in
+                                        cardsTaskTile(t)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// One sticky-note tile. Category color tints the background,
+        /// icon badge top-left, check top-right, title in the body,
+        /// footer with due date + points pill + avatar.
+        private func cardsTaskTile(_ t: TaskItem) -> some View {
+            let color = categoryColor(t.category)
+            return Button { editingTask = t } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        ZStack {
+                            Circle().fill(color.opacity(0.22))
+                                .frame(width: 34, height: 34)
+                            Image(systemName: kindIcon(for: t.category))
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(color)
+                        }
+                        Spacer()
+                        Button { completeTask(t) } label: {
+                            Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 22, weight: .regular))
+                                .foregroundStyle(t.isCompleted ? color : color.opacity(0.65))
+                        }.buttonStyle(.row)
+                    }
+                    Text(t.task)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.text)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 4)
+                    HStack(spacing: 6) {
+                        if let d = t.dueDate {
+                            Image(systemName: "clock")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(P.textDim)
+                            Text(whenString(d))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(P.textDim)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        if t.points > 0 {
+                            Text("+\(t.points)")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Capsule().fill(color))
+                        }
+                        avatarBlock(for: t)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+                .background(color.opacity(0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(color.opacity(0.28), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .buttonStyle(.row)
+        }
+
+        /// Recently done as compact 2-column pills.
+        private var cardsRecentlyDone: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Recently done")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                    Spacer()
+                    Text("\(completed.count) done")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                }
+                .padding(.horizontal, 4)
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
+                ], spacing: 12) {
+                    ForEach(Array(completed.prefix(6)), id: \.uid) { t in
+                        let color = categoryColor(t.category)
+                        Button { editingTask = t } label: {
+                            HStack(spacing: 8) {
+                                Button { completeTask(t) } label: {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(color)
+                                }.buttonStyle(.row)
+                                Text(t.task)
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .strikethrough()
+                                    .foregroundStyle(P.textDim)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(color.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }.buttonStyle(.row)
+                    }
+                }
+            }
+        }
+
+        // MARK: – Rings layout (idea-D, Apple Fitness rings)
+
+        private var ringsContent: some View {
+            VStack(alignment: .leading, spacing: 24) {
+                ringsHero
+                if iAmAdmin { calmScopeToggle }
+                calmQuickAdd
+                ringsTaskList
+                if !completed.isEmpty { ringsRecentlyDone }
+            }
+            .padding(.horizontal, 22)
+            .padding(.bottom, 48)
+        }
+
+        private var todayTasksForRings: [TaskItem] {
+            todos.filter { isToday($0.dueDate) && !isModuleCategory($0.category) && passesScope($0) }
+        }
+        private var todayChoresTotal: Int {
+            todayTasksForRings.filter { $0.category.lowercased() == "chores" }.count
+        }
+        private var todayChoresDone: Int {
+            todayTasksForRings.filter { $0.category.lowercased() == "chores" && $0.isCompleted }.count
+        }
+        private var todayRemindersTotal: Int {
+            todayTasksForRings.filter { $0.category.lowercased() == "reminders" }.count
+        }
+        private var todayRemindersDone: Int {
+            todayTasksForRings.filter { $0.category.lowercased() == "reminders" && $0.isCompleted }.count
+        }
+        private var choresPercent: Double {
+            todayChoresTotal == 0 ? 0 : Double(todayChoresDone) / Double(todayChoresTotal)
+        }
+        private var remindersPercent: Double {
+            todayRemindersTotal == 0 ? 0 : Double(todayRemindersDone) / Double(todayRemindersTotal)
+        }
+
+        private var ringsHero: some View {
+            let (word, emoji) = greetingTime
+            let title = firstName.isEmpty ? word : "\(word), \(firstName)"
+            return VStack(alignment: .leading, spacing: 14) {
+                Text("\(title) \(emoji)")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(P.text)
+                HStack(spacing: 18) {
+                    activityRingStack
+                    VStack(alignment: .leading, spacing: 10) {
+                        ringLegend(label: "All",        tint: P.peach, done: doneTodayCount,     total: totalTodayCount)
+                        ringLegend(label: "Chores",     tint: P.mint,  done: todayChoresDone,    total: todayChoresTotal)
+                        ringLegend(label: "Reminders",  tint: P.coral, done: todayRemindersDone, total: todayRemindersTotal)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.top, 4)
+        }
+
+        private var activityRingStack: some View {
+            ZStack {
+                activityRing(diameter: 140, lineWidth: 14, percent: donePercent,        tint: P.peach)
+                activityRing(diameter: 104, lineWidth: 14, percent: choresPercent,      tint: P.mint)
+                activityRing(diameter: 68,  lineWidth: 12, percent: remindersPercent,   tint: P.coral)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: donePercent)
+            .animation(.easeInOut(duration: 0.5), value: choresPercent)
+            .animation(.easeInOut(duration: 0.5), value: remindersPercent)
+        }
+
+        private func activityRing(diameter: CGFloat, lineWidth: CGFloat,
+                                  percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func ringLegend(label: String, tint: Color, done: Int, total: Int) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text("\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                    .monospacedDigit()
+            }
+            .opacity(total == 0 ? 0.55 : 1)
+        }
+
+        private var ringsTaskList: some View {
+            VStack(alignment: .leading, spacing: 20) {
+                if visibleItems.isEmpty {
+                    calmEmptyState
+                } else {
+                    ForEach(bucketedItems, id: \.0) { (bucket, items) in
+                        let bundles = items.filter { $0.isChoreBundle }
+                        let regulars = items.filter { !$0.isChoreBundle }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(digestSentence(bucket: bucket, count: items.count))
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(bucket == .overdue ? P.coral : P.textDim)
+                                .padding(.leading, 4)
+                                .padding(.bottom, 4)
+                            ForEach(bundles, id: \.uid) { bundle in
+                                choreBundleCard(bundle)
+                            }
+                            if !regulars.isEmpty {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(regulars.enumerated()), id: \.element.uid) { idx, t in
+                                        ringsTaskRow(t)
+                                        if idx < regulars.count - 1 {
+                                            Divider().padding(.leading, 38)
+                                        }
+                                    }
+                                }
+                                .background(P.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private func ringsTaskRow(_ t: TaskItem) -> some View {
+            let color = categoryColor(t.category)
+            return Button { editingTask = t } label: {
+                HStack(spacing: 12) {
+                    Button { completeTask(t) } label: {
+                        Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(t.isCompleted ? color : color.opacity(0.7))
+                    }.buttonStyle(.row)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Circle().fill(color).frame(width: 5, height: 5)
+                            Text(t.task)
+                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .foregroundStyle(P.text)
+                                .lineLimit(1)
+                        }
+                        if let d = t.dueDate {
+                            Text(whenString(d))
+                                .font(.system(size: 12, weight: .regular, design: .rounded))
+                                .foregroundStyle(P.textDim)
+                        }
+                    }
+                    Spacer(minLength: 6)
+                    if t.points > 0 {
+                        Text("+\(t.points)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(color)
+                    }
+                    avatarBlock(for: t)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }.buttonStyle(.row)
+        }
+
+        private var ringsRecentlyDone: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Recently done")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                    Spacer()
+                    Text("\(completed.count) done")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+                VStack(spacing: 0) {
+                    ForEach(Array(completed.prefix(5).enumerated()), id: \.element.id) { idx, t in
+                        HStack(spacing: 12) {
+                            Button { completeTask(t) } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(P.mint)
+                            }.buttonStyle(.row)
+                            Button { editingTask = t } label: {
+                                HStack {
+                                    Text(t.task)
+                                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                                        .strikethrough()
+                                        .foregroundStyle(P.textDim)
+                                    Spacer()
+                                    if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 20) }
+                                }
+                                .contentShape(Rectangle())
+                            }.buttonStyle(.row)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        if idx < min(5, completed.count) - 1 {
+                            Divider().padding(.leading, 38)
+                        }
+                    }
+                }
+                .background(P.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+        }
+
         // MARK: – Calm layout (Direction A redesign)
 
         /// Simple greeting + one-line summary. No gradient, no progress
@@ -3035,12 +3405,25 @@ extension CasalistCottage {
             }.buttonStyle(.row)
         }
 
-        // MARK: – Original (digest) layout, kept around for fallback
+        // MARK: – Layout switcher (design A / C / D)
 
-        /// Calm/Things-style layout. Big breathing room, no gradient
-        /// hero, no card backgrounds on rows. Section headers do the
-        /// hierarchical work; content carries the screen.
+        /// Picks the layout from `myToDoDesign` AppStorage:
+        ///   "calm"   -> idea-A (default): roomy rows, color stripe cards
+        ///   "cards"  -> idea-C: 2-column sticky-note tile grid
+        ///   "rings"  -> idea-D: Apple Fitness rings hero + compact list
+        /// Any other value falls back to calm. Switch via Settings →
+        /// Developer → My To-Do Design while Geezy is deciding.
+        @ViewBuilder
         private var content: some View {
+            switch myToDoDesign {
+            case "cards": cardsContent
+            case "rings": ringsContent
+            default:      calmContent
+            }
+        }
+
+        /// Idea-A calm layout. Roomy rows with category color stripe.
+        private var calmContent: some View {
             VStack(alignment: .leading, spacing: 28) {
                 calmHero
                 if iAmAdmin { calmScopeToggle }
