@@ -2676,9 +2676,7 @@ extension CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
-                greeting
-                progressHero
-                addPills
+                digestHero
                 if iAmAdmin { scopeToggle }
                 quickAddRow
                 kindFilters
@@ -2687,97 +2685,89 @@ extension CasalistCottage {
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
-        /// First-name greeting that varies by time of day.
-        private var greeting: some View {
+        /// Time-of-day greeting word + emoji.
+        private var greetingTime: (word: String, emoji: String) {
             let hour = Calendar.current.component(.hour, from: Date())
-            let timeWord: String
-            let emoji: String
             switch hour {
-            case 5..<12:  (timeWord, emoji) = ("Good morning", "☀️")
-            case 12..<17: (timeWord, emoji) = ("Good afternoon", "👋")
-            case 17..<22: (timeWord, emoji) = ("Good evening", "🌙")
-            default:      (timeWord, emoji) = ("Hey", "👋")
+            case 5..<12:  return ("Morning", "☀️")
+            case 12..<17: return ("Afternoon", "🌤️")
+            case 17..<22: return ("Evening", "🌙")
+            default:      return ("Late night", "🌙")
             }
-            let firstName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+        }
+
+        /// First name of the local user, falling back to "" if not yet set.
+        private var firstName: String {
+            (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
                 .trimmingCharacters(in: .whitespaces)
                 .split(separator: " ").first.map(String.init) ?? ""
-            let line = firstName.isEmpty ? "\(timeWord) \(emoji)" : "\(timeWord), \(firstName) \(emoji)"
-            return Text(line)
-                .font(.system(size: 22, weight: .heavy))
-                .foregroundStyle(P.text)
-                .padding(.top, 4)
-                .padding(.leading, 4)
         }
 
-        /// Subtitle for the progress hero that varies with how far you are.
-        private var heroSubtitle: String {
-            if totalTodayCount == 0 { return "Nothing due today 🌿" }
-            if doneTodayCount == 0 { return "Let's get started 💪" }
-            let pct = donePercent
-            if pct >= 1.0  { return "Crushing it 🎉" }
-            if pct >= 0.75 { return "Almost done!" }
-            if pct >= 0.5  { return "Halfway there 💪" }
-            return "\(doneTodayCount) of \(totalTodayCount) done today"
+        /// Informational sentence based on today's count -- "3 tasks today",
+        /// "All clear for today", etc. Replaces the percent-done metric.
+        private var todaySentence: String {
+            if totalTodayCount == 0 { return "Nothing due today" }
+            let remaining = totalTodayCount - doneTodayCount
+            if remaining <= 0 { return "All done for today 🎉" }
+            if remaining == 1 { return "1 task today" }
+            return "\(remaining) tasks today"
         }
 
-        private var addPills: some View {
-            HStack(spacing: 10) {
-                Button { showAddTodo = true } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 11, weight: .heavy))
-                        Text("New Task").font(.system(size: 13, weight: .heavy))
+        /// Compact date pill for the top-right of the hero. Shows weekday
+        /// + day so it acts like a quick "what day is it" anchor.
+        private var dateChipText: String {
+            let f = DateFormatter()
+            f.dateFormat = "EEE, MMM d"
+            return f.string(from: Date())
+        }
+
+        /// Big digest-style header that combines greeting + today's count
+        /// + a contextual date chip. Replaces the older progress-ring hero;
+        /// reads as friendly morning brief, not admin dashboard.
+        private var digestHero: some View {
+            let (word, emoji) = greetingTime
+            let title = firstName.isEmpty ? word : "\(word), \(firstName)"
+            return VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(scopeAllowsEveryone ? "FAMILY DIGEST" : "DAILY DIGEST")
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .tracking(1.2)
+                            .opacity(0.85)
+                        Text("\(title) \(emoji)")
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(
-                        Group {
-                            if paletteName == "anchor" {
-                                Capsule().fill(P.butter)
-                            } else {
-                                Capsule().fill(P.heroGradient)
+                    Spacer()
+                    // Soft glass date chip
+                    Text(dateChipText)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.white.opacity(0.22)))
+                        .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                }
+
+                // Today's headline sentence + thin completion bar
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(todaySentence)
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    if totalTodayCount > 0 {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.18))
+                                Capsule().fill(Color.white)
+                                    .frame(width: geo.size.width * CGFloat(donePercent))
+                                    .animation(.easeInOut(duration: 0.5), value: donePercent)
                             }
                         }
-                    )
-                }.buttonStyle(.row)
-                Spacer()
-            }
-        }
-
-        // MARK: – Hero
-
-        private var progressHero: some View {
-            HStack(alignment: .center, spacing: 18) {
-                ZStack {
-                    Circle().stroke(Color.white.opacity(0.22), lineWidth: 7).frame(width: 86, height: 86)
-                    Circle().trim(from: 0, to: donePercent)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 86, height: 86)
-                        .animation(.easeInOut(duration: 0.5), value: donePercent)
-                    VStack(spacing: -2) {
-                        Text("\(Int(donePercent * 100))%").font(.system(size: 22, weight: .bold, design: .rounded))
-                        Text("done").font(.system(size: 10, weight: .medium)).opacity(0.8)
+                        .frame(height: 6)
                     }
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(scopeAllowsEveryone ? "Family to-do" : "My to-do")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded)).opacity(0.85)
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(visibleItems.count)")
-                            .font(.system(size: 38, weight: .bold, design: .rounded))
-                        Text(visibleItems.count == 1 ? "task waiting" : "tasks waiting")
-                            .font(.system(size: 14, weight: .medium, design: .rounded)).opacity(0.85)
-                    }
-                    Text(heroSubtitle)
-                        .font(.system(size: 13, weight: .medium, design: .rounded)).opacity(0.85)
-                }
-                Spacer(minLength: 0)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 22).padding(.vertical, 22)
             .background(
-                // Anchor keeps the hero on solid cobalt to match its tile;
-                // other themes get the brand sunrise gradient.
                 Group {
                     if paletteName == "anchor" {
                         P.butter
@@ -2997,19 +2987,16 @@ extension CasalistCottage {
         /// Each section has a sentence-case header in the same friendly
         /// rounded family as the rest of the screen.
         private var groupedTaskList: some View {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 22) {
                 ForEach(bucketedItems, id: \.0) { (bucket, items) in
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text(bucket.title)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(bucket == .overdue ? P.coral : P.textDim)
-                                .padding(.leading, 4)
-                            Spacer()
-                            Text("\(items.count)")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(P.textMuted).padding(.trailing, 4)
-                        }
+                        // Digest-style sentence header: "3 today", "2 tomorrow",
+                        // "1 overdue". Reads as a quick summary rather than a
+                        // category label.
+                        Text(digestSentence(bucket: bucket, count: items.count))
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundStyle(bucket == .overdue ? P.coral : P.text)
+                            .padding(.leading, 4)
                         VStack(spacing: 10) {
                             ForEach(items, id: \.uid) { t in
                                 if t.isChoreBundle {
@@ -3021,6 +3008,20 @@ extension CasalistCottage {
                         }
                     }
                 }
+            }
+        }
+
+        /// Per-bucket informational sentence header. Plural-aware.
+        private func digestSentence(bucket: TaskBucket, count: Int) -> String {
+            let noun = count == 1 ? "task" : "tasks"
+            switch bucket {
+            case .overdue:  return "\(count) overdue"
+            case .today:    return "\(count) \(noun) today"
+            case .tomorrow: return "\(count) tomorrow"
+            case .thisWeek: return "\(count) this week"
+            case .later:    return "\(count) later"
+            case .noDate:   return "No date set"
+            case .bundles:  return count == 1 ? "1 bundle in progress" : "\(count) bundles"
             }
         }
 
