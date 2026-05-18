@@ -12,13 +12,17 @@ struct CustomRepeatPicker: View {
     @State private var interval: Int = 1
     @State private var unit: RepeatRule.Unit = .day
     /// Selected weekdays when `unit == .week`. iOS convention 1=Sun..7=Sat.
-    @State private var selectedWeekdays: Set<Int> = [6]   // Friday default
+    /// Empty set means "generic weekly" with no specific day pinned, which
+    /// stores as the legacy "weekly" preset.
+    @State private var selectedWeekdays: Set<Int> = []
 
     private let intervalOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
-    /// Preset shortcuts shown as chips. The optional `weekdays` set is
-    /// applied when the preset is tapped (so "Weekdays" jumps straight
-    /// to Mon–Fri on a weekly cadence).
+    /// Preset shortcuts shown as chips. `weekdays` semantics when the
+    /// preset has `unit == .week`:
+    ///   nil       → preset doesn't care about weekday selection
+    ///   []        → generic weekly with NO specific day (legacy "weekly")
+    ///   non-empty → explicit set ("Weekdays" = Mon–Fri, etc.)
     private let presets: [PresetSpec] = [
         .init(label: "Hourly",    interval: 1,  unit: .hour,  weekdays: nil),
         .init(label: "Every 2h",  interval: 2,  unit: .hour,  weekdays: nil),
@@ -28,7 +32,7 @@ struct CustomRepeatPicker: View {
         .init(label: "Daily",     interval: 1,  unit: .day,   weekdays: nil),
         .init(label: "Weekdays",  interval: 1,  unit: .week,  weekdays: [2, 3, 4, 5, 6]),
         .init(label: "Weekends",  interval: 1,  unit: .week,  weekdays: [1, 7]),
-        .init(label: "Weekly",    interval: 1,  unit: .week,  weekdays: nil),
+        .init(label: "Weekly",    interval: 1,  unit: .week,  weekdays: []),
         .init(label: "Monthly",   interval: 1,  unit: .month, weekdays: nil),
         .init(label: "Yearly",    interval: 1,  unit: .year,  weekdays: nil),
     ]
@@ -103,7 +107,7 @@ struct CustomRepeatPicker: View {
                     let isOn = selectedWeekdays.contains(wd)
                     Button {
                         if isOn {
-                            if selectedWeekdays.count > 1 { selectedWeekdays.remove(wd) }
+                            selectedWeekdays.remove(wd)
                         } else {
                             selectedWeekdays.insert(wd)
                         }
@@ -127,8 +131,9 @@ struct CustomRepeatPicker: View {
         let isSelected: Bool = {
             guard interval == p.interval && unit == p.unit else { return false }
             if p.unit == .week {
-                let presetDays = p.weekdays ?? [6]
-                return selectedWeekdays == presetDays
+                // For .week presets, weekdays specifies the exact set ([] means
+                // generic weekly). Non-.week presets ignore the day selection.
+                return selectedWeekdays == (p.weekdays ?? [])
             }
             return true
         }()
@@ -136,7 +141,7 @@ struct CustomRepeatPicker: View {
             interval = p.interval
             unit = p.unit
             if p.unit == .week {
-                selectedWeekdays = p.weekdays ?? [6]
+                selectedWeekdays = p.weekdays ?? []
             }
         } label: {
             Text(p.label)
