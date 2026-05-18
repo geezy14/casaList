@@ -2800,15 +2800,226 @@ extension CasalistCottage {
             }
         }
 
+        // MARK: – Calm layout (Direction A redesign)
+
+        /// Simple greeting + one-line summary. No gradient, no progress
+        /// ring, no eyebrow caps. Typography carries the moment.
+        private var calmHero: some View {
+            let (word, emoji) = greetingTime
+            let title = firstName.isEmpty ? word : "\(word), \(firstName)"
+            return VStack(alignment: .leading, spacing: 6) {
+                Text("\(title) \(emoji)")
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text(todaySentence)
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 12)
+        }
+
+        /// Text-only scope toggle. Active tab is bold + full text color;
+        /// inactive is regular weight + dim. No capsules.
+        private var calmScopeToggle: some View {
+            HStack(spacing: 22) {
+                ForEach(["Mine", "Everyone", "Reminders"], id: \.self) { opt in
+                    let active = scope == opt
+                    Button { scope = opt } label: {
+                        Text(opt)
+                            .font(.system(size: 14,
+                                          weight: active ? .semibold : .regular,
+                                          design: .rounded))
+                            .foregroundStyle(active ? P.text : P.textDim)
+                    }.buttonStyle(.row)
+                }
+                Spacer()
+            }
+        }
+
+        /// Underline-style quick add. Bell + arrow on the right, no
+        /// capsule chrome, just a thin baseline.
+        private var calmQuickAdd: some View {
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(P.textDim)
+                    TextField("Quick task or reminder...", text: $newItem)
+                        .font(.system(size: 16, weight: .regular, design: .rounded))
+                        .submitLabel(.done)
+                        .onSubmit(addInlineItem)
+                    Button { openReminderFromQuickAdd() } label: {
+                        Image(systemName: "bell")
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(P.textDim)
+                    }.buttonStyle(.row)
+                    Button { addInlineItem() } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(newItem.trimmingCharacters(in: .whitespaces).isEmpty
+                                             ? P.textMuted : P.text)
+                    }.buttonStyle(.row)
+                    .disabled(newItem.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Rectangle()
+                    .fill(P.border)
+                    .frame(height: 1)
+            }
+        }
+
+        /// Calm task list. Section headers as sentence-case typography,
+        /// rows are borderless with category dot + clean text. No card
+        /// backgrounds, no shadows.
+        private var calmTaskList: some View {
+            VStack(alignment: .leading, spacing: 28) {
+                if visibleItems.isEmpty {
+                    calmEmptyState
+                } else {
+                    ForEach(bucketedItems, id: \.0) { (bucket, items) in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(digestSentence(bucket: bucket, count: items.count))
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(bucket == .overdue ? P.coral : P.textDim)
+                                .padding(.bottom, 6)
+                            ForEach(items, id: \.uid) { t in
+                                if t.isChoreBundle {
+                                    choreBundleCard(t)
+                                } else {
+                                    calmTaskRow(t)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// Single task row in the calm design. Round outline checkbox,
+        /// title in medium weight, subtitle (category dot + due date)
+        /// dimmed. Avatar(s) + points on the right.
+        private func calmTaskRow(_ t: TaskItem) -> some View {
+            let color = categoryColor(t.category)
+            return Button { editingTask = t } label: {
+                HStack(alignment: .top, spacing: 14) {
+                    Button { completeTask(t) } label: {
+                        Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 22, weight: .regular))
+                            .foregroundStyle(t.isCompleted ? color : color.opacity(0.65))
+                    }.buttonStyle(.row)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t.task)
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundStyle(P.text)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            Circle().fill(color).frame(width: 5, height: 5)
+                            Text(calmSubtitleFor(t))
+                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .foregroundStyle(P.textDim)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    avatarBlock(for: t)
+                        .padding(.top, 1)
+                    if t.points > 0 {
+                        Text("+\(t.points)")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(color)
+                            .padding(.top, 2)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.row)
+            .padding(.vertical, 10)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(P.border).frame(height: 0.5)
+                    .padding(.leading, 36)
+            }
+        }
+
+        /// "Chores · Today at 3pm" — category + relative date inline.
+        private func calmSubtitleFor(_ t: TaskItem) -> String {
+            var parts: [String] = [t.category.capitalized]
+            if let d = t.dueDate { parts.append(whenString(d)) }
+            return parts.joined(separator: " · ")
+        }
+
+        /// Recently done section in calm style. Tap the check to undo;
+        /// tap the row to open editor.
+        private var calmRecentlyDone: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Recently done")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                    Spacer()
+                    Text("\(completed.count) done")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                }
+                .padding(.bottom, 6)
+                ForEach(Array(completed.prefix(5).enumerated()), id: \.element.id) { _, t in
+                    HStack(spacing: 14) {
+                        Button { completeTask(t) } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(P.mint)
+                        }.buttonStyle(.row)
+                        Button { editingTask = t } label: {
+                            HStack(spacing: 10) {
+                                Text(t.task)
+                                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                                    .strikethrough()
+                                    .foregroundStyle(P.textDim)
+                                Spacer()
+                                if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 20) }
+                            }
+                            .contentShape(Rectangle())
+                        }.buttonStyle(.row)
+                    }
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(P.border).frame(height: 0.5)
+                            .padding(.leading, 32)
+                    }
+                }
+            }
+        }
+
+        /// Tap-to-add empty state. Centered, no card; uses negative space.
+        private var calmEmptyState: some View {
+            Button { showAddTodo = true } label: {
+                VStack(spacing: 12) {
+                    Text("✨").font(.system(size: 44))
+                    Text("All clear")
+                        .font(.system(size: 20, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.text)
+                    Text("Nothing on your plate.")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            }.buttonStyle(.row)
+        }
+
+        // MARK: – Original (digest) layout, kept around for fallback
+
+        /// Calm/Things-style layout. Big breathing room, no gradient
+        /// hero, no card backgrounds on rows. Section headers do the
+        /// hierarchical work; content carries the screen.
         private var content: some View {
-            VStack(alignment: .leading, spacing: 14) {
-                digestHero
-                if iAmAdmin { scopeToggle }
-                quickAddRow
-                kindFilters
-                taskList
-                recentlyDone
-            }.padding(.horizontal, 20).padding(.bottom, 28)
+            VStack(alignment: .leading, spacing: 28) {
+                calmHero
+                if iAmAdmin { calmScopeToggle }
+                calmQuickAdd
+                calmTaskList
+                if !completed.isEmpty { calmRecentlyDone }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
         }
 
         /// Time-of-day greeting word + emoji.
