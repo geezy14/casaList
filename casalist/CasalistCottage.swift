@@ -50,11 +50,12 @@ public enum CasalistCottage {
         /// can preview each option's colors.
         static func resolveForPreview(_ name: String, dark: Bool) -> Palette {
             switch name {
-            case "vivid":  return vivid(dark)
-            case "anchor": return anchor(dark)
-            case "harbor": return harbor(dark)
-            case "dodger": return dodger(dark)
-            default:       return ember(dark)
+            case "vivid":   return vivid(dark)
+            case "anchor":  return anchor(dark)
+            case "harbor":  return harbor(dark)
+            case "dodger":  return dodger(dark)
+            case "sunrise": return sunrise(dark)
+            default:        return ember(dark)
             }
         }
 
@@ -68,9 +69,12 @@ public enum CasalistCottage {
         static func resolve(_ dark: Bool) -> Palette {
             let name = UserDefaults.standard.string(forKey: "paletteName") ?? defaultName
             switch name {
-            case "vivid":  return vivid(dark)
-            case "anchor": return anchor(dark)
-            default:       return ember(dark)
+            case "vivid":   return vivid(dark)
+            case "anchor":  return anchor(dark)
+            case "harbor":  return harbor(dark)
+            case "dodger":  return dodger(dark)
+            case "sunrise": return sunrise(dark)
+            default:        return ember(dark)
             }
         }
 
@@ -193,6 +197,34 @@ public enum CasalistCottage {
             )
         }
 
+
+        /// "Sunrise" — dawn-sky blue paired with warm coral. The peach
+        /// slot is sky-blue and the coral slot is sunrise coral so the
+        /// brand `heroGradient` (peach → coral) reads as a literal
+        /// sunrise: cool dawn light on the top-left, warm sun on the
+        /// bottom-right. Backgrounds carry a faint peach tint so the
+        /// whole screen feels morning-warm.
+        ///   peach    → dawn blue       (primary / CTAs)
+        ///   mint     → sage green      (success / chores)
+        ///   butter   → golden hour     (highlight / points)
+        ///   lavender → dusk purple     (secondary / maintenance)
+        ///   sky      → soft sky        (info / cool secondary)
+        ///   coral    → sunrise coral   (warning / overdue)
+        static func sunrise(_ dark: Bool) -> Palette {
+            dark ? Palette(
+                bg: Color(rgb: 0x1A1228), surface: Color(rgb: 0x251A37), surfaceAlt: Color(rgb: 0x322145), surfaceHi: Color(rgb: 0x422C59),
+                border: Color.white.opacity(0.10),
+                text: Color(rgb: 0xFFF0E5), textDim: Color(rgb: 0xFFF0E5).opacity(0.6), textMuted: Color(rgb: 0xFFF0E5).opacity(0.4),
+                peach: Color(rgb: 0x6BB8FF), mint: Color(rgb: 0x5FD4A2), butter: Color(rgb: 0xFFD67A),
+                lavender: Color(rgb: 0xC99CE8), sky: Color(rgb: 0x93CFFF), coral: Color(rgb: 0xFF8A6B)
+            ) : Palette(
+                bg: Color(rgb: 0xFFF7EE), surface: Color(rgb: 0xFFFFFF), surfaceAlt: Color(rgb: 0xFFE9D9), surfaceHi: Color(rgb: 0xFFD4B8),
+                border: Color(rgb: 0x1B2E4D).opacity(0.10),
+                text: Color(rgb: 0x1B2E4D), textDim: Color(rgb: 0x1B2E4D).opacity(0.6), textMuted: Color(rgb: 0x1B2E4D).opacity(0.4),
+                peach: Color(rgb: 0x5DA8FF), mint: Color(rgb: 0x4DBF8A), butter: Color(rgb: 0xFFC857),
+                lavender: Color(rgb: 0xB98AD9), sky: Color(rgb: 0x80C5FF), coral: Color(rgb: 0xFF7A5A)
+            )
+        }
 
         /// Bright, candy-colored palette used by the Kid (starfield) view.
         static func starfield() -> Palette {

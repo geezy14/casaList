@@ -1114,7 +1114,13 @@ struct SettingsView: View {
                     Text("COLOR PALETTE")
                         .font(.system(size: 10, weight: .heavy)).tracking(1.0)
                         .foregroundStyle(P.textMuted)
-                    HStack(spacing: 8) {
+                    // 2-row grid so we can fit Sunrise alongside the
+                    // existing three without crowding each swatch.
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8),
+                    ], spacing: 8) {
+                        paletteSwatch("sunrise", label: "Sunrise")
                         paletteSwatch("ember", label: "Ember")
                         paletteSwatch("vivid", label: "Vivid")
                         paletteSwatch("anchor", label: "Anchor")
@@ -1134,12 +1140,21 @@ struct SettingsView: View {
         let swatch = CasalistCottage.Palette.resolveForPreview(name, dark: false)
         return Button { paletteName = name } label: {
             VStack(spacing: 6) {
-                HStack(spacing: 0) {
-                    swatch.peach.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    swatch.mint.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    swatch.butter.frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Top half: the actual heroGradient that the palette
+                // produces, so what you see in the swatch is what you'll
+                // see on the dashboard tile + My To-Do hero. Bottom half:
+                // accent colors for category recognition.
+                VStack(spacing: 0) {
+                    swatch.heroGradient
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    HStack(spacing: 0) {
+                        swatch.mint.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        swatch.butter.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        swatch.lavender.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(height: 12)
                 }
-                .frame(height: 26)
+                .frame(height: 38)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 Text(label).font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(active ? P.text : P.textDim)
