@@ -1,27 +1,34 @@
-Casalist 1 (build 1.2) — Critical fix + Rewards approvals on standings
+What's New in 2.0 Build 1.2
 
-CRITICAL FIX (please install before you delete and reinstall)
-- Fixed a bug where deleting and reinstalling the app could wipe the
- entire family from every device. Cause: an auto-cleanup routine
- mistook the not-yet-synced CloudKit household for stray garbage and
- deleted it, propagating the delete to every family member. Disabled
- the auto-deletion entirely; duplicates (rare) are now cleaned up
- manually in Settings.
+REWARDS & LEVELS
+- Kid mode now works both ways -- admins can switch a member to kid OR standard and it takes effect on their device instantly
+- Level names updated: Broom Pilot, Mop Jockey, Chore Warrior, Task Slayer (levels 2-5)
+- Your rank and level now show under your name on the Personal Card -- updates dynamically as you earn points
+- Rank badges added under each name in the This Week's Star leaderboard
+- Personal Card sections renamed: Swept the Chores, Chores & Scores, Keeping Up the Pace
+- Share card fixed -- tapping Share now goes straight to the share sheet
 
-NEW
-- Rewards page: pending reward requests now show as a peach badge
- directly on the requesting kid's avatar in standings. Admin taps
- the avatar to open an inline approval sheet with the requester's
- "why" note and a points stepper. Removed the tray icon from this
- page — requests live where the data lives.
-- Settings -> Data -> "Reset all data" now also clears streaks and
- badges. (Was leaving them behind.)
+HOME & CHORES
+- Home and Maintenance tabs now show a default chore tile grid -- tap any tile to assign it to a family member and add it to their to-do
+- Grocery tab has a new staple quick-add grid -- tap to add instantly, tile dims when item is already on the list
+- Quick Add on the home dashboard is now a tile grid matching the same style
 
-WHAT TO TEST
-- Normal use should be unchanged. The fix is defensive — it just
- stops a destructive auto-cleanup from running too eagerly.
-- If anyone in the family deletes and reinstalls the app, they
- should get all the existing family data back via CloudKit sync
- (give it 1-2 minutes after first launch).
-- As admin, have a kid suggest a reward. Their avatar in your
- Rewards standings should show a pending count. Tap to approve.
+FAMILY LIST
+- Up for Grabs section is now 2-column tiles (was a plain list)
+- Points always visible on each tile
+- Quick-add defaults to 5 pts
+
+QUICK TASK BAR
+- Every tab now has a Quick Task bar -- type and submit without opening the full form
+- Home, My To-Do, Maintenance, and Family List all have it
+
+BUG FIXES
+- Tasks due today no longer show as overdue the moment they are created
+- Reminders tile count is now per-person -- assigned reminders only show on that person's tile and only they get the push. Unassigned reminders show for everyone
+
+What to Test
+- Switch a family member between kid and standard mode and confirm it updates on their device
+- Tap a default chore tile on the Home/Maintenance tab and assign it to someone
+- Add a grocery staple -- confirm it dims when already on the list
+- Use the Quick Task bar on each tab
+- Set a reminder assigned to one person -- confirm only they see it on their tile

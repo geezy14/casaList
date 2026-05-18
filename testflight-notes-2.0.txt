@@ -1,25 +1,34 @@
-Version 2.0 -- Build 1
+What's New in 2.0 Build 1.2
 
-What's New:
+REWARDS & LEVELS
+- Kid mode now works both ways -- admins can switch a member to kid OR standard and it takes effect on their device instantly
+- Level names updated: Broom Pilot, Mop Jockey, Chore Warrior, Task Slayer (levels 2-5)
+- Your rank and level now show under your name on the Personal Card -- updates dynamically as you earn points
+- Rank badges added under each name in the This Week's Star leaderboard
+- Personal Card sections renamed: Swept the Chores, Chores & Scores, Keeping Up the Pace
+- Share card fixed -- tapping Share now goes straight to the share sheet
 
-Starfield (kid mode) overhaul. Four themes: Space, Ocean, Garden, Orchid --
-kids pick their own in the gear menu. Two display modes: Simple (big buttons,
-just the chores) and Full (stats, family peek, wins). Completing a chore now
-animates the checkmark. Tapping your avatar opens your full stats card.
+HOME & CHORES
+- Home and Maintenance tabs now show a default chore tile grid -- tap any tile to assign it to a family member and add it to their to-do
+- Grocery tab has a new staple quick-add grid -- tap to add instantly, tile dims when item is already on the list
+- Quick Add on the home dashboard is now a tile grid matching the same style
 
-Personal stats card is now available to everyone. Tap your profile photo on
-the Home tab to see your points, streak, completions, and year-end projection.
+FAMILY LIST
+- Up for Grabs section is now 2-column tiles (was a plain list)
+- Points always visible on each tile
+- Quick-add defaults to 5 pts
 
-Reminders got a full redesign. Date & Time, Repeat, Details, and Location now
-show as grouped cards -- always visible, nothing hidden behind an icon strip.
+QUICK TASK BAR
+- Every tab now has a Quick Task bar -- type and submit without opening the full form
+- Home, My To-Do, Maintenance, and Family List all have it
 
-Priority on reminders. Set None / Low / Medium / High from the Details card.
-Cards show a colored badge (! / !! / !!!) in the header.
+BUG FIXES
+- Tasks due today no longer show as overdue the moment they are created
+- Reminders tile count is now per-person -- assigned reminders only show on that person's tile and only they get the push. Unassigned reminders show for everyone
 
-What to Test:
-
-- Switch a kid to Orchid theme -- confirm all four themes work
-- Tap avatar in kid mode -- confirm stats card opens
-- Tap profile photo on Home -- confirm stats card opens for adults too
-- Create a reminder with priority High -- confirm !!! badge appears on the card
-- Edit an existing reminder -- confirm all panels show populated values
+What to Test
+- Switch a family member between kid and standard mode and confirm it updates on their device
+- Tap a default chore tile on the Home/Maintenance tab and assign it to someone
+- Add a grocery staple -- confirm it dims when already on the list
+- Use the Quick Task bar on each tab
+- Set a reminder assigned to one person -- confirm only they see it on their tile
