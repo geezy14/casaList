@@ -636,10 +636,11 @@ public enum CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 #if DEBUG
-                // "Rings" layout (idea-D): rings hero only, no agenda
-                // ribbon, no quick-add chips. Tiles + What's New still
-                // surface day-to-day work below.
+                // "Rings" layout (idea-D): rings hero + the quick-add
+                // task bar (so you can drop a chore from the top of the
+                // dashboard). No agenda ribbon, no quick-add chip row.
                 greetingCardRings
+                quickAdd
                 star
                 tiles
                 whatsNew
