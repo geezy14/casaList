@@ -1,0 +1,16 @@
+Casalist 2.2 (build 2.4)
+
+What's new
+- Faster cross-device sync. Chores, reminders, and grocery items
+  now land on every family device within seconds. No more
+  force-closing the app to push changes through.
+
+What to test
+- Add a chore on one device, watch it appear on another within
+  ~10 seconds.
+- Check off a reminder; the strike-through should mirror on the
+  other devices without reopening Casalist.
+- Grocery add/check from device A should show on device B
+  without a tap.
+
+Thanks for testing!
