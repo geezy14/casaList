@@ -2433,6 +2433,11 @@ extension CasalistCottage {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
         private var scopeAllowsEveryone: Bool { iAmAdmin && scope == "Everyone" }
+        /// True when the admin has flipped to the Reminders scope --
+        /// surfaces ALL reminders regardless of targeting so admins can
+        /// audit / edit anything in the household. Tasks/chores stay
+        /// filtered to "mine" in this mode (use Everyone scope for tasks).
+        private var scopeIsReminders: Bool { iAmAdmin && scope == "Reminders" }
 
         /// True if this reminder/task is targeted at me through any of
         /// the routing rules. Used to decide if it belongs in my My To-Do.
@@ -2448,7 +2453,13 @@ extension CasalistCottage {
         }
 
         private func passesScope(_ t: TaskItem) -> Bool {
-            scopeAllowsEveryone ? true : isTargetedAtMe(t)
+            if scopeAllowsEveryone { return true }
+            if scopeIsReminders {
+                // Reminders scope: show all reminders, hide non-reminder
+                // tasks so the view is focused on what the admin wants.
+                return t.category.lowercased() == "reminders"
+            }
+            return isTargetedAtMe(t)
         }
 
         private var incomplete: [TaskItem] {
@@ -2883,11 +2894,11 @@ extension CasalistCottage {
 
         private var scopeToggle: some View {
             HStack(spacing: 8) {
-                ForEach(["Mine", "Everyone"], id: \.self) { opt in
+                ForEach(["Mine", "Everyone", "Reminders"], id: \.self) { opt in
                     let active = scope == opt
                     Button { scope = opt } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: opt == "Mine" ? "person.fill" : "person.3.fill")
+                            Image(systemName: scopeIcon(opt))
                                 .font(.system(size: 11, weight: .heavy))
                             Text(opt).font(.system(size: 13, weight: .heavy))
                         }
@@ -2897,6 +2908,15 @@ extension CasalistCottage {
                     }.buttonStyle(.row)
                 }
                 Spacer()
+            }
+        }
+
+        private func scopeIcon(_ opt: String) -> String {
+            switch opt {
+            case "Mine":      return "person.fill"
+            case "Everyone":  return "person.3.fill"
+            case "Reminders": return "bell.fill"
+            default:          return "circle"
             }
         }
 
@@ -3600,12 +3620,36 @@ extension CasalistCottage {
                 if !completed.isEmpty {
                     VStack(spacing: 0) {
                         ForEach(Array(completed.prefix(5).enumerated()), id: \.element.id) { i, t in
+                            // The row body. Two affordances:
+                            //  - Tap the green check on the LEFT to
+                            //    un-complete the task in place (fixes
+                            //    accidental marks-done without leaving
+                            //    the screen).
+                            //  - Tap the row text/avatar to open the
+                            //    full editor for any other change.
                             HStack(spacing: 12) {
-                                Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(P.mint)
-                                Text(t.task).font(.system(size: 13, weight: .semibold)).strikethrough().foregroundStyle(P.textDim)
-                                Spacer()
-                                if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 22) }
-                            }.padding(.vertical, 10)
+                                Button {
+                                    completeTask(t)
+                                } label: {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(P.mint)
+                                }.buttonStyle(.row)
+                                Button {
+                                    editingTask = t
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Text(t.task)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .strikethrough()
+                                            .foregroundStyle(P.textDim)
+                                        Spacer()
+                                        if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 22) }
+                                    }
+                                    .contentShape(Rectangle())
+                                }.buttonStyle(.row)
+                            }
+                            .padding(.vertical, 10)
                             .overlay(alignment: .top) {
                                 if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
                             }
