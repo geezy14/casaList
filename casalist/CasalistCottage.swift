@@ -2894,55 +2894,74 @@ extension CasalistCottage {
             }
         }
 
-        /// Single task row in the calm design. Round outline checkbox,
-        /// title in medium weight, subtitle (category dot + due date)
-        /// dimmed. Avatar(s) + points on the right.
+        /// Task card in the calm design. Per Geezy's screenshot:
+        /// rounded surface, left category color stripe, outline check,
+        /// title + clock-icon time + category subtitle, avatar + points
+        /// pill on the right. Distinct from the prior borderless rows.
         private func calmTaskRow(_ t: TaskItem) -> some View {
             let color = categoryColor(t.category)
             return Button { editingTask = t } label: {
-                HStack(alignment: .top, spacing: 14) {
-                    Button { completeTask(t) } label: {
-                        Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 22, weight: .regular))
-                            .foregroundStyle(t.isCompleted ? color : color.opacity(0.65))
-                    }.buttonStyle(.row)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(t.task)
-                            .font(.system(size: 16, weight: .medium, design: .rounded))
-                            .foregroundStyle(P.text)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(2)
-                        HStack(spacing: 6) {
-                            Circle().fill(color).frame(width: 5, height: 5)
-                            Text(calmSubtitleFor(t))
-                                .font(.system(size: 13, weight: .regular, design: .rounded))
-                                .foregroundStyle(P.textDim)
+                HStack(spacing: 0) {
+                    // Left color stripe -- category cue.
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color)
+                        .frame(width: 5)
+                        .padding(.vertical, 14)
+                    HStack(alignment: .center, spacing: 14) {
+                        Button { completeTask(t) } label: {
+                            Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 22, weight: .regular))
+                                .foregroundStyle(t.isCompleted ? color : color.opacity(0.75))
+                        }.buttonStyle(.row)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(t.task)
+                                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                .foregroundStyle(P.text)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                if let _ = t.dueDate {
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 11, weight: .regular))
+                                        .foregroundStyle(P.textDim)
+                                }
+                                Text(calmSubtitleFor(t))
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(P.textDim)
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        VStack(alignment: .trailing, spacing: 6) {
+                            avatarBlock(for: t)
+                            if t.points > 0 {
+                                Text("+\(t.points)")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Capsule().fill(color))
+                            }
                         }
                     }
-                    Spacer(minLength: 8)
-                    avatarBlock(for: t)
-                        .padding(.top, 1)
-                    if t.points > 0 {
-                        Text("+\(t.points)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(color)
-                            .padding(.top, 2)
-                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                 }
-                .contentShape(Rectangle())
+                .background(P.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(P.border, lineWidth: 1)
+                )
             }
             .buttonStyle(.row)
-            .padding(.vertical, 10)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(P.border).frame(height: 0.5)
-                    .padding(.leading, 36)
-            }
+            .padding(.bottom, 10)
         }
 
-        /// "Chores · Today at 3pm" — category + relative date inline.
+        /// Subtitle: "Today 4:00 PM · Home" (when dueDate present) or
+        /// just "Home" (when not). Category capitalized for readability.
         private func calmSubtitleFor(_ t: TaskItem) -> String {
-            var parts: [String] = [t.category.capitalized]
+            var parts: [String] = []
             if let d = t.dueDate { parts.append(whenString(d)) }
+            parts.append(t.category.capitalized)
             return parts.joined(separator: " · ")
         }
 
