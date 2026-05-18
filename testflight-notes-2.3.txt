@@ -1,7 +1,7 @@
 What's New in 2.3 (still version 2.2)
 
 Reminders are smarter
-- New "Notify" choice on every reminder: Everyone, Admins only, or a specific person.
+- New Notify choice on every reminder: Everyone, Admins only, or a specific person.
 - Reminders assigned to a person now appear in that person's My To-Do alongside their chores.
 - Admin-only reminders are hidden from non-admins entirely.
 - The Reminders tab now only holds loose "for the family" notes; targeted reminders live with the assignee.
@@ -21,11 +21,6 @@ Theme + UI polish
 - Saved Locations actually wired into reminder/event/trip pickers -- pick a stored place without searching.
 - Weekday repeat: Mon-Fri quick pick, plus a multi-select weekday chip row.
 - Custom repeat picker now reachable from the New Task screen.
-
-Reliability fixes from 2.2
-- CloudKit env split: Debug talks to Development, Release talks to Production. 2.0 / 2.1 were silently using Dev.
-- 2-second debounce on remote change pipeline so SQLite WAL doesn't block CloudKit exports.
-- Kid mode no longer gets stuck after role changes.
 
 What to Test
 - Create reminders targeting Everyone / Admins only / a specific person. Verify only the right people see them in My To-Do.
