@@ -275,6 +275,15 @@ final class CasaCoreDataStack {
             attr("uid", .stringAttributeType, def: ""),
             attr("task", .stringAttributeType, def: ""),
             attr("assignee", .stringAttributeType),
+            // Notification routing override. Decides who gets the push
+            // when this reminder fires; assignee still drives My To-Do
+            // appearance + points awarding.
+            //   ""         -> default: push goes to assignee (or everyone
+            //                 if assignee is empty). Same as today.
+            //   "everyone" -> every household device fires the push.
+            //   "admins"   -> only owners + admins (canManageFamily) fire.
+            // Schema redeploy required before this syncs in Production.
+            attr("notifyMode", .stringAttributeType, def: ""),
             attr("dueDate", .dateAttributeType),
             attr("category", .stringAttributeType, def: ""),
             attr("isCompleted", .booleanAttributeType, def: false),

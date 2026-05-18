@@ -25,6 +25,11 @@ struct AddReminderView: View {
     @State private var hasFireDate: Bool
     @State private var fireDate: Date
     @State private var assignee: String
+    /// "" = default (notify assignee, or broadcast if empty)
+    /// "everyone" = broadcast push regardless of assignee
+    /// "admins" = push only to owners + admins
+    /// Keeps assignee independent so the My To-Do owner stays correct.
+    @State private var notifyMode: String
     @State private var hasStopTime: Bool
     @State private var stopDate: Date
     @State private var locationLat: Double
@@ -60,6 +65,7 @@ struct AddReminderView: View {
             let stopAnchor = cal.date(byAdding: .minute, value: mins > 0 ? mins : 22 * 60, to: baseToday) ?? baseToday
             _stopDate = State(initialValue: stopAnchor)
             _assignee = State(initialValue: t.assignee ?? "")
+            _notifyMode = State(initialValue: t.notifyMode)
             _locationLat = State(initialValue: t.locationLat)
             _locationLng = State(initialValue: t.locationLng)
             _locationRadius = State(initialValue: t.locationRadius)
@@ -82,6 +88,7 @@ struct AddReminderView: View {
             let stopAnchor = cal.date(byAdding: .minute, value: tpl.repeatEndMinutes > 0 ? Int(tpl.repeatEndMinutes) : 22 * 60, to: cal.startOfDay(for: now)) ?? now
             _stopDate = State(initialValue: stopAnchor)
             _assignee = State(initialValue: tpl.assignee)
+            _notifyMode = State(initialValue: "")
             _locationLat = State(initialValue: tpl.locationLat)
             _locationLng = State(initialValue: tpl.locationLng)
             _locationRadius = State(initialValue: tpl.locationRadius)
@@ -100,6 +107,7 @@ struct AddReminderView: View {
             let cal = Calendar.current
             _stopDate = State(initialValue: cal.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date())
             _assignee = State(initialValue: "")
+            _notifyMode = State(initialValue: "")
             _locationLat = State(initialValue: 0)
             _locationLng = State(initialValue: 0)
             _locationRadius = State(initialValue: 0)
@@ -139,6 +147,32 @@ struct AddReminderView: View {
         case 3: return .red
         default: return .secondary
         }
+    }
+
+    /// Single-string view of the Notify picker selection that maps to
+    /// the two underlying fields (assignee + notifyMode). Tag values:
+    ///   ""           = Everyone   (assignee="", mode="")
+    ///   "__admins__" = Admins only (assignee="", mode="admins")
+    ///   "<name>"     = Individual (assignee="<name>", mode="")
+    /// The empty/Everyone case relies on the existing scheduleNow
+    /// fallback that broadcasts when assignee is empty -- keeping
+    /// notifyMode empty avoids a behavior change for old reminders.
+    private var notifyTargetBinding: Binding<String> {
+        Binding(
+            get: {
+                if notifyMode == "admins" { return "__admins__" }
+                return assignee
+            },
+            set: { newValue in
+                if newValue == "__admins__" {
+                    assignee = ""
+                    notifyMode = "admins"
+                } else {
+                    assignee = newValue
+                    notifyMode = ""
+                }
+            }
+        )
     }
 
     private var stopMinutesValue: Int64 {
@@ -462,8 +496,9 @@ struct AddReminderView: View {
                     .frame(width: 22)
                 Text("Notify")
                 Spacer()
-                Picker("Notify", selection: $assignee) {
+                Picker("Notify", selection: notifyTargetBinding) {
                     Text("Everyone").tag("")
+                    Text("Admins only").tag("__admins__")
                     ForEach(familyMembers, id: \.uid) { m in
                         Text(m.name).tag(m.name)
                     }
@@ -792,6 +827,7 @@ struct AddReminderView: View {
             editing.repeatHours = 0
             editing.repeatEndMinutes = stopMinutesValue
             editing.assignee = trimmedAssignee.isEmpty ? nil : trimmedAssignee
+            editing.notifyMode = notifyMode
             editing.locationLat = locationLat
             editing.locationLng = locationLng
             editing.locationRadius = locationRadius
@@ -812,6 +848,7 @@ struct AddReminderView: View {
                 repeatKind: repeatKind
             )
             item.repeatEndMinutes = stopMinutesValue
+            item.notifyMode = notifyMode
             item.locationLat = locationLat
             item.locationLng = locationLng
             item.locationRadius = locationRadius

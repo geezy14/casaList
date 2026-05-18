@@ -97,6 +97,51 @@ enum NotificationsManager {
     /// Schedules notifications for a single task directly, without needing a
     /// fetch. Cancels any prior notifications belonging to this task first.
     @MainActor
+    /// Decide whether THIS device should schedule a local notification
+    /// for a reminder, given the routing override + assignee.
+    ///
+    /// Rules:
+    /// - notifyMode == "everyone": always yes
+    /// - notifyMode == "admins": yes if local FamilyMember has owner or
+    ///   admin role (canManageFamily). Looked up off the Core Data main
+    ///   context — this runs on every refresh so the lookup is cheap.
+    /// - notifyMode empty: legacy behavior — yes if assignee matches my
+    ///   userName, or if assignee is empty (broadcast).
+    static func shouldDeviceScheduleReminder(
+        notifyMode: String,
+        assignee: String,
+        myName: String
+    ) -> Bool {
+        switch notifyMode {
+        case "everyone":
+            return true
+        case "admins":
+            return localUserIsAdmin()
+        default:
+            // Empty mode = current behavior. Notify the assignee, or
+            // broadcast if no assignee.
+            if assignee.isEmpty { return true }
+            if myName.isEmpty { return true }
+            return myName.lowercased() == assignee.lowercased()
+        }
+    }
+
+    /// True when the local user's FamilyMember record has owner or
+    /// admin role. Uses the shared Core Data main context and looks up
+    /// the member by `meUid` (UserDefaults) or `userName` fallback.
+    private static func localUserIsAdmin() -> Bool {
+        let context = CasaCoreDataStack.shared.context
+        let userName = UserDefaults.standard.string(forKey: "userName") ?? ""
+        let meUid = UserDefaults.standard.string(forKey: "meUid") ?? ""
+        let req = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        let members = (try? context.fetch(req)) ?? []
+        let me = FamilyPermissions.currentMember(
+            members: members, userName: userName, meUid: meUid
+        )
+        return me?.canManageFamily ?? false
+    }
+
     static func scheduleNow(for task: TaskItem) async {
         // Capture properties synchronously on MainActor.
         let baseId = "task-\(Int(task.createdAt.timeIntervalSince1970 * 1000))"
@@ -109,19 +154,26 @@ enum NotificationsManager {
         let taskUid = task.uid
         let category = task.category.lowercased()
         let assignee = (task.assignee ?? "").trimmingCharacters(in: .whitespaces)
+        let notifyMode = task.notifyMode.lowercased()
 
-        // Per-person reminders: only the device whose user owns the
-        // reminder schedules a local notification. Empty assignee
-        // means "everyone" — every household device schedules its own
-        // copy. Only applies to reminders; chores keep their existing
+        // Route per-device based on notifyMode override + assignee.
+        //   "everyone" -> every device schedules
+        //   "admins"   -> only owners + admins schedule
+        //   "users"/"" -> existing assignee-based behavior
+        // Only reminders use this routing; chores keep their existing
         // assignment semantics elsewhere in the codebase.
-        if category == "reminders" && !assignee.isEmpty {
+        if category == "reminders" {
             let me = UserDefaults.standard.string(forKey: "userName")?
                 .trimmingCharacters(in: .whitespaces) ?? ""
-            if !me.isEmpty && me.lowercased() != assignee.lowercased() {
+            let shouldSchedule = shouldDeviceScheduleReminder(
+                notifyMode: notifyMode,
+                assignee: assignee,
+                myName: me
+            )
+            if !shouldSchedule {
                 // Cancel any stale pending notifications for this task
                 // before bailing — the reminder may have been
-                // reassigned away from this user.
+                // re-routed away from this user.
                 let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
                 let toCancel = pending.map(\.identifier).filter { $0.hasPrefix(baseId) }
                 if !toCancel.isEmpty {

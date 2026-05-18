@@ -30,6 +30,11 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var reminderPriority: Int64
     /// Optional end time. Only meaningful when dueDate has a time component.
     @NSManaged public var endDate: Date?
+    /// Notification routing override. "" = use assignee (default),
+    /// "everyone" = broadcast, "admins" = owners + admins only.
+    /// Separate from `assignee` so the task's My To-Do owner stays
+    /// independent of who gets the push.
+    @NSManaged public var notifyMode: String
     @NSManaged public var household: Household?
 
     var hasLocationTrigger: Bool { locationRadius > 0 }
