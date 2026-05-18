@@ -29,6 +29,77 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > "testflight it" section below for the full rule. **Do not bump
 > `MARKETING_VERSION` without Geezy asking.**
 
+### 2026-05-18 — TF 2.3 → 2.5 saga: schema gate + DON'T touch runDedupePipeline
+Half-day debugging session. Started by shipping idea-A/C/D as
+hidden options under a DEBUG design picker; pivoted hard when
+sync broke. Walked through TF 2.2 (working) → 2.3 (silently broken,
+missing CD_notifyMode in Production) → schema deploy via Chrome MCP →
+2.4 (still broken because I "fixed" runDedupePipeline) → 2.5 (revert
+restored sync, instant on both devices).
+
+**Headline takeaways for future Claudes:**
+
+1. **DON'T switch `CasalistAppDelegate.runDedupePipeline` from
+   `newBackgroundContext() + automaticallyMergesChangesFromParent
+   + bg.perform` to `container.performBackgroundTask`.** I theorized
+   the original pattern leaked bg-context listeners and would
+   eventually starve CloudKit's export queue. The "fix" looked
+   clean on paper. Empirically: it **breaks Production CKShare
+   exports completely.** Dev still syncs (which made the bug
+   invisible until TF). The revert in commit `18db2c4` restored
+   instant cross-device sync. Memory note saved at
+   `casalist_dont_touch_dedupe_pipeline.md`. Read it before
+   touching that function.
+
+2. **CloudKit schema gate is now enforced by an Xcode Run Script
+   build phase** (commit `c06731e`). The casalist target's first
+   build phase is "Preflight: CloudKit schema gate" — it calls
+   `scripts/cloudkit-schema-diff.sh --ci` on Release builds. If
+   Production != Development, the **archive fails before code
+   signing.** Debug builds skip the check. This problem has
+   bitten three times in two days (TF 2.2 calendar sync,
+   TF 2.3 notifyMode, plus an earlier name-typo); the rule
+   "remember to run the script" failed every time. The build
+   itself is the gate now. Bypass via `CASALIST_SKIP_SCHEMA_GATE=1`
+   if you genuinely need to (almost never).
+
+3. **CKMirroredData poisoning is a real, separate concern.** When
+   TF 2.3 ran against Prod-without-`CD_notifyMode`, every record
+   write got rejected and NSPersistentCloudKitContainer marked
+   those local mutations as terminal failures. Even after the
+   schema deploy fixed Production, the local mirror on each
+   device was still poisoned — sync stayed broken until a
+   delete + reboot + reinstall on each device cleared the local
+   store. Updating over the top is NOT enough. CLAUDE.md spells
+   this out near the schema-gate section.
+
+**Other ships from this session** (overshadowed by the sync
+saga but still landed):
+- Idea-A "Calm" My To-Do layout + bundle editing (rename,
+  recategorize, reassign, change bonus points) — main branch,
+  hidden behind `myToDoDesign` AppStorage with default "digest"
+- Idea-C "Cards" and idea-D "Rings" folded into main as additional
+  hidden options under the same picker. Geezy picked D as the
+  eventual winner; Family List hero already mirrors D's rings
+  style on main
+- Profar (HealthKit family wellness module) Phase 1 plumbing
+  shipped on `health-routing-refactor` branch behind
+  `profarEnabled` AppStorage. Steps + kcal + exercise + sleep
+  read end-to-end. Auth re-trigger pattern needed every time we
+  add new HKQuantityType identifiers
+- Production CloudKit schema deploy (CD_notifyMode +
+  CD_ProfarEntry record type, the latter auto-promoted because
+  Dashboard's deploy button is all-or-nothing) executed via
+  Chrome MCP on icloud.developer.apple.com
+- ExportOptions.plist `destination` flipped from `upload` to
+  `export` so altool can pick up the IPA. The previous mode was
+  the recurring "ExportArchive produced no IPA" gotcha
+
+29 commits pushed to `origin/main` between `682793e` (the bad
+bg-context "fix") and `18db2c4` (the revert that fixed Prod).
+The schema-gate commit `c06731e` is the load-bearing safety
+net going forward.
+
 ### 2026-05-16 — 1.6 + 1.7 + 1.8 all shipped to TF in one day
 Marathon all-day session. Shipped THREE TestFlight builds in one day
 (1.6 mid-session, 1.7 mid-session, 1.8 end-of-session) plus the
@@ -495,55 +566,7 @@ iPhone Air (geezy) + iPhone 15 (dakoda) passed end-to-end: fresh
 AirDrop accepted cleanly, both names visible on both devices, roles
 set correctly. Build uploaded via standard "testflight it" flow.
 
-### 2026-05-15 — TestFlight 4.0 shipped: Kid mode + themes + push quartet
-Big session. TestFlight build `4.0` (MARKETING_VERSION + CURRENT_PROJECT_VERSION
-both bumped from `1`/`3.9` to `4.0`) uploaded with eight major shipping
-features: (1) Kid-mode "starfield" UI auto-activates for FamilyMembers
-with `role == .kid` — full-screen alt to the adult shell with big-tap
-chore tiles, goal shelf, "MY WINS" log, "Ask for a reward" submit flow,
-confetti + UINotificationFeedbackGenerator haptic on every completion;
-(2) user-selectable theme picker in Settings → Appearance with three
-palettes (`ember` default, `vivid`, `anchor`) — each top-level view
-declares `@AppStorage("paletteName")` so palette swap propagates
-instantly to every screen (without that observer the dashboard stayed
-stale until refresh); (3) push notification quartet — task assigned,
-reward requested, reward redeemed, weekly Sunday recap — all wired
-into `.NSPersistentStoreRemoteChange` and deduped via UserDefaults UID
-sets so local saves don't self-notify; (4) WHAT'S NEW feed merges
-completions + redemptions, sorted by `completedAt`/`redeemedAt` not
-`createdAt`, and shows "X added Y to Z" when a creator assigns to
-someone else; (5) goal redesign — requesters write a label + optional
-"why" note, admins set the price at approval time in Inbox; (6)
-dashboard polish — `Home` tile replaces Maintenance (bundles both
-home + maintenance categories with a pill toggle), quick-add chips
-with clear-all, admin Mine/Everyone scope toggle on My To-Do,
-pull-to-refresh on every ScrollView, collapsed adult shell from 4
-tabs to 2 (Home + Rewards); (7) new app icon — AI-generated dark
-slate house + checklist composition, prepped via ImageMagick (no
-Photoshop) — tight crop, fuzz-bounded `-opaque` to kill checker
-pattern, low-fuzz corner floodfill for antialiasing cleanup, alpha
-off; (8) celebration overlay reworked — confetti now actually
-animates (was rendering already in final state because the overlay
-was conditionally inserted into the view tree — fixed with a
-separate `confettiFlying` phase driven via `withAnimation` after a
-50ms delay so the view exists long enough to animate FROM the
-initial state). **Schema deploy Dev → Production** for three new
-CloudKit fields (`CD_TaskItem.CD_completedAt`,
-`CD_FamilyGoal.CD_note`, `CD_Household.CD_routinesJSON`) executed
-via the Chrome MCP browsing the CloudKit Dashboard directly — Geezy
-authorized it explicitly so I clicked the Deploy button. Two new
-scripts shipped: `scripts/verify-testflight-schema.sh` (cktool-based
-preflight check) and `scripts/set_testflight_notes.py` (PyJWT +
-urllib, no `requests` dep — posts "What to Test" to the
-betaBuildLocalization). Notable gotcha: Apple's `filter[version]=4.0`
-in the App Store Connect API matches stale "4" builds — fixed in
-the script by fetching recent + exact-string filtering client-side.
-DEBUG-gated features still in code for later builds: routines, team
-goals, family stats, avatar tier emblems (the LeveledAvatar tier
-ring ships; just the corner medal is suppressed on top-bar +
-standings).
-
-_(2026-05-14 Option A entry rotated to `docs/progress-log-archive.md`)_
+_(2026-05-15 TestFlight 4.0 entry and 2026-05-14 Option A entry rotated to `docs/progress-log-archive.md`)_
 
 ## Overview
 Casalist is a private family household management app for iOS.
