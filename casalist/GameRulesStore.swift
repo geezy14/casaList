@@ -19,6 +19,7 @@ struct CategoryPointRule: Codable, Identifiable, Equatable {
     var emoji: String
     var defaultPoints: Int  // suggested default when creating a task in this category
     var description: String // e.g. "Daily household chores"
+    var isLocked: Bool = false // if true, point value cannot be changed per-task
 }
 
 struct GameRules: Codable {
@@ -69,5 +70,12 @@ final class GameRulesStore: ObservableObject {
 
     func reset() {
         rules = .default
+    }
+
+    /// Returns the rule whose category name matches (case-insensitive), if any.
+    func rule(for category: String) -> CategoryPointRule? {
+        rules.categoryRules.first {
+            $0.category.lowercased() == category.lowercased()
+        }
     }
 }

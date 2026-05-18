@@ -16,6 +16,8 @@ struct AddTaskView: View {
     }
     private var canPickAnyAssignee: Bool { me?.canCreateTasksForOthers ?? true }
 
+    @StateObject private var gameRules = GameRulesStore.shared
+
     @State private var taskName = ""
     @State private var assigneeName: String = ""
     @State private var category: String
@@ -111,20 +113,37 @@ struct AddTaskView: View {
         }
         Section("Category") {
             Picker("Category", selection: $category) {
-                Text("Chores").tag("Chores")
-                Text("Home").tag("home")
-                Text("Groceries").tag("groceries")
-                Text("Maintenance").tag("Maintenance")
+                ForEach(gameRules.rules.categoryRules) { rule in
+                    Text("\(rule.emoji) \(rule.category)").tag(rule.category)
+                }
+                Text("🛒 Groceries").tag("groceries")
             }
             .pickerStyle(.menu)
             .onChange(of: category) { _, new in
-                if new.lowercased() == "groceries" { points = 0 }
-                else if points == 0 { points = 10 }
+                if new.lowercased() == "groceries" {
+                    points = 0
+                } else if let rule = gameRules.rule(for: new) {
+                    points = rule.defaultPoints
+                } else if points == 0 {
+                    points = 10
+                }
             }
         }
         if !isPointless {
+            let lockedRule = gameRules.rule(for: category)
+            let isPointLocked = lockedRule?.isLocked == true
             Section("Points") {
-                Stepper(value: $points, in: 0...500, step: 5) { Text("\(points) pts") }
+                HStack {
+                    Stepper(value: $points, in: 0...500, step: 5) {
+                        Text("\(points) pts")
+                    }
+                    .disabled(isPointLocked)
+                    if isPointLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.orange.opacity(0.8))
+                    }
+                }
             }
         }
         Section("When") {
@@ -169,10 +188,9 @@ struct AddTaskView: View {
         }
         Section("Category") {
             Picker("Category", selection: $bundleCategory) {
-                Text("Chores").tag("Chores")
-                Text("Home").tag("home")
-                Text("Maintenance").tag("Maintenance")
-                Text("Family").tag("family")
+                ForEach(gameRules.rules.categoryRules) { rule in
+                    Text("\(rule.emoji) \(rule.category)").tag(rule.category)
+                }
             }.pickerStyle(.menu)
         }
         Section("Assign to") {

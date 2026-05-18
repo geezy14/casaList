@@ -316,9 +316,16 @@ struct GameRulesView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("\(rule.defaultPoints) pts")
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                if rule.isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.orange.opacity(0.8))
+                }
+                Text("\(rule.defaultPoints) pts")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.secondary)
+            }
             if isAdmin {
                 Button { activeSheet = .editCat(rule) } label: {
                     Image(systemName: "pencil.circle")
@@ -419,8 +426,19 @@ private struct CatEditSheet: View {
                 Section("Emoji") {
                     TextField("🧹", text: $draft.emoji)
                 }
-                Section("Default points") {
+                Section(header: Text("Default points"),
+                        footer: Text(draft.isLocked
+                                     ? "Locked — tasks in this category are always worth exactly \(draft.defaultPoints) pts. No one can change it per task."
+                                     : "Points pre-fill when this category is picked. Can still be adjusted per task.")) {
                     Stepper("\(draft.defaultPoints) pts", value: $draft.defaultPoints, in: 0...500, step: 5)
+                    Toggle(isOn: $draft.isLocked) {
+                        HStack(spacing: 6) {
+                            Image(systemName: draft.isLocked ? "lock.fill" : "lock.open")
+                                .foregroundStyle(draft.isLocked ? Color.orange : Color.secondary)
+                            Text(draft.isLocked ? "Points locked" : "Lock points")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
                 }
                 Section("Description") {
                     TextField("Short description", text: $draft.description)
