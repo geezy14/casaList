@@ -2415,8 +2415,13 @@ extension CasalistCottage {
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
+        /// Categories whose items live in their own dedicated tab/view and
+        /// SHOULDN'T appear in the personal to-do list. Reminders are
+        /// intentionally NOT in this list — they fold into My To-Do when
+        /// the assignee is you (or when admin is viewing Everyone), so the
+        /// digest reflects your full daily load.
         private func isModuleCategory(_ cat: String) -> Bool {
-            ["groceries", "maintenance", "reminders"].contains(cat.lowercased())
+            ["groceries", "maintenance"].contains(cat.lowercased())
         }
         private func isMine(_ t: TaskItem) -> Bool {
             let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
@@ -2862,6 +2867,7 @@ extension CasalistCottage {
             case "home":        return "house.fill"
             case "maintenance": return "wrench.fill"
             case "family":      return "person.3.fill"
+            case "reminders":   return "bell.fill"
             default:            return "tag.fill"
             }
         }
