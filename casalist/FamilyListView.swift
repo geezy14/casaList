@@ -292,7 +292,7 @@ public struct FamilyListView: View {
     private var quickAddBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-            TextField("Add anything quick…", text: $newItem)
+            TextField("Quick task...", text: $newItem)
                 .font(.system(size: 14, weight: .semibold))
                 .submitLabel(.done)
                 .onSubmit(addInlineItem)

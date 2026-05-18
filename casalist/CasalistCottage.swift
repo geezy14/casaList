@@ -266,6 +266,7 @@ public enum CasalistCottage {
         @State private var showFamilyList = false
         @State private var selectedAgendaTask: TaskItem? = nil
         @State private var activeDraftBundle: TaskItem? = nil
+        @State private var quickTaskText: String = ""
         @State private var showProfilePhoto = false
         @State private var showPersonalCard = false
         @AppStorage("userName") private var userName: String = ""
@@ -274,6 +275,7 @@ public enum CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyEvent.startDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allEvents: FetchedResults<FamilyEvent>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
@@ -586,13 +588,24 @@ public enum CasalistCottage {
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
+        private func quickAddEmoji(_ entry: QuickAddEntry) -> String {
+            switch entry.category.lowercased() {
+            case "maintenance": return "🔧"
+            case "home":        return "🏠"
+            case "groceries":   return "🛒"
+            case "family":      return "👨‍👩‍👧"
+            case "reminders":   return "🔔"
+            default:            return "✅"
+            }
+        }
+
         private var quickAddChips: some View {
             let entries = QuickAddHistory.load()
             return Group {
                 if !entries.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 6) {
-                            Text("QUICK ADD").font(.system(size: 10, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim)
+                            Text("QUICK ADD").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim)
                             if let ping = quickAddPing {
                                 Text("· \(ping)")
                                     .font(.system(size: 10, weight: .heavy))
@@ -613,12 +626,10 @@ public enum CasalistCottage {
                             }
                         }
                         .padding(.leading, 4)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(entries) { e in
-                                    quickAddChip(e)
-                                }
-                            }.padding(.horizontal, 4)
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                            ForEach(entries) { e in
+                                quickAddTile(e)
+                            }
                         }
                     }
                     .id(quickAddTick)
@@ -626,7 +637,7 @@ public enum CasalistCottage {
             }
         }
 
-        private func quickAddChip(_ e: QuickAddEntry) -> some View {
+        private func quickAddTile(_ e: QuickAddEntry) -> some View {
             Button {
                 let households = (try? modelContext.fetch(Household.fetchRequest())) ?? []
                 let t = QuickAddHistory.spawn(
@@ -634,23 +645,37 @@ public enum CasalistCottage {
                     in: modelContext, household: households.preferredTarget
                 )
                 Task { await NotificationsManager.scheduleNow(for: t) }
-                withAnimation { quickAddPing = "Added \"\(e.label)\" for \(e.assignee.isEmpty ? "no one" : e.assignee)" }
+                withAnimation { quickAddPing = "Added \"\(e.label)\"" }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                     withAnimation { quickAddPing = nil }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Text(e.label).font(.system(size: 12, weight: .heavy)).foregroundStyle(P.text)
-                    if !e.assignee.isEmpty {
-                        Text("· \(e.assignee)").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textDim)
-                    }
-                    if e.points > 0 {
-                        Text("⭐\(e.points)").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.peach)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(quickAddEmoji(e)).font(.system(size: 30))
+                    Spacer()
+                    Text(e.label)
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(P.text)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                    HStack(spacing: 4) {
+                        if !e.assignee.isEmpty {
+                            Text(e.assignee)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(P.textDim)
+                        }
+                        if e.points > 0 {
+                            Text("\(e.points) pts")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(P.lavender)
+                        }
                     }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Capsule().fill(P.surface))
-                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .frame(minHeight: 110)
+                .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
             }
             .buttonStyle(.row)
             .contextMenu {
@@ -916,16 +941,41 @@ public enum CasalistCottage {
         }
 
         private var quickAdd: some View {
-            Button { showAddTodo = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-                    Text("What needs doing?").font(.system(size: 14, weight: .semibold)).foregroundStyle(P.textDim)
-                    Spacer()
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                TextField("Quick task...", text: $quickTaskText)
+                    .font(.system(size: 14, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit(addQuickTask)
+                Button { addQuickTask() } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
                 }
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Capsule().fill(P.surface))
-                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
-            }.buttonStyle(.row)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func addQuickTask() {
+            let name = quickTaskText.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces)
+            let it = TaskItem(
+                context: modelContext,
+                task: name,
+                category: "Chores",
+                points: 5,
+                createdBy: myName
+            )
+            it.assignee = myName
+            if let h = households.preferredTarget {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
+            try? modelContext.save()
+            quickTaskText = ""
         }
 
         private var star: some View {
@@ -1029,7 +1079,15 @@ public enum CasalistCottage {
             homeAndMaintenanceItems.filter { ($0.dueDate ?? .distantFuture) < Date() }.count
         }
         private var homeNextItem: String { homeAndMaintenanceItems.first?.task ?? "" }
-        private var reminderItems: [TaskItem] { allTodos.filter { !$0.isCompleted && $0.category.lowercased() == "reminders" } }
+        private var reminderItems: [TaskItem] {
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces).lowercased()
+            return allTodos.filter {
+                guard !$0.isCompleted && $0.category.lowercased() == "reminders" else { return false }
+                let assignee = ($0.assignee ?? "").trimmingCharacters(in: .whitespaces)
+                return assignee.isEmpty || assignee.lowercased() == myName
+            }
+        }
         private var reminderCount: Int { reminderItems.count }
         private var reminderPreview: String { reminderItems.prefix(3).map { $0.task }.joined(separator: ", ") }
 
@@ -2599,7 +2657,7 @@ extension CasalistCottage {
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
                     Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-                    TextField("Add a task...", text: $newItem)
+                    TextField("Quick task...", text: $newItem)
                         .font(.system(size: 14, weight: .semibold))
                         .submitLabel(.done)
                         .onSubmit(addInlineItem)
@@ -3664,6 +3722,7 @@ extension CasalistCottage {
         /// view title matches what the user just tapped.
         @State private var categoryPill: String = "Home"
         @State private var quickAddTarget: DefaultChore? = nil
+        @State private var newItem: String = ""
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
@@ -3803,6 +3862,7 @@ extension CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 pill
+                quickAddRow
                 quickAddGrid
                 if !active.isEmpty || !done.isEmpty {
                     section(title: "OVERDUE ⚠️", items: overdue, color: P.coral)
@@ -3811,6 +3871,45 @@ extension CasalistCottage {
                     section(title: "DONE ✓", items: done.suffix(5).map { $0 }, color: P.mint, completed: true)
                 }
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var quickAddRow: some View {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                TextField("Quick task...", text: $newItem)
+                    .font(.system(size: 14, weight: .semibold))
+                    .submitLabel(.done)
+                    .onSubmit(addInlineItem)
+                Button { addInlineItem() } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .background(Capsule().fill(P.surface))
+            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+        }
+
+        private func addInlineItem() {
+            let name = newItem.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            let myName = (members.first(where: { $0.name == userName })?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces)
+            let cat = categoryPill.lowercased()
+            let it = TaskItem(
+                context: modelContext,
+                task: name,
+                category: cat,
+                points: 10,
+                createdBy: myName
+            )
+            it.assignee = myName
+            if let h = households.preferredTarget {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
+            try? modelContext.save()
+            newItem = ""
         }
 
         private var quickAddGrid: some View {
