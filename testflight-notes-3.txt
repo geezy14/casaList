@@ -1,0 +1,17 @@
+Casalist 2.2 (build 3)
+
+What's new
+- "Rings" Home and Reminders. Hero rings on the Dashboard and
+  Reminders tabs match the Family list style. Three at-a-glance
+  metrics per screen.
+- Dashboard rings: Today / This week / Streak.
+- Reminders rings: Pinned / Today / Hourly.
+- Cleaner Dashboard: rings hero, quick task bar, and your tiles.
+
+What to test
+- Open Home. Tap the rings hero area; nothing should crash.
+- Open Reminders. Confirm the rings show Pinned, Today, Hourly.
+- Add a chore from the quick task bar on Home.
+- Family list rings unchanged - confirm they still feel right.
+
+Thanks!

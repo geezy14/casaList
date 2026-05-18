@@ -635,24 +635,13 @@ public enum CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
-                #if DEBUG
-                // "Rings" layout (idea-D): rings hero + the quick-add
-                // task bar (so you can drop a chore from the top of the
-                // dashboard). No agenda ribbon, no quick-add chip row.
+                // "Rings" layout: rings hero + quick-add task bar.
+                // No agenda ribbon, no quick-add chip row.
                 greetingCardRings
                 quickAdd
                 star
                 tiles
                 whatsNew
-                #else
-                greetingCard
-                stickyAgenda
-                quickAdd
-                if canManage { quickAddChips }
-                star
-                tiles
-                whatsNew
-                #endif
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
@@ -5708,11 +5697,7 @@ extension CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
-                #if DEBUG
                 ringsHero
-                #else
-                hero
-                #endif
                 quickAddRow
                 listSection
                 if !linkedReminders.isEmpty {
