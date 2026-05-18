@@ -54,10 +54,12 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
     }
 }
 
-/// Modal location picker. Search-as-you-type, suggestions list, tap to pick.
+/// Modal location picker. Surfaces the user's Saved Locations as one-tap
+/// choices at the top, then live MapKit search-as-you-type below.
 struct LocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var completer = LocationCompleter()
+    @State private var savedLocations: [SavedLocation] = []
     let onPick: (PickedLocation) -> Void
 
     var body: some View {
@@ -69,6 +71,33 @@ struct LocationPickerSheet: View {
                         TextField("Search for a place", text: $completer.query)
                             .textInputAutocapitalization(.words)
                             .autocorrectionDisabled()
+                    }
+                }
+                // Saved locations only show when the user hasn't started
+                // typing — once they're searching, the autocomplete list
+                // is what's relevant. Settings → Saved Locations is where
+                // entries get added.
+                if completer.query.isEmpty && !savedLocations.isEmpty {
+                    Section("Saved") {
+                        ForEach(savedLocations) { s in
+                            Button {
+                                pickSaved(s)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(s.label).foregroundStyle(.primary)
+                                        if !s.address.isEmpty {
+                                            Text(s.address).font(.caption).foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                }
+                            }
+                            .buttonStyle(.row)
+                        }
                     }
                 }
                 if !completer.results.isEmpty {
@@ -99,6 +128,7 @@ struct LocationPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
+            .onAppear { savedLocations = SavedLocationsStore.loadAll() }
         }
     }
 
@@ -111,6 +141,16 @@ struct LocationPickerSheet: View {
                 }
             }
         }
+    }
+
+    private func pickSaved(_ s: SavedLocation) {
+        onPick(PickedLocation(
+            name: s.label,
+            subtitle: s.address,
+            latitude: s.latitude,
+            longitude: s.longitude
+        ))
+        dismiss()
     }
 }
 
