@@ -2914,11 +2914,16 @@ extension CasalistCottage {
                                 .foregroundStyle(t.isCompleted ? color : color.opacity(0.75))
                         }.buttonStyle(.row)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(t.task)
-                                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                .foregroundStyle(P.text)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
+                            HStack(spacing: 8) {
+                                Image(systemName: kindIcon(for: t.category))
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(color)
+                                Text(t.task)
+                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(P.text)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(2)
+                            }
                             HStack(spacing: 6) {
                                 if let _ = t.dueDate {
                                     Image(systemName: "clock")
@@ -3233,7 +3238,10 @@ extension CasalistCottage {
         /// custom categories the user adds in GameRulesView.
         private func kindIcon(for cat: String) -> String {
             switch cat.lowercased() {
-            case "chores":      return "checkmark.circle.fill"
+            // SF Symbols doesn't have a literal broom; sparkles reads
+            // as "tidied / cleaned" which fits Chores better than a
+            // generic check mark.
+            case "chores":      return "sparkles"
             case "homework":    return "book.fill"
             case "home":        return "house.fill"
             case "maintenance": return "wrench.fill"
@@ -3687,6 +3695,15 @@ extension CasalistCottage {
 
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 6) {
+                                    // Category icon (wrench for maintenance,
+                                    // sparkles for chores, etc.) + a small
+                                    // square-stack icon to denote "bundle."
+                                    Image(systemName: kindIcon(for: bundle.category))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(color)
+                                    Image(systemName: "square.stack.fill")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(color.opacity(0.7))
                                     Text(bundle.task).font(.system(size: 15, weight: .heavy)).foregroundStyle(allDone ? P.textDim : P.text)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 10, weight: .heavy))
