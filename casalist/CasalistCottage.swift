@@ -2540,7 +2540,17 @@ extension CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
-            .sheet(item: $editingTask) { t in TaskDetailView(task: t) }
+            .sheet(item: $editingTask) { t in
+                // Reminders get the full AddReminderView edit experience
+                // (alert toggle, location panel, repeat, color, photo, etc.)
+                // so editing from My To-Do matches editing from the Reminders
+                // tab. Everything else falls back to the generic TaskDetailView.
+                if t.category.lowercased() == "reminders" {
+                    AddReminderView(editing: t)
+                } else {
+                    TaskDetailView(task: t)
+                }
+            }
             .sheet(isPresented: $showAddBundle) { AddTaskView(startMode: "bundle") }
             .celebration(visible: $celebrate, label: celebrateLabel)
             .swipeBack { if let onHome { onHome() } else { dismiss() } }
