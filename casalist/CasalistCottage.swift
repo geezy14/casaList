@@ -17,6 +17,31 @@ public enum CasalistCottage {
         let bg, surface, surfaceAlt, surfaceHi, border, text, textDim, textMuted: Color
         let peach, mint, butter, lavender, sky, coral: Color
 
+        /// Brand "sunrise" gradient — peach in the top-left, coral in the
+        /// bottom-right. The active palette decides what those two hues
+        /// actually look like (cobalt-to-brick on Anchor, blue-to-orange
+        /// on Dodger, magenta-to-orange on Vivid, etc.). Use on the primary
+        /// hero block, the My To-Do dashboard tile, the floating + button —
+        /// any surface that should read as "this is your space."
+        var heroGradient: LinearGradient {
+            LinearGradient(
+                colors: [peach, coral],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        /// Subtle near-background variant — same direction, low opacity.
+        /// For tinting larger surfaces (screen backgrounds, large cards)
+        /// without competing with content.
+        var heroGradientFaint: LinearGradient {
+            LinearGradient(
+                colors: [peach.opacity(0.10), coral.opacity(0.06)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
         /// Default palette name when none has been picked yet.
         static let defaultName = "vivid"
 
@@ -1102,7 +1127,8 @@ public enum CasalistCottage {
                         tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
                     }.buttonStyle(.row)
                     Button { showMyToDo = true } label: {
-                        tile(bg: P.butter, emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
+                        tile(bg: P.peach, gradient: P.heroGradient, shadowColor: P.coral, useWhiteText: true,
+                             emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.row)
                     Button { showReminders = true } label: {
                         tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
@@ -1142,7 +1168,22 @@ public enum CasalistCottage {
             allEvents.first(where: { $0.startDate >= Date() })?.title ?? ""
         }
 
-        private func tile(bg: Color, emoji: String, label: String, big: String, suffix: String, sub: String, badge: String? = nil) -> some View {
+        /// Dashboard tile. Pass either a solid `bg:` (category tile) or
+        /// `gradient:` for the brand sunrise look. `shadowColor:` defaults
+        /// to bg or — for gradients — the supplied color. White
+        /// foreground on gradients reads better than the warm brown.
+        private func tile(
+            bg: Color,
+            gradient: LinearGradient? = nil,
+            shadowColor: Color? = nil,
+            useWhiteText: Bool = false,
+            emoji: String,
+            label: String,
+            big: String,
+            suffix: String,
+            sub: String,
+            badge: String? = nil
+        ) -> some View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text(emoji).font(.system(size: 20))
@@ -1162,24 +1203,26 @@ public enum CasalistCottage {
                 Text(label).font(.system(size: 14, weight: .bold))
                 Text(sub).font(.system(size: 11, weight: .semibold)).opacity(0.7).lineLimit(2).frame(height: 28, alignment: .top)
             }
-            .foregroundStyle(Color(rgb: 0x3B2A22))
+            .foregroundStyle(useWhiteText ? Color.white : Color(rgb: 0x3B2A22))
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(bg)
-                    .overlay(
-                        // Subtle top highlight + bottom shade gives the
-                        // solid color a saturated, dimensional look without
-                        // shifting the underlying palette value.
+                ZStack {
+                    if let gradient {
+                        RoundedRectangle(cornerRadius: 24).fill(gradient)
+                    } else {
+                        RoundedRectangle(cornerRadius: 24).fill(bg)
+                    }
+                    RoundedRectangle(cornerRadius: 24).fill(
                         LinearGradient(
                             colors: [Color.white.opacity(0.18), Color.clear, Color.black.opacity(0.22)],
                             startPoint: .top, endPoint: .bottom
                         )
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 24))
             )
-            .shadow(color: bg.opacity(0.35), radius: 10, x: 0, y: 4)
+            .shadow(color: (shadowColor ?? bg).opacity(0.35), radius: 10, x: 0, y: 4)
         }
 
         private struct ActivityEntry: Identifiable {
@@ -2570,8 +2613,8 @@ extension CasalistCottage {
                 Button { showAddTodo = true } label: {
                     Image(systemName: "plus").font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.peach))
-                        .shadow(color: P.peach.opacity(0.4), radius: 8, y: 4)
+                        .background(Circle().fill(P.heroGradient))
+                        .shadow(color: P.coral.opacity(0.45), radius: 8, y: 4)
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -2640,7 +2683,7 @@ extension CasalistCottage {
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(Capsule().fill(P.peach))
+                    .background(Capsule().fill(P.heroGradient))
                 }.buttonStyle(.row)
                 Spacer()
             }
@@ -2678,12 +2721,7 @@ extension CasalistCottage {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 22).padding(.vertical, 22)
-            .background(
-                LinearGradient(
-                    colors: [P.peach, P.coral],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-            )
+            .background(P.heroGradient)
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
             .shadow(color: P.coral.opacity(0.28), radius: 18, x: 0, y: 8)
         }
@@ -2721,7 +2759,7 @@ extension CasalistCottage {
                         .onSubmit(addInlineItem)
                     Button { addInlineItem() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                            .frame(width: 32, height: 32).background(Circle().fill(P.heroGradient))
                     }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
