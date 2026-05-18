@@ -51,7 +51,16 @@ struct AddReminderView: View {
     @State private var hasFireTime: Bool
     @State private var priority: Int64
 
-    init(editing: TaskItem? = nil, template: ReminderTemplate? = nil) {
+    /// Initialize the reminder editor. `initialTitle` lets a caller
+    /// (e.g. MyToDo's quick-add bell) prefill just the title and leave
+    /// everything else at sane defaults; `editing` and `template` keep
+    /// their existing meanings. Only one of editing/template/initialTitle
+    /// should be set per call.
+    init(
+        editing: TaskItem? = nil,
+        template: ReminderTemplate? = nil,
+        initialTitle: String = ""
+    ) {
         self.editing = editing
         if let t = editing {
             _title = State(initialValue: t.task)
@@ -99,7 +108,7 @@ struct AddReminderView: View {
             _hasFireTime = State(initialValue: tpl.hasFireTime)
             _priority = State(initialValue: 0)
         } else {
-            _title = State(initialValue: "")
+            _title = State(initialValue: initialTitle)
             _repeatKind = State(initialValue: "")
             _hasFireDate = State(initialValue: false)
             _fireDate = State(initialValue: Date().addingTimeInterval(3600))

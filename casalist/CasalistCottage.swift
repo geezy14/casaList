@@ -2400,6 +2400,10 @@ extension CasalistCottage {
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var newItem: String = ""
+        /// True when the bell on the quick-add bar was tapped. Presents
+        /// the full AddReminderView prefilled with whatever was typed.
+        @State private var showAddReminder: Bool = false
+        @State private var quickReminderDraft: String = ""
         @State private var expandedBundles: Set<String> = []
         @State private var showAddBundle: Bool = false
         @State private var bundleNewItem: [String: String] = [:]
@@ -2633,6 +2637,9 @@ extension CasalistCottage {
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
+            .sheet(isPresented: $showAddReminder) {
+                AddReminderView(initialTitle: quickReminderDraft)
+            }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
             .sheet(item: $editingTask) { t in
@@ -2723,6 +2730,15 @@ extension CasalistCottage {
             }
             try? modelContext.save()
             newItem = ""
+        }
+
+        /// Open the full AddReminderView pre-filled with whatever the
+        /// user typed in the quick-add bar. Empty input still opens the
+        /// editor (the user can type the title there) -- nothing lost.
+        private func openReminderFromQuickAdd() {
+            quickReminderDraft = newItem.trimmingCharacters(in: .whitespaces)
+            newItem = ""
+            showAddReminder = true
         }
 
         private var inboxBadgeCount: Int {
@@ -2926,10 +2942,21 @@ extension CasalistCottage {
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
                     Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-                    TextField("Quick task...", text: $newItem)
+                    TextField("Quick task or reminder...", text: $newItem)
                         .font(.system(size: 14, weight: .semibold))
                         .submitLabel(.done)
                         .onSubmit(addInlineItem)
+                    // Bell button: opens the full AddReminderView pre-
+                    // filled with whatever is typed. Lets the user
+                    // promote a quick line into a reminder (with notify
+                    // target, date, repeat, etc.) without leaving My To-Do.
+                    Button { openReminderFromQuickAdd() } label: {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(P.peach)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(P.surfaceAlt))
+                    }.buttonStyle(.row)
                     Button { addInlineItem() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
                             .frame(width: 32, height: 32)
