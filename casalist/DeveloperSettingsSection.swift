@@ -295,17 +295,61 @@ private struct DevNukeBlock: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)],
                   predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
+    @FetchRequest(sortDescriptors: [])
+    private var allTasks: FetchedResults<TaskItem>
     @AppStorage("userName") private var userName: String = ""
 
     var body: some View {
         Group {
             DevActionRow(title: "Merge duplicate households") { mergeHouseholds() }
             DevDivider()
+            DevActionRow(title: "⚠️ Wipe ALL stats (points, XP, streaks, badges, task history)") { wipeAllStats() }
+            DevDivider()
+            DevActionRow(title: "Wipe all points + lifetime XP") { wipePoints() }
+            DevDivider()
+            DevActionRow(title: "Wipe all streaks + badges") { wipeStreaksAndBadges() }
+            DevDivider()
             DevActionRow(title: "Dump state to share log") { dumpState() }
             DevDivider()
             DevActionRow(title: "Nuke ALL local data (hard delete)") { nukeAll() }
             DevDivider()
         }
+    }
+
+    private func wipeAllStats() {
+        // 1. Points + XP
+        for m in members { m.points = 0; m.lifetimePoints = 0 }
+        // 2. Task completion history — clear completedAt so card stats reset to 0
+        for t in allTasks {
+            if t.completedAt != nil { t.completedAt = nil }
+            if t.isCompleted { t.isCompleted = false }
+            t.completionCount = 0
+        }
+        try? moc.save()
+        // 3. Streaks + badges from UserDefaults
+        let ud = UserDefaults.standard
+        ud.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix("streak_") || $0.hasPrefix("badges_") || $0.hasPrefix("reminder_streak_") }
+            .forEach { ud.removeObject(forKey: $0) }
+        message = "Wiped all stats: points, XP, streaks, badges, task completion history."
+    }
+
+    private func wipePoints() {
+        for m in members {
+            m.points = 0
+            m.lifetimePoints = 0
+        }
+        try? moc.save()
+        message = "Wiped points + lifetime XP for \(members.count) member(s)."
+    }
+
+    private func wipeStreaksAndBadges() {
+        let ud = UserDefaults.standard
+        let keysToRemove = ud.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix("streak_") || $0.hasPrefix("badges_") || $0.hasPrefix("reminder_streak_")
+        }
+        keysToRemove.forEach { ud.removeObject(forKey: $0) }
+        message = "Wiped streaks + badges (\(keysToRemove.count) keys cleared)."
     }
 
     private func mergeHouseholds() {

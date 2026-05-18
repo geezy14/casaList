@@ -117,8 +117,28 @@ struct LeveledAvatar: View {
     let size: CGFloat
     /// Whether to show the small medal emblem in the corner.
     var showEmblem: Bool = true
+    /// Pass an explicit level number (1-10) from the caller to guarantee the
+    /// ring always matches the displayed level. Falls back to computing from
+    /// member data when nil.
+    var overrideLevel: Int? = nil
 
-    private var level: AvatarLevel { AvatarLevel(lifetimePoints: Int(member.lifetimePoints)) }
+    /// Effective lifetime pts — use whichever is higher so pre-migration members
+    /// (lifetimePoints == 0) still get the right ring from their current balance.
+    private var effectiveLifetime: Int {
+        let lp = Int(member.lifetimePoints)
+        let p  = Int(member.points)
+        return lp > p ? lp : p
+    }
+    private var level: AvatarLevel {
+        let lvl = overrideLevel ?? levelNumber(for: effectiveLifetime)
+        switch lvl {
+        case 1:     return .rookie
+        case 2...3: return .bronze
+        case 4...5: return .silver
+        case 6...7: return .gold
+        default:    return .platinum
+        }
+    }
 
     var body: some View {
         let ringWidth: CGFloat = max(2, size * 0.07)

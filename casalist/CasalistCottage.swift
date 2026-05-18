@@ -265,6 +265,7 @@ public enum CasalistCottage {
         @State private var showSchedule = false
         @State private var showFamilyList = false
         @State private var selectedAgendaTask: TaskItem? = nil
+        @State private var activeDraftBundle: TaskItem? = nil
         @State private var showProfilePhoto = false
         @State private var showPersonalCard = false
         @AppStorage("userName") private var userName: String = ""
@@ -322,6 +323,7 @@ public enum CasalistCottage {
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
             .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
             .sheet(item: $selectedAgendaTask) { t in TaskDetailView(task: t) }
+            .sheet(item: $activeDraftBundle) { b in BundleDraftSheet(bundle: b) }
             .sheet(item: $selectedSearchTask) { t in TaskDetailView(task: t) }
             .sheet(isPresented: $showProfilePhoto) { ProfilePhotoSheet() }
             .fullScreenCover(isPresented: $showPersonalCard) { PersonalCardView() }
@@ -756,6 +758,7 @@ public enum CasalistCottage {
             let symbol: String
             let color: Color
             let taskUid: String?   // nil for event tiles, set for task/reminder tiles
+            var isDraftBundle: Bool = false
         }
 
         private func tileSymbol(_ cat: String) -> String {
@@ -853,7 +856,22 @@ public enum CasalistCottage {
                     taskUid: task.uid
                 )
             }
-            return eventTiles + timedTiles + pinnedTiles
+            // Draft bundles — always in agenda until finalized
+            let draftBundleTiles = allTodos
+                .filter { $0.repeatKind == "bundle-draft" && $0.parentUid.isEmpty }
+                .map { bundle -> AgendaTile in
+                    let childCount = allTodos.filter { $0.parentUid == bundle.uid }.count
+                    return AgendaTile(
+                        timeText: childCount == 0 ? "Add chores" : "\(childCount) chore\(childCount == 1 ? "" : "s")",
+                        label: bundle.task,
+                        sub: bundle.assignee ?? "Anyone",
+                        symbol: "square.stack.fill",
+                        color: tileColor(bundle.category),
+                        taskUid: bundle.uid,
+                        isDraftBundle: true
+                    )
+                }
+            return draftBundleTiles + eventTiles + timedTiles + pinnedTiles
         }
 
         @ViewBuilder
@@ -863,24 +881,32 @@ public enum CasalistCottage {
                     HStack(spacing: 8) {
                         ForEach(Array(todayAgenda.enumerated()), id: \.element.id) { i, a in
                             Button {
-                                if let uid = a.taskUid,
+                                if a.isDraftBundle,
+                                   let uid = a.taskUid,
+                                   let b = allTodos.first(where: { $0.uid == uid }) {
+                                    activeDraftBundle = b
+                                } else if let uid = a.taskUid,
                                    let t = allTodos.first(where: { $0.uid == uid }) {
                                     selectedAgendaTask = t
                                 } else {
                                     showSchedule = true
                                 }
                             } label: {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Image(systemName: a.symbol).font(.system(size: 15)).foregroundStyle(a.color)
-                                        .frame(width: 30, height: 30)
-                                        .background(Circle().fill(a.color.opacity(0.2)))
-                                    Text(a.label).font(.system(size: 13, weight: .heavy)).lineLimit(2)
-                                    Text(a.sub.isEmpty ? a.timeText : "\(a.timeText) · \(a.sub)")
-                                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(2)
+                                ZStack(alignment: .topTrailing) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Image(systemName: a.symbol).font(.system(size: 15)).foregroundStyle(a.color)
+                                            .frame(width: 30, height: 30)
+                                            .background(Circle().fill(a.color.opacity(0.2)))
+                                        Text(a.label).font(.system(size: 13, weight: .heavy)).lineLimit(2)
+                                        Text(a.sub.isEmpty ? a.timeText : "\(a.timeText) · \(a.sub)")
+                                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(1).truncationMode(.tail)
+                                    }
+                                    .padding(14).frame(width: 130, height: 110, alignment: .leading)
+                                    .background(RoundedRectangle(cornerRadius: 20).fill(i % 2 == 0 ? P.surface : P.surfaceAlt))
+                                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(
+                                        a.isDraftBundle ? Color.red.opacity(0.5) : P.border, lineWidth: 1.5))
+
                                 }
-                                .padding(14).frame(width: 130, alignment: .leading)
-                                .background(RoundedRectangle(cornerRadius: 20).fill(i % 2 == 0 ? P.surface : P.surfaceAlt))
-                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
                             }.buttonStyle(.row)
                         }
                     }.padding(.vertical, 4)
@@ -1233,6 +1259,7 @@ public enum CasalistCottage {
         /// has at least one pending request), this opens an inline approval
         /// sheet scoped to just their requests.
         @State private var pendingForKid: FamilyMember? = nil
+        @State private var earningBundleDetail: TaskItem? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var celebrateEmoji: String = "⭐"
@@ -1276,6 +1303,7 @@ public enum CasalistCottage {
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(item: $pendingForKid) { m in pendingForKidSheet(m) }
+            .sheet(item: $earningBundleDetail) { b in bundleDetailSheet(b) }
             .celebration(visible: $celebrate, label: celebrateLabel, emoji: celebrateEmoji)
             .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
@@ -1485,7 +1513,9 @@ public enum CasalistCottage {
                 if let me = myMember {
                     let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
                     let streak = StreakTracker.effectiveCurrent(for: me.uid)
-                    let lp = Int(me.lifetimePoints)
+                    // lifetimePoints is 0 on pre-migration members; fall back to
+                    // current points until real lifetime data accumulates.
+                    let lp = Int(max(me.lifetimePoints, me.points))
                     let level = levelNumber(for: lp)
                     let nextLevelPts = nextLevelThreshold(for: lp) ?? (lp + 1000)
                     let prevLevelPts = nextLevelPts - 1  // only used for display; progress fn handles thresholds
@@ -1495,7 +1525,7 @@ public enum CasalistCottage {
 
                     VStack(spacing: 14) {
                         HStack(spacing: 16) {
-                            LeveledAvatar(member: me, size: 64)
+                            LeveledAvatar(member: me, size: 64, overrideLevel: level)
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 8) {
                                     Text(me.name).font(.system(size: 20, weight: .heavy))
@@ -1562,7 +1592,14 @@ public enum CasalistCottage {
         /// Open, point-bearing TaskItems that should appear in the EARN POINTS
         /// section. Owner/admin see everything; standard/kid see only their own.
         private var earningTasks: [TaskItem] {
-            let pointTasks = allTodos.filter { !$0.isCompleted && $0.points > 0 }
+            // Exclude bundle children (they live under their bundle container) and drafts.
+            // Bundle containers (isChoreBundle) count as a single earning unit using their bonus points.
+            let pointTasks = allTodos.filter {
+                !$0.isCompleted
+                && $0.points > 0
+                && $0.parentUid.isEmpty          // no bundle children
+                && $0.repeatKind != "bundle-draft" // no unfinished drafts
+            }
             if let me = myMember, !me.canManageFamily {
                 let lc = me.name.lowercased()
                 return pointTasks.filter { ($0.assignee ?? "").lowercased() == lc }
@@ -1966,7 +2003,17 @@ public enum CasalistCottage {
             let assignee = members.first(where: { $0.name.lowercased() == (t.assignee ?? "").lowercased() })
             let isMineOrIManage = (myMember?.canManageFamily ?? false) ||
                 ((myMember?.name.lowercased() ?? "") == (t.assignee ?? "").lowercased())
-            return HStack(spacing: 12) {
+
+            // For bundles: total pts = bonus + sum of all incomplete child chore pts
+            let isBundle = t.isChoreBundle
+            let allBundleChildren = isBundle ? allTodos.filter { $0.parentUid == t.uid } : []
+            let doneChildren = allBundleChildren.filter { $0.isCompleted }
+            let openChildren = allBundleChildren.filter { !$0.isCompleted }
+            let totalChildPts = openChildren.reduce(0) { $0 + Int($1.points) }
+            let displayPts = isBundle ? (Int(t.points) + totalChildPts) : Int(t.points)
+            let allChildrenDone = isBundle && !allBundleChildren.isEmpty && openChildren.isEmpty
+
+            let row = HStack(spacing: 12) {
                 if let a = assignee {
                     LeveledAvatar(member: a, size: 32)
                 } else {
@@ -1976,46 +2023,188 @@ public enum CasalistCottage {
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t.task).font(.system(size: 13, weight: .heavy)).lineLimit(2)
+                    HStack(spacing: 6) {
+                        if isBundle {
+                            Image(systemName: "square.stack.fill")
+                                .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
+                        }
+                        Text(t.task).font(.system(size: 13, weight: .heavy)).lineLimit(2)
+                    }
                     HStack(spacing: 6) {
                         Text(t.assignee ?? "Unassigned").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                        if let due = t.dueDate {
+                        if isBundle {
+                            Text("·").foregroundStyle(P.textMuted)
+                            Text("\(doneChildren.count)/\(allBundleChildren.count) chores done")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(allChildrenDone ? P.mint : P.textMuted)
+                        } else if let due = t.dueDate {
                             Text("·").foregroundStyle(P.textMuted)
                             Text(due, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
                         }
                     }
                 }
                 Spacer()
-                Text("⚡ \(t.points)").font(.system(size: 13, weight: .heavy))
+                Text("\(isBundle ? "⚡️⚡️" : "⚡") \(displayPts)").font(.system(size: 13, weight: .heavy))
                     .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(Capsule().fill(P.peach))
+                    .background(Capsule().fill(isBundle ? P.butter.opacity(0.9) : P.peach))
                     .foregroundStyle(.white)
-                if isMineOrIManage {
+                if isMineOrIManage && (!isBundle || allChildrenDone) {
                     Button {
                         completeEarning(t)
                     } label: {
                         Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy))
                             .frame(width: 30, height: 30)
-                            .background(Circle().fill(P.peach))
+                            .background(Circle().fill(allChildrenDone ? P.mint : P.peach))
                             .foregroundStyle(.white)
                     }.buttonStyle(.row)
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(isBundle ? P.butter.opacity(0.4) : P.border, lineWidth: 1.5))
+            .contentShape(Rectangle())
+
+            // Bundles are tappable to see their chores
+            return Group {
+                if isBundle {
+                    Button { earningBundleDetail = t } label: { row }
+                        .buttonStyle(.plain)
+                } else {
+                    row
+                }
+            }
+        }
+
+        @ViewBuilder
+        private func bundleDetailSheet(_ bundle: TaskItem) -> some View {
+            let children = allTodos.filter { $0.parentUid == bundle.uid }.sorted { !$0.isCompleted && $1.isCompleted }
+            let color: Color = {
+                switch bundle.category.lowercased() {
+                case "chores": return Color(rgb: 0x4CAF82)
+                case "home": return Color(rgb: 0x5B9BD5)
+                case "maintenance": return Color(rgb: 0xE8A838)
+                case "family": return Color(rgb: 0xC87DD4)
+                default: return Color(rgb: 0x4CAF82)
+                }
+            }()
+            let doneCount = children.filter { $0.isCompleted }.count
+            let totalCount = children.count
+
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // Header
+                            HStack(spacing: 10) {
+                                RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 5, height: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(bundle.task).font(.system(size: 22, weight: .heavy))
+                                    Text("\(doneCount)/\(totalCount) chores done · \(bundle.assignee ?? "Unassigned")")
+                                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
+                                }
+                                Spacer()
+                                if bundle.points > 0 {
+                                    HStack(spacing: 3) {
+                                        Text("⚡️⚡️").font(.system(size: 9))
+                                        Text("+\(bundle.points) bonus")
+                                    }
+                                    .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(P.butter.opacity(0.9)))
+                                }
+                            }
+                            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 16)
+
+                            // Progress bar
+                            if totalCount > 0 {
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 4).fill(P.surfaceAlt).frame(height: 6)
+                                        RoundedRectangle(cornerRadius: 4).fill(color)
+                                            .frame(width: geo.size.width * CGFloat(doneCount) / CGFloat(totalCount), height: 6)
+                                    }
+                                }
+                                .frame(height: 6)
+                                .padding(.horizontal, 20).padding(.bottom, 16)
+                            }
+
+                            // Chore list
+                            VStack(spacing: 0) {
+                                ForEach(children, id: \.uid) { child in
+                                    HStack(spacing: 12) {
+                                        if child.isCompleted {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 22)).foregroundStyle(color)
+                                        } else {
+                                            Circle().stroke(color, lineWidth: 2).frame(width: 22, height: 22)
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(child.task)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(child.isCompleted ? P.textDim : P.text)
+                                                .strikethrough(child.isCompleted, color: P.textDim)
+                                            if child.points > 0 {
+                                                Text("+\(child.points) pts").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textDim)
+                                            }
+                                        }
+                                        Spacer()
+                                        if child.isCompleted {
+                                            Text("Done").font(.system(size: 10, weight: .heavy)).foregroundStyle(color)
+                                        }
+                                    }
+                                    .padding(.horizontal, 16).padding(.vertical, 12)
+                                    .background(child.isCompleted ? color.opacity(0.06) : P.surface)
+                                    Divider().padding(.leading, 50)
+                                }
+                            }
+                            .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 32)
+                        }
+                    }
+                }
+                .navigationTitle("Bundle details")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { earningBundleDetail = nil }
+                    }
+                }
+            }
         }
 
         private func completeEarning(_ t: TaskItem) {
-            let wasCompleted = t.isCompleted
-            let isRecurring = !t.effectiveRepeatKind.isEmpty
-            let pts = Int(t.points)
-            FamilyPoints.toggle(t, in: members)
-            try? modelContext.save()
-            let earned = isRecurring || (!wasCompleted && t.isCompleted)
-            if earned && pts > 0 {
-                celebrateLabel = "+\(pts) pts!"
-                celebrate = true
+            // Guard: already completed — no double-awarding
+            guard !t.isCompleted else { return }
+
+            if t.isChoreBundle {
+                // Bundles: repeatKind="bundle" would make FamilyPoints.toggle roll forward
+                // instead of completing. Handle bundles directly — award bonus, mark done.
+                let bonusPts = Int(t.points)
+                if bonusPts > 0, let name = t.assignee,
+                   let member = members.first(where: { $0.name.lowercased() == name.lowercased() }) {
+                    member.points += Int64(bonusPts)
+                    member.lifetimePoints += Int64(bonusPts)
+                }
+                t.isCompleted = true
+                t.completedAt = Date()
+                try? modelContext.save()
+                if bonusPts > 0 {
+                    celebrateLabel = "Bundle done! +\(bonusPts) bonus! 🎉"
+                    celebrateEmoji = "⭐"
+                    celebrate = true
+                }
+            } else {
+                // Regular task: one-way complete, never un-complete from this screen
+                let pts = Int(t.points)
+                FamilyPoints.toggle(t, in: members)
+                try? modelContext.save()
+                if pts > 0 {
+                    celebrateLabel = "+\(pts) pts!"
+                    celebrate = true
+                }
             }
         }
 
@@ -2048,6 +2237,11 @@ extension CasalistCottage {
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var newItem: String = ""
+        @State private var expandedBundles: Set<String> = []
+        @State private var showAddBundle: Bool = false
+        @State private var bundleNewItem: [String: String] = [:]
+        @State private var bundleDraftItemPoints: [String: Int] = [:]
+        @State private var bundleInlinePoints: [String: Int] = [:]
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var todos: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allGoals: FetchedResults<FamilyGoal>
@@ -2074,10 +2268,26 @@ extension CasalistCottage {
         private func passesScope(_ t: TaskItem) -> Bool { scopeAllowsEveryone ? true : isMine(t) }
 
         private var incomplete: [TaskItem] {
-            todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0) && !$0.isContainer }
+            // Regular open tasks (not module categories, not containers, not bundle children)
+            let regular = todos.filter {
+                !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0)
+                && !$0.isContainer && !$0.isChoreBundle && $0.parentUid.isEmpty
+            }
+            // Bundle containers — show if assigned to me, unassigned (anyone), or admin sees all.
+            // Unassigned bundles always appear in Mine mode since they're open for anyone to work.
+            let bundles = todos.filter {
+                guard $0.isChoreBundle else { return false }
+                if scopeAllowsEveryone { return true }
+                let assignee = ($0.assignee ?? "").trimmingCharacters(in: .whitespaces)
+                return assignee.isEmpty || isMine($0)
+            }
+            return regular + bundles
         }
         private var completed: [TaskItem] {
-            todos.filter { $0.isCompleted && !isModuleCategory($0.category) && passesScope($0) && !$0.isContainer }
+            todos.filter {
+                $0.isCompleted && !isModuleCategory($0.category) && passesScope($0)
+                && !$0.isContainer && !$0.isChoreBundle && $0.parentUid.isEmpty
+            }
         }
 
         private func isToday(_ d: Date?) -> Bool {
@@ -2100,7 +2310,7 @@ extension CasalistCottage {
             }
         }
         private var visibleItems: [TaskItem] {
-            incomplete.filter { passesKind($0) && passesTime($0) }
+            incomplete.filter { $0.repeatKind != "bundle-draft" && passesKind($0) && ($0.isChoreBundle || passesTime($0)) }
         }
 
         private var doneTodayCount: Int { completed.filter { isToday($0.dueDate) }.count }
@@ -2152,13 +2362,14 @@ extension CasalistCottage {
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
             .sheet(item: $editingTask) { t in TaskDetailView(task: t) }
+            .sheet(isPresented: $showAddBundle) { AddTaskView(startMode: "bundle") }
             .celebration(visible: $celebrate, label: celebrateLabel)
             .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
 
         private func completeTask(_ t: TaskItem) {
             let wasCompleted = t.isCompleted
-            let isRecurring = !t.effectiveRepeatKind.isEmpty
+            let isRecurring = !t.effectiveRepeatKind.isEmpty && !t.isChoreBundle
             let pts = Int(t.points)
             FamilyPoints.toggle(t, in: members)
             try? modelContext.save()
@@ -2167,6 +2378,47 @@ extension CasalistCottage {
                 celebrateLabel = "+\(pts) pts!"
                 celebrate = true
             }
+            // Check if completing this child finishes a bundle
+            checkBundleCompletion(for: t)
+        }
+
+        private func checkBundleCompletion(for child: TaskItem) {
+            guard !child.parentUid.isEmpty else { return }
+            guard let bundle = todos.first(where: { $0.uid == child.parentUid && $0.isChoreBundle }) else { return }
+            let siblings = todos.filter { $0.parentUid == bundle.uid }
+            guard !siblings.isEmpty, siblings.allSatisfy({ $0.isCompleted }) else { return }
+            guard bundle.points > 0 else { return }
+            let bonusPts = Int(bundle.points)
+            let recipientName = bundle.assignee ?? child.assignee ?? ""
+            if !recipientName.isEmpty, let member = FamilyPoints.match(name: recipientName, in: members) {
+                member.points += Int64(bonusPts)
+                member.lifetimePoints += Int64(bonusPts)
+            }
+            try? modelContext.save()
+            celebrateLabel = "Bundle done! +\(bonusPts) bonus!"
+            celebrate = true
+        }
+
+        private func addChoreToBundle(_ bundle: TaskItem) {
+            let text = (bundleNewItem[bundle.uid] ?? "").trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { return }
+            let pts = bundleInlinePoints[bundle.uid] ?? 10
+            let myName = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName
+            let chore = TaskItem(
+                context: modelContext,
+                task: text,
+                category: bundle.category,
+                points: pts,
+                createdBy: myName.trimmingCharacters(in: .whitespaces)
+            )
+            chore.parentUid = bundle.uid
+            chore.assignee = bundle.assignee
+            if let h = households.preferredTarget {
+                modelContext.assign(chore, toStoreOf: h)
+                chore.household = h
+            }
+            try? modelContext.save()
+            bundleNewItem[bundle.uid] = ""
         }
 
         private func addInlineItem() {
@@ -2231,15 +2483,40 @@ extension CasalistCottage {
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
 
+        private var bundlesInProgress: [TaskItem] {
+            todos.filter {
+                guard $0.repeatKind == "bundle-draft" && $0.parentUid.isEmpty else { return false }
+                if scopeAllowsEveryone { return true }
+                let assignee = ($0.assignee ?? "").trimmingCharacters(in: .whitespaces)
+                return assignee.isEmpty || isMine($0)
+            }
+        }
+
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 progressHero
+                addPills
                 if iAmAdmin { scopeToggle }
                 quickAddRow
                 kindFilters
                 taskList
                 recentlyDone
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var addPills: some View {
+            HStack(spacing: 10) {
+                Button { showAddTodo = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus").font(.system(size: 11, weight: .heavy))
+                        Text("New Task").font(.system(size: 13, weight: .heavy))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                    .background(Capsule().fill(P.peach))
+                }.buttonStyle(.row)
+                Spacer()
+            }
         }
 
         // MARK: – Hero
@@ -2295,20 +2572,23 @@ extension CasalistCottage {
         // MARK: – Inline quick-add
 
         private var quickAddRow: some View {
-            HStack(spacing: 10) {
-                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
-                TextField("Add a task...", text: $newItem)
-                    .font(.system(size: 14, weight: .semibold))
-                    .submitLabel(.done)
-                    .onSubmit(addInlineItem)
-                Button { addInlineItem() } label: {
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                    TextField("Add a task...", text: $newItem)
+                        .font(.system(size: 14, weight: .semibold))
+                        .submitLabel(.done)
+                        .onSubmit(addInlineItem)
+                    Button { addInlineItem() } label: {
+                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                            .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                    }
                 }
+                .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+                .background(Capsule().fill(P.surface))
+                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+
             }
-            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
-            .background(Capsule().fill(P.surface))
-            .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
         }
 
         // MARK: – Kind + time filter chips
@@ -2385,7 +2665,11 @@ extension CasalistCottage {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(visibleItems, id: \.uid) { t in
-                            taskCard(t)
+                            if t.isChoreBundle {
+                                choreBundleCard(t)
+                            } else {
+                                taskCard(t)
+                            }
                         }
                     }
                 }
@@ -2413,9 +2697,12 @@ extension CasalistCottage {
                         Button {
                             completeTask(t)
                         } label: {
-                            ZStack {
-                                Circle().stroke(color, lineWidth: 2).frame(width: 24, height: 24)
-                                Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(color).opacity(0.4)
+                            if t.isCompleted {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 24)).foregroundStyle(color)
+                            } else {
+                                Circle().stroke(color, lineWidth: 2)
+                                    .frame(width: 24, height: 24)
                             }
                         }.buttonStyle(.row)
 
@@ -2453,6 +2740,392 @@ extension CasalistCottage {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
             }.buttonStyle(.row)
+        }
+
+        // MARK: – Bundles in progress
+
+        private var bundlesInProgressSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("BUNDLES IN PROGRESS ⚡")
+                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                        .foregroundStyle(P.textDim).padding(.leading, 4)
+                    Spacer()
+                    Text("\(bundlesInProgress.count)")
+                        .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
+                }
+                ForEach(bundlesInProgress) { bundle in
+                    draftBundleCard(bundle)
+                }
+            }
+        }
+
+        private func draftBundleCard(_ bundle: TaskItem) -> some View {
+            let color = categoryColor(bundle.category)
+            let children = todos.filter { $0.parentUid == bundle.uid }
+            let newItemKey = bundle.uid
+            let newItemBinding = Binding<String>(
+                get: { bundleNewItem[newItemKey] ?? "" },
+                set: { bundleNewItem[newItemKey] = $0 }
+            )
+            let newPtsBinding = Binding<Int>(
+                get: { bundleDraftItemPoints[newItemKey] ?? 10 },
+                set: { bundleDraftItemPoints[newItemKey] = $0 }
+            )
+
+            return VStack(alignment: .leading, spacing: 10) {
+                // Header
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 4, height: 16)
+                        Text(bundle.task).font(.system(size: 16, weight: .heavy))
+                    }
+                    Spacer()
+                    if bundle.points > 0 {
+                        HStack(spacing: 3) {
+                            Text("⚡️⚡️").font(.system(size: 8))
+                            Text("+\(bundle.points) bonus")
+                        }
+                        .font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(P.butter.opacity(0.9)))
+                    }
+                    // Finalize button
+                    Button {
+                        bundle.repeatKind = "bundle"
+                        try? modelContext.save()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy))
+                            Text("Finalize").font(.system(size: 11, weight: .heavy))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(P.mint))
+                    }.buttonStyle(.row)
+                }
+
+                // Chore list
+                if children.isEmpty {
+                    Text("No chores yet — add below")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted).padding(.leading, 4)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(children.enumerated()), id: \.element.uid) { i, child in
+                            HStack(spacing: 10) {
+                                Circle().stroke(color, lineWidth: 1.5).frame(width: 16, height: 16)
+                                    .opacity(0.5)
+                                Text(child.task)
+                                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text)
+                                Spacer()
+                                if child.points > 0 {
+                                    Text("+\(child.points)")
+                                        .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
+                                }
+                                Button { child.softDelete(); try? modelContext.save() } label: {
+                                    Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(P.textMuted)
+                                }.buttonStyle(.row)
+                            }
+                            .padding(.vertical, 8).padding(.leading, 4)
+                            .overlay(alignment: .top) {
+                                if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.5)))
+                }
+
+                // Inline add with per-item points
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle").font(.system(size: 15)).foregroundStyle(P.textDim)
+                    TextField("Add a chore…", text: newItemBinding)
+                        .font(.system(size: 13, weight: .semibold))
+                        .submitLabel(.done)
+                        .onSubmit { addChoreToDraft(bundle) }
+                    // Points picker — cycles 5 → 10 → 15 → 0
+                    HStack(spacing: 4) {
+                        Button { newPtsBinding.wrappedValue = max(0, newPtsBinding.wrappedValue - 5) } label: {
+                            Image(systemName: "minus").font(.system(size: 10, weight: .heavy))
+                        }.buttonStyle(.row)
+                        Text("\(newPtsBinding.wrappedValue)pt")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.text)
+                            .frame(minWidth: 28)
+                        Button { newPtsBinding.wrappedValue = min(50, newPtsBinding.wrappedValue + 5) } label: {
+                            Image(systemName: "plus").font(.system(size: 10, weight: .heavy))
+                        }.buttonStyle(.row)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(P.surfaceAlt))
+                    Button { addChoreToDraft(bundle) } label: {
+                        Image(systemName: "arrow.up").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                            .frame(width: 26, height: 26).background(Circle().fill(color))
+                    }.buttonStyle(.row)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6).padding(.trailing, 4)
+                .background(Capsule().fill(P.surfaceAlt))
+                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+
+                HStack {
+                    Text("\(children.count) chore\(children.count == 1 ? "" : "s") added")
+                        .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted).padding(.leading, 4)
+                    Spacer()
+                    Button {
+                        children.forEach { $0.softDelete() }
+                        bundle.softDelete()
+                        try? modelContext.save()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "trash").font(.system(size: 10, weight: .heavy))
+                            Text("Delete bundle").font(.system(size: 11, weight: .heavy))
+                        }
+                        .foregroundStyle(Color.red.opacity(0.8))
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(Color.red.opacity(0.12)))
+                    }.buttonStyle(.row)
+                }
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(color.opacity(0.4), lineWidth: 1.5))
+        }
+
+        private func addChoreToDraft(_ bundle: TaskItem) {
+            let key = bundle.uid
+            let text = (bundleNewItem[key] ?? "").trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { return }
+            let pts = bundleDraftItemPoints[key] ?? 10
+            let myName = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName
+            let chore = TaskItem(
+                context: modelContext,
+                task: text,
+                category: bundle.category,
+                points: pts,
+                createdBy: myName.trimmingCharacters(in: .whitespaces)
+            )
+            chore.parentUid = bundle.uid
+            chore.assignee = bundle.assignee
+            if let h = households.preferredTarget {
+                modelContext.assign(chore, toStoreOf: h)
+                chore.household = h
+            }
+            try? modelContext.save()
+            bundleNewItem[key] = ""
+        }
+
+        // MARK: – Bundle card
+
+        private func choreBundleCard(_ bundle: TaskItem) -> some View {
+            let color = categoryColor(bundle.category)
+            let children = todos.filter { $0.parentUid == bundle.uid }.sorted { !$0.isCompleted && $1.isCompleted }
+            let doneCount = children.filter { $0.isCompleted }.count
+            let totalCount = children.count
+            let allDone = totalCount > 0 && doneCount == totalCount
+            let isExpanded = expandedBundles.contains(bundle.uid)
+
+            return VStack(spacing: 0) {
+                // Bundle header — tap to expand/collapse
+                Button {
+                    if isExpanded { expandedBundles.remove(bundle.uid) }
+                    else { expandedBundles.insert(bundle.uid) }
+                } label: {
+                    HStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 3).fill(color)
+                            .frame(width: 5).padding(.vertical, 10)
+                        HStack(spacing: 12) {
+                            // Progress ring
+                            ZStack {
+                                Circle().stroke(color.opacity(0.25), lineWidth: 3).frame(width: 28, height: 28)
+                                if totalCount > 0 {
+                                    Circle()
+                                        .trim(from: 0, to: CGFloat(doneCount) / CGFloat(totalCount))
+                                        .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                        .frame(width: 28, height: 28)
+                                        .rotationEffect(.degrees(-90))
+                                }
+                                if allDone {
+                                    Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundStyle(color)
+                                } else {
+                                    Text("\(doneCount)").font(.system(size: 9, weight: .heavy)).foregroundStyle(color)
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(bundle.task).font(.system(size: 15, weight: .heavy)).foregroundStyle(allDone ? P.textDim : P.text)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 10, weight: .heavy))
+                                        .foregroundStyle(P.textDim)
+                                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                                }
+                                Text("\(doneCount)/\(totalCount) done").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
+                            }
+
+                            Spacer(minLength: 4)
+
+                            VStack(alignment: .trailing, spacing: 4) {
+                                if let cl = memberFor(bundle.assignee) { CLAvatar(cl, size: 26) }
+                                if bundle.points > 0 {
+                                    HStack(spacing: 2) {
+                                        Text("⚡️⚡️").font(.system(size: 8))
+                                        Text("+\(bundle.points) bonus")
+                                    }
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(P.butter.opacity(0.9)))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                    }
+                }.buttonStyle(.row)
+
+                // Expanded child chores + inline add
+                if isExpanded {
+                    VStack(spacing: 0) {
+                        Rectangle().fill(P.border).frame(height: 1).padding(.leading, 19)
+                        ForEach(children, id: \.uid) { child in
+                            HStack(spacing: 12) {
+                                Button { completeTask(child) } label: {
+                                    if child.isCompleted {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 22)).foregroundStyle(color)
+                                    } else {
+                                        Circle().stroke(color, lineWidth: 2).frame(width: 22, height: 22)
+                                    }
+                                }.buttonStyle(.row)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(child.task)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(child.isCompleted ? P.textDim : P.text)
+                                        .strikethrough(child.isCompleted, color: P.textDim)
+                                    if child.points > 0 {
+                                        Text("+\(child.points) pts").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textDim)
+                                    }
+                                }
+                                Spacer()
+                                if let cl = memberFor(child.assignee) { CLAvatar(cl, size: 22) }
+                            }
+                            .padding(.leading, 54).padding(.trailing, 14).padding(.vertical, 10)
+                            .background(P.surfaceAlt.opacity(0.5))
+                            Rectangle().fill(P.border).frame(height: 1).padding(.leading, 54)
+                        }
+                        // Assignee picker (admin, shown when unassigned or to reassign)
+                        if iAmAdmin {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(P.sky)
+                                Text("Assigned to").font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
+                                Spacer()
+                                Menu {
+                                    Button("Anyone") { bundle.assignee = nil; try? modelContext.save() }
+                                    ForEach(members, id: \.uid) { m in
+                                        Button(m.name) { bundle.assignee = m.name; try? modelContext.save() }
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Text(bundle.assignee ?? "Anyone")
+                                            .font(.system(size: 12, weight: .heavy)).foregroundStyle(P.text)
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.system(size: 9, weight: .heavy)).foregroundStyle(P.textDim)
+                                    }
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(Capsule().fill(P.surfaceAlt))
+                                }
+                            }
+                            .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 8)
+                            .background(P.surfaceAlt.opacity(0.2))
+                            Rectangle().fill(P.border).frame(height: 1).padding(.leading, 14)
+                        }
+                        // Bonus points editor (admin only)
+                        if iAmAdmin {
+                            HStack(spacing: 10) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(P.butter)
+                                Text("Bonus pts").font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
+                                Spacer()
+                                HStack(spacing: 8) {
+                                    Button { bundle.points = max(0, bundle.points - 5); try? modelContext.save() } label: {
+                                        Image(systemName: "minus").font(.system(size: 11, weight: .heavy))
+                                            .frame(width: 26, height: 26).background(Circle().fill(P.surfaceAlt))
+                                    }.buttonStyle(.row)
+                                    Text("\(bundle.points) pts")
+                                        .font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text)
+                                        .frame(minWidth: 50, alignment: .center)
+                                    Button { bundle.points = min(500, bundle.points + 5); try? modelContext.save() } label: {
+                                        Image(systemName: "plus").font(.system(size: 11, weight: .heavy))
+                                            .frame(width: 26, height: 26).background(Circle().fill(P.surfaceAlt))
+                                    }.buttonStyle(.row)
+                                }
+                            }
+                            .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 8)
+                            .background(P.surfaceAlt.opacity(0.2))
+                            Rectangle().fill(P.border).frame(height: 1).padding(.leading, 14)
+                        }
+
+                        // Inline add-chore row with points picker
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(color.opacity(0.6))
+                            TextField("Add a chore to this bundle…",
+                                      text: Binding(
+                                        get: { bundleNewItem[bundle.uid] ?? "" },
+                                        set: { bundleNewItem[bundle.uid] = $0 }
+                                      ))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(P.text)
+                                .onSubmit { addChoreToBundle(bundle) }
+                            // Points picker
+                            HStack(spacing: 4) {
+                                Button { bundleInlinePoints[bundle.uid] = max(0, (bundleInlinePoints[bundle.uid] ?? 10) - 5) } label: {
+                                    Image(systemName: "minus").font(.system(size: 9, weight: .heavy))
+                                }.buttonStyle(.row)
+                                Text("\(bundleInlinePoints[bundle.uid] ?? 10)pt")
+                                    .font(.system(size: 10, weight: .heavy)).foregroundStyle(P.text)
+                                    .frame(minWidth: 26)
+                                Button { bundleInlinePoints[bundle.uid] = min(100, (bundleInlinePoints[bundle.uid] ?? 10) + 5) } label: {
+                                    Image(systemName: "plus").font(.system(size: 9, weight: .heavy))
+                                }.buttonStyle(.row)
+                            }
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(P.surfaceAlt))
+                            Button { addChoreToBundle(bundle) } label: {
+                                Image(systemName: "arrow.up").font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                                    .frame(width: 24, height: 24).background(Circle().fill(color))
+                            }.buttonStyle(.row)
+                        }
+                        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 8)
+                        .background(P.surfaceAlt.opacity(0.3))
+
+                        // Admin delete button
+                        if iAmAdmin {
+                            Button {
+                                children.forEach { $0.softDelete() }
+                                bundle.softDelete()
+                                try? modelContext.save()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "trash").font(.system(size: 10, weight: .heavy))
+                                    Text("Delete bundle").font(.system(size: 11, weight: .heavy))
+                                }
+                                .foregroundStyle(Color.red.opacity(0.8))
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.red.opacity(0.08))
+                            }.buttonStyle(.row)
+                        }
+                    }
+                }
+            }
+            .background(P.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(allDone ? color.opacity(0.5) : P.border, lineWidth: 1.5))
         }
 
         // MARK: – Recently done
@@ -2656,10 +3329,22 @@ extension CasalistCottage {
         }
 
         private func tripDateText(_ d: Date) -> String {
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.hour, .minute], from: d)
+            let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+            if cal.isDateInToday(d) {
+                if hasTime {
+                    let f = DateFormatter(); f.dateFormat = "'Today' h:mm a"
+                    return f.string(from: d)
+                }
+                return "Today"
+            }
             let f = DateFormatter()
-            if Calendar.current.isDateInToday(d) { f.dateFormat = "'Today' h:mm a" }
-            else if Calendar.current.isDateInTomorrow(d) { f.dateFormat = "'Tmrw' h:mm a" }
-            else { f.dateFormat = "MMM d · h:mm a" }
+            if cal.isDateInTomorrow(d) {
+                f.dateFormat = hasTime ? "'Tmrw' h:mm a" : "'Tmrw'"
+            } else {
+                f.dateFormat = hasTime ? "MMM d · h:mm a" : "MMM d"
+            }
             return f.string(from: d)
         }
 
@@ -5185,6 +5870,289 @@ extension CasalistCottage {
                     FamilyDedupe.mergeDuplicateMeRecords(in: moc, userName: trimmed)
                 }
             }
+        }
+    }
+
+    // MARK: - Bundle Draft Sheet
+    struct BundleDraftSheet: View {
+        @Environment(\.managedObjectContext) private var moc
+        @Environment(\.dismiss) private var dismiss
+        @AppStorage("userName") private var userName: String = ""
+        @AppStorage("meUid") private var meUid: String = ""
+        @ObservedObject var bundle: TaskItem
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)],
+                      predicate: NSPredicate(format: "deletedAt == nil"))
+        private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)],
+                      predicate: NSPredicate(format: "deletedAt == nil"))
+        private var households: FetchedResults<Household>
+        private var children: [TaskItem] {
+            (try? moc.fetch({
+                let r = NSFetchRequest<TaskItem>(entityName: "TaskItem")
+                r.predicate = NSPredicate(format: "parentUid == %@ AND deletedAt == nil", bundle.uid)
+                r.sortDescriptors = [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)]
+                return r
+            }())) ?? []
+        }
+
+        @State private var newChore = ""
+        @State private var newChorePts = 10
+        @State private var selectedAssignee: String = ""
+
+        private var dark: Bool { true }
+        @Environment(\.colorScheme) private var sys
+        @AppStorage("paletteName") private var paletteName: String = "vivid"
+        private var P: Palette { Palette.resolve(sys == .dark) }
+
+        init(bundle: TaskItem) {
+            self.bundle = bundle
+            _selectedAssignee = State(initialValue: bundle.assignee ?? "")
+        }
+
+        private var color: Color {
+            switch bundle.category.lowercased() {
+            case "chores": return Color(rgb: 0x4CAF82)
+            case "home": return Color(rgb: 0x5B9BD5)
+            case "maintenance": return Color(rgb: 0xE8A838)
+            case "family": return Color(rgb: 0xC87DD4)
+            default: return Color(rgb: 0x4CAF82)
+            }
+        }
+
+        var body: some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // Header
+                            HStack(spacing: 10) {
+                                RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 5, height: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(bundle.task)
+                                        .font(.system(size: 22, weight: .heavy)).foregroundStyle(P.text)
+                                    Text(bundle.category)
+                                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(P.textDim)
+                                }
+                                Spacer()
+                                // Bonus badge
+                                if bundle.points > 0 {
+                                    HStack(spacing: 3) {
+                                        Text("⚡️⚡️").font(.system(size: 9))
+                                        Text("+\(bundle.points) bonus")
+                                    }
+                                    .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(Color(rgb: 0xE8B040).opacity(0.9)))
+                                }
+                            }
+                            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 16)
+
+                            // Chores list
+                            VStack(spacing: 0) {
+                                if children.isEmpty {
+                                    Text("No chores yet — add one below")
+                                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(P.textMuted)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 20).padding(.vertical, 14)
+                                } else {
+                                    ForEach(children, id: \.uid) { child in
+                                        HStack(spacing: 12) {
+                                            Circle().stroke(color, lineWidth: 1.5).frame(width: 18, height: 18).opacity(0.5)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(child.task).font(.system(size: 14, weight: .semibold)).foregroundStyle(P.text)
+                                                if child.points > 0 {
+                                                    Text("+\(child.points) pts").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textDim)
+                                                }
+                                            }
+                                            Spacer()
+                                            Button {
+                                                child.softDelete()
+                                                try? moc.save()
+                                            } label: {
+                                                Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                                            }.buttonStyle(.plain)
+                                        }
+                                        .padding(.horizontal, 20).padding(.vertical, 12)
+                                        .background(P.surface)
+                                        Divider().padding(.leading, 50)
+                                    }
+                                }
+
+                                // Inline add
+                                HStack(spacing: 10) {
+                                    Image(systemName: "plus.circle").font(.system(size: 16)).foregroundStyle(color.opacity(0.7))
+                                    TextField("Add a chore…", text: $newChore)
+                                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(P.text)
+                                        .submitLabel(.done)
+                                        .onSubmit { addChore() }
+                                    HStack(spacing: 6) {
+                                        Button { newChorePts = max(0, newChorePts - 5) } label: {
+                                            Image(systemName: "minus").font(.system(size: 10, weight: .heavy))
+                                        }.buttonStyle(.plain)
+                                        Text("\(newChorePts)pt")
+                                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.text)
+                                            .frame(minWidth: 30, alignment: .center)
+                                        Button { newChorePts = min(100, newChorePts + 5) } label: {
+                                            Image(systemName: "plus").font(.system(size: 10, weight: .heavy))
+                                        }.buttonStyle(.plain)
+                                    }
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(P.surfaceAlt))
+                                    Button { addChore() } label: {
+                                        Image(systemName: "arrow.up").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                                            .frame(width: 28, height: 28).background(Circle().fill(color))
+                                    }.buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .background(P.surface)
+                            }
+                            .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
+                            .padding(.horizontal, 16)
+
+                            // Bonus pts
+                            HStack(spacing: 12) {
+                                Image(systemName: "bolt.fill").font(.system(size: 13, weight: .heavy)).foregroundStyle(Color(rgb: 0xE8B040))
+                                Text("Completion bonus").font(.system(size: 14, weight: .semibold)).foregroundStyle(P.text)
+                                Spacer()
+                                HStack(spacing: 10) {
+                                    Button { bundle.points = max(0, bundle.points - 5); try? moc.save() } label: {
+                                        Image(systemName: "minus").font(.system(size: 12, weight: .heavy))
+                                            .frame(width: 30, height: 30).background(Circle().fill(P.surfaceAlt))
+                                    }.buttonStyle(.plain)
+                                    Text("\(bundle.points) pts")
+                                        .font(.system(size: 14, weight: .heavy)).foregroundStyle(P.text)
+                                        .frame(minWidth: 55, alignment: .center)
+                                    Button { bundle.points = min(500, bundle.points + 5); try? moc.save() } label: {
+                                        Image(systemName: "plus").font(.system(size: 12, weight: .heavy))
+                                            .frame(width: 30, height: 30).background(Circle().fill(P.surfaceAlt))
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 16)
+                            .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+                            .padding(.horizontal, 16).padding(.top, 12)
+
+                            // Assignee picker
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("ASSIGN TO").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim)
+                                    .padding(.horizontal, 20).padding(.top, 16)
+                                VStack(spacing: 0) {
+                                    // "Anyone" option
+                                    Button {
+                                        withAnimation { selectedAssignee = "" }
+                                    } label: {
+                                        HStack {
+                                            Text("Anyone (unassigned)").font(.system(size: 14, weight: .semibold)).foregroundStyle(P.text)
+                                            Spacer()
+                                            if selectedAssignee.isEmpty {
+                                                Image(systemName: "checkmark.circle.fill").foregroundStyle(color)
+                                            }
+                                        }
+                                        .padding(.horizontal, 16).padding(.vertical, 12)
+                                        .background(selectedAssignee.isEmpty ? color.opacity(0.08) : Color.clear)
+                                        .contentShape(Rectangle())
+                                    }.buttonStyle(.plain)
+                                    Divider().padding(.leading, 16)
+                                    ForEach(members, id: \.uid) { m in
+                                        Button {
+                                            withAnimation { selectedAssignee = m.name }
+                                        } label: {
+                                            HStack(spacing: 10) {
+                                                CLAvatar(m.asCLMember, size: 28)
+                                                Text(m.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(P.text)
+                                                Spacer()
+                                                if selectedAssignee == m.name {
+                                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(color)
+                                                }
+                                            }
+                                            .padding(.horizontal, 16).padding(.vertical, 10)
+                                            .background(selectedAssignee == m.name ? color.opacity(0.08) : Color.clear)
+                                            .contentShape(Rectangle())
+                                        }.buttonStyle(.plain)
+                                        if m != members.last { Divider().padding(.leading, 54) }
+                                    }
+                                }
+                                .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
+                                .padding(.horizontal, 16)
+                            }
+
+                            // Done / Assign button
+                            Button {
+                                bundle.assignee = selectedAssignee.isEmpty ? nil : selectedAssignee
+                                // Only finalize (leave agenda → My To-Do) when assigned to someone
+                                if !selectedAssignee.isEmpty {
+                                    bundle.repeatKind = "bundle"
+                                }
+                                // No assignee = stays as bundle-draft, remains in agenda
+                                try? moc.save()
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: selectedAssignee.isEmpty ? "square.stack.fill" : "checkmark.circle.fill")
+                                        .font(.system(size: 15, weight: .heavy))
+                                    Text(selectedAssignee.isEmpty ? "Save draft" : "Assign to \(selectedAssignee)")
+                                        .font(.system(size: 15, weight: .heavy))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Capsule().fill(selectedAssignee.isEmpty ? P.textDim : color))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 32)
+
+                            // Delete
+                            Button {
+                                children.forEach { $0.softDelete() }
+                                bundle.softDelete()
+                                try? moc.save()
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "trash").font(.system(size: 12, weight: .heavy))
+                                    Text("Delete bundle").font(.system(size: 13, weight: .heavy))
+                                }
+                                .foregroundStyle(Color.red.opacity(0.7))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16).padding(.bottom, 20)
+                        }
+                    }
+                }
+                .navigationTitle("Building bundle")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { dismiss() }
+                    }
+                }
+            }
+        }
+
+        private func addChore() {
+            let text = newChore.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { return }
+            let myName = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName
+            let chore = TaskItem(
+                context: moc,
+                task: text,
+                category: bundle.category,
+                points: newChorePts,
+                createdBy: myName.trimmingCharacters(in: .whitespaces)
+            )
+            chore.parentUid = bundle.uid
+            chore.assignee = bundle.assignee
+            if let h = households.preferredTarget {
+                moc.assign(chore, toStoreOf: h)
+                chore.household = h
+            }
+            try? moc.save()
+            newChore = ""
         }
     }
 }

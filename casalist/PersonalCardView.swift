@@ -25,6 +25,7 @@ struct PersonalCardView: View {
     ) private var allGoals: FetchedResults<FamilyGoal>
 
     @State private var showEditPhoto = false
+    @State private var showSharePreview = false
     @State private var showShareSheet = false
     @State private var shareImage: UIImage? = nil
 
@@ -149,6 +150,16 @@ struct PersonalCardView: View {
             }
         }
         .sheet(isPresented: $showEditPhoto) { ProfilePhotoSheet() }
+        .sheet(isPresented: $showSharePreview) {
+            if let img = shareImage {
+                SharePreviewSheet(image: img, onShare: {
+                    showSharePreview = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        showShareSheet = true
+                    }
+                })
+            }
+        }
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage { ShareSheet(items: [img]) }
         }
@@ -328,7 +339,7 @@ struct PersonalCardView: View {
 
             HStack(spacing: 0) {
                 splitCol(value: "\(thisYearCompleted.count)", label: "TASKS\nDONE")
-                splitCol(value: "\(pointsThisYear)", label: "POINTS\nEARNED")
+                splitCol(value: "\(me?.points ?? 0)", label: "CURRENT\nPOINTS")
                 splitCol(value: "\(goalsRedeemedThisYear)", label: "GOALS\nREDEEMED")
             }
             .padding(.top, 2)
@@ -420,11 +431,14 @@ struct PersonalCardView: View {
             projectedPoints: projectedPoints,
             palette: P
         )
+        // ImageRenderer must run on the main actor. Capture image synchronously
+        // here (we're already on main), then show the preview sheet.
         let renderer = ImageRenderer(content: snapshot.frame(width: 390, height: 780))
-        renderer.scale = 3
+        renderer.scale = UIScreen.main.scale
+        renderer.proposedSize = ProposedViewSize(width: 390, height: 780)
         if let img = renderer.uiImage {
             shareImage = img
-            showShareSheet = true
+            showSharePreview = true
         }
     }
 }
@@ -603,6 +617,55 @@ private struct CardSnapshotView: View {
             Text(label).font(.system(size: 8, weight: .heavy)).tracking(0.5)
                 .foregroundStyle(.white.opacity(0.45))
         }.frame(maxWidth: .infinity)
+    }
+}
+
+// ── Share preview sheet ───────────────────────────────────────────────────────
+
+private struct SharePreviewSheet: View {
+    let image: UIImage
+    let onShare: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(rgb: 0x080808).ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 20) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
+                            .padding(.horizontal, 16)
+
+                        Button(action: onShare) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .heavy))
+                                Text("Share")
+                                    .font(.system(size: 16, weight: .heavy))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(Capsule().fill(Color(rgb: 0xF4845F)))
+                            .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .padding(.vertical, 20)
+                }
+            }
+            .navigationTitle("Your Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        }
     }
 }
 

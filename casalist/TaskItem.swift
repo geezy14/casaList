@@ -46,6 +46,9 @@ public final class TaskItem: NSManagedObject {
     /// the explicit `dueDate != nil` clause in the trip filters.
     var isContainer: Bool { points == -1 && parentUid.isEmpty }
 
+    /// True when this task is a chore-bundle container (groups child chores with a completion bonus).
+    var isChoreBundle: Bool { repeatKind == "bundle" && parentUid.isEmpty }
+
     public override func awakeFromInsert() {
         super.awakeFromInsert()
         setPrimitiveValue(UUID().uuidString, forKey: "uid")

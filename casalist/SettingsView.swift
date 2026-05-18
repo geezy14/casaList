@@ -207,6 +207,9 @@ struct SettingsView: View {
             householdSection
             familySection
             appearanceSection
+            section(title: "GAME RULES") {
+                GameRulesSettingsSection(isAdmin: iAmAdmin)
+            }
             NotificationsSettingsSection()
             PrivacySettingsSection()
             ScheduleSettingsSection()
