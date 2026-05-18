@@ -557,35 +557,142 @@ public struct FamilyListView: View {
         }.buttonStyle(.row)
     }
 
-    private var hero: some View {
-        HStack(alignment: .center, spacing: 18) {
-            ZStack {
-                Circle().fill(Color.white.opacity(0.22)).frame(width: 86, height: 86)
-                Image(systemName: "tray.full.fill")
-                    .font(.system(size: 32, weight: .medium))
-                    .foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Family list")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded)).opacity(0.85)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(openItems.count)")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
-                    Text(openItems.count == 1 ? "up for grabs" : "up for grabs")
-                        .font(.system(size: 14, weight: .medium, design: .rounded)).opacity(0.85)
-                }
-                Text(openItems.isEmpty ? "Add something the family can pick up" : "Tap Claim to make it yours")
-                    .font(.system(size: 13, weight: .medium, design: .rounded)).opacity(0.85)
-            }
-            Spacer(minLength: 0)
+    // MARK: – Rings hero (mirrors MyToDo idea-D)
+
+    /// Family List identity color -- matches the dashboard tile.
+    private var familyListOrange: Color { Color(rgb: 0xE67E22) }
+
+    /// Total / done across non-container family items (loose + nested).
+    private var totalFamilyOpen: Int {
+        allTasks.filter {
+            $0.category.lowercased() == "family"
+                && $0.deletedAt == nil
+                && !$0.isContainer
+                && !$0.isCompleted
+        }.count
+    }
+    private var totalFamilyDone: Int {
+        allTasks.filter {
+            $0.category.lowercased() == "family"
+                && $0.deletedAt == nil
+                && !$0.isContainer
+                && $0.isCompleted
+        }.count
+    }
+    private var allFamilyPercent: Double {
+        let total = totalFamilyOpen + totalFamilyDone
+        return total == 0 ? 0 : Double(totalFamilyDone) / Double(total)
+    }
+
+    /// Across all open outings, ratio of nested items that are done.
+    private var outingsProgressPercent: Double {
+        var done = 0, total = 0
+        for trip in trips {
+            let kids = allTasks.filter { $0.parentUid == trip.uid && $0.deletedAt == nil }
+            total += kids.count
+            done += kids.filter { $0.isCompleted }.count
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 22).padding(.vertical, 22)
-        // Matches the orange Family List tile on the dashboard so the
-        // tile -> screen handoff is visually continuous.
-        .background(Color(rgb: 0xE67E22))
-        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .shadow(color: Color(rgb: 0xE67E22).opacity(0.32), radius: 18, x: 0, y: 8)
+        return total == 0 ? 0 : Double(done) / Double(total)
+    }
+    private var outingsActiveCount: Int { trips.count }
+
+    /// Total loose items (claimed + unclaimed). Used as the "Loose" ring
+    /// denominator. The numerator is the count that already has an
+    /// assignee (someone picked it up).
+    private var allLooseItems: [TaskItem] {
+        allTasks.filter {
+            $0.category.lowercased() == "family"
+                && $0.parentUid.isEmpty
+                && $0.dueDate == nil
+                && !$0.isContainer
+                && !$0.isCompleted
+        }
+    }
+    private var looseClaimRate: Double {
+        let total = allLooseItems.count
+        guard total > 0 else { return 0 }
+        let claimed = allLooseItems.filter {
+            !($0.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }.count
+        return Double(claimed) / Double(total)
+    }
+    private var looseClaimedCount: Int {
+        allLooseItems.filter {
+            !($0.assignee ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }.count
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Family list 🪴")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(P.text)
+            HStack(spacing: 18) {
+                activityRingStack
+                VStack(alignment: .leading, spacing: 10) {
+                    ringLegend(label: "All",
+                               tint: familyListOrange,
+                               done: totalFamilyDone,
+                               total: totalFamilyOpen + totalFamilyDone)
+                    ringLegend(label: "Outings",
+                               tint: P.mint,
+                               done: Int((outingsProgressPercent * 100).rounded()),
+                               total: 100,
+                               trailingLabel: outingsActiveCount == 1 ? "1 active" : "\(outingsActiveCount) active")
+                    ringLegend(label: "Loose",
+                               tint: P.coral,
+                               done: looseClaimedCount,
+                               total: allLooseItems.count)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    /// Apple-Fitness style concentric rings. Outer = all family items,
+    /// middle = outings progress, inner = loose-claim rate. Faint
+    /// track behind each so empty rings still read.
+    private var activityRingStack: some View {
+        ZStack {
+            activityRing(diameter: 140, lineWidth: 14, percent: allFamilyPercent,      tint: familyListOrange)
+            activityRing(diameter: 104, lineWidth: 14, percent: outingsProgressPercent, tint: P.mint)
+            activityRing(diameter: 68,  lineWidth: 12, percent: looseClaimRate,        tint: P.coral)
+        }
+        .frame(width: 140, height: 140)
+        .animation(.easeInOut(duration: 0.5), value: allFamilyPercent)
+        .animation(.easeInOut(duration: 0.5), value: outingsProgressPercent)
+        .animation(.easeInOut(duration: 0.5), value: looseClaimRate)
+    }
+
+    private func activityRing(diameter: CGFloat, lineWidth: CGFloat,
+                              percent: Double, tint: Color) -> some View {
+        ZStack {
+            Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    /// Legend row. `trailingLabel` lets the Outings ring show a custom
+    /// count (e.g. "2 active") instead of the percent-as-fraction.
+    private func ringLegend(label: String, tint: Color, done: Int, total: Int,
+                            trailingLabel: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(tint).frame(width: 10, height: 10)
+            Text(label)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(P.text)
+            Spacer(minLength: 4)
+            Text(trailingLabel ?? "\(done)/\(total)")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                .monospacedDigit()
+        }
+        .opacity(total == 0 ? 0.55 : 1)
     }
 
     private var openSection: some View {
