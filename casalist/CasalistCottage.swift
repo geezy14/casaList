@@ -3595,15 +3595,17 @@ extension CasalistCottage {
         private var active: [TaskItem] { maintenanceTasks.filter { !$0.isCompleted } }
         private var done: [TaskItem] { maintenanceTasks.filter { $0.isCompleted } }
         private var overdue: [TaskItem] {
-            active.filter { ($0.dueDate ?? .distantFuture) < Date() }
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            return active.filter { ($0.dueDate ?? .distantFuture) < startOfToday }
         }
         private var dueSoon: [TaskItem] {
-            let now = Date()
-            let weekOut = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-            return active.filter { ($0.dueDate ?? .distantFuture) >= now && ($0.dueDate ?? .distantFuture) <= weekOut }
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            let weekOut = Calendar.current.date(byAdding: .day, value: 7, to: startOfToday) ?? startOfToday
+            return active.filter { ($0.dueDate ?? .distantFuture) >= startOfToday && ($0.dueDate ?? .distantFuture) <= weekOut }
         }
         private var laterItems: [TaskItem] {
-            let weekOut = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            let weekOut = Calendar.current.date(byAdding: .day, value: 7, to: startOfToday) ?? startOfToday
             return active.filter { ($0.dueDate ?? .distantFuture) > weekOut }
         }
 
