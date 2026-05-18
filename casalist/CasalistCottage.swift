@@ -1159,14 +1159,13 @@ public enum CasalistCottage {
                         tile(bg: P.lavender, emoji: "🏠", label: "Home", big: "\(homeTileCount)", suffix: "open", sub: homeNextItem, badge: homeOverdueCount > 0 ? "\(homeOverdueCount) DUE" : nil)
                     }.buttonStyle(.row)
                     Button { showMyToDo = true } label: {
-                        // Anchor keeps the My To-Do tile as a solid cobalt
-                        // primary — its blue has enough identity on its own
-                        // and the gradient washed it into the brick-red coral.
+                        // Anchor keeps the My To-Do tile as a solid butter
+                        // (warm amber) — that's the original Anchor look.
                         // Every other palette gets the sunrise heroGradient.
-                        tile(bg: P.peach,
+                        tile(bg: paletteName == "anchor" ? P.butter : P.peach,
                              gradient: paletteName == "anchor" ? nil : P.heroGradient,
-                             shadowColor: paletteName == "anchor" ? P.peach : P.coral,
-                             useWhiteText: true,
+                             shadowColor: paletteName == "anchor" ? P.butter : P.coral,
+                             useWhiteText: paletteName != "anchor",
                              emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.row)
                     Button { showReminders = true } label: {
@@ -2655,13 +2654,13 @@ extension CasalistCottage {
                         .background(
                             Group {
                                 if paletteName == "anchor" {
-                                    Circle().fill(P.peach)
+                                    Circle().fill(P.butter)
                                 } else {
                                     Circle().fill(P.heroGradient)
                                 }
                             }
                         )
-                        .shadow(color: (paletteName == "anchor" ? P.peach : P.coral).opacity(0.45), radius: 8, y: 4)
+                        .shadow(color: (paletteName == "anchor" ? P.butter : P.coral).opacity(0.45), radius: 8, y: 4)
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -2733,7 +2732,7 @@ extension CasalistCottage {
                     .background(
                         Group {
                             if paletteName == "anchor" {
-                                Capsule().fill(P.peach)
+                                Capsule().fill(P.butter)
                             } else {
                                 Capsule().fill(P.heroGradient)
                             }
@@ -2781,14 +2780,14 @@ extension CasalistCottage {
                 // other themes get the brand sunrise gradient.
                 Group {
                     if paletteName == "anchor" {
-                        P.peach
+                        P.butter
                     } else {
                         P.heroGradient
                     }
                 }
             )
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: (paletteName == "anchor" ? P.peach : P.coral).opacity(0.28), radius: 18, x: 0, y: 8)
+            .shadow(color: (paletteName == "anchor" ? P.butter : P.coral).opacity(0.28), radius: 18, x: 0, y: 8)
         }
 
         // MARK: – Scope toggle (admin only)
