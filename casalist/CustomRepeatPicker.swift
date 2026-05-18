@@ -90,14 +90,16 @@ struct CustomRepeatPicker: View {
     }
 
     private var weekdaySelector: some View {
-        // Two-row toggleable weekday chips (Sun → Sat). Tapping toggles
-        // membership; at least one day must remain selected — if the user
-        // tries to deselect the last day, we silently keep it.
-        let shorts = Calendar.current.veryShortStandaloneWeekdaySymbols  // ["S","M",...,"S"]
+        // Toggleable weekday chips. Order follows the app-wide Saturday-first
+        // convention (see SaturdayFirstCalendar.swift): Sat, Sun, Mon..Fri.
+        // Internal weekday ints stay in iOS convention (1=Sun..7=Sat).
+        // At least one day must remain selected.
+        let shorts = Calendar.current.veryShortStandaloneWeekdaySymbols  // index = wd-1
+        let order: [Int] = [7, 1, 2, 3, 4, 5, 6]
         return VStack(alignment: .leading, spacing: 6) {
             Text("On these days").font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 6) {
-                ForEach(1...7, id: \.self) { wd in
+                ForEach(order, id: \.self) { wd in
                     let isOn = selectedWeekdays.contains(wd)
                     Button {
                         if isOn {
