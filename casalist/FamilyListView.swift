@@ -211,7 +211,7 @@ public struct FamilyListView: View {
         let now = Date()
         return allTasks.filter {
             $0.category == StatusPing.category
-                && $0.deletedAtValue == nil
+                && $0.deletedAt == nil
                 && ($0.dueDate ?? .distantPast) > now
         }.sorted { $0.createdAt > $1.createdAt }
     }

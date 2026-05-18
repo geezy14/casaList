@@ -1,0 +1,15 @@
+What's New in 2.1
+
+- Announcements now default to 4-hour banner (was push-only). Minimum banner time is 1 hour to account for CloudKit delivery latency in production.
+- Removed 15-minute announcement option -- too short to be useful.
+- Family calendar events now sync correctly in production (CloudKit schema fix for CD_endDate on FamilyEvent).
+- Kid mode no longer gets stuck after a soft-delete/restore cycle.
+- Fixed: MyToDo was showing "Today 12:00 AM" for tasks with no time set.
+- Fixed: Announcements banner no longer shows stale soft-deleted records.
+
+What to Test
+
+- Create an announcement with a 4-hour banner. Verify it shows on another device.
+- Create a family calendar event. Verify it appears on all devices within 30 seconds.
+- If you have a kid-mode member, verify switching roles in/out of kid mode sticks across app restarts.
+- Add a task with no specific time. Verify "Today" shows without "12:00 AM".

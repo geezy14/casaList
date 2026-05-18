@@ -6,7 +6,7 @@ enum FamilyPermissions {
     static func currentMember<S: Sequence>(members: S, userName: String, meUid: String) -> FamilyMember?
     where S.Element == FamilyMember {
         if !meUid.isEmpty, let u = UUID(uuidString: meUid),
-           let m = members.first(where: { $0.uid == u }) {
+           let m = members.first(where: { $0.uid == u && $0.deletedAt == nil }) {
             return m
         }
         let trimmed = userName.trimmingCharacters(in: .whitespaces).lowercased()

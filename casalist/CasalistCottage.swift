@@ -2416,10 +2416,19 @@ extension CasalistCottage {
             return members.first { $0.name.lowercased() == assignee.lowercased() }?.asCLMember
         }
         private func whenString(_ d: Date) -> String {
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.hour, .minute], from: d)
+            let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
             let f = DateFormatter()
-            if Calendar.current.isDateInToday(d) { f.dateFormat = "h:mm a"; return "Today \(f.string(from: d))" }
-            if Calendar.current.isDateInTomorrow(d) { f.dateFormat = "h:mm a"; return "Tomorrow \(f.string(from: d))" }
-            f.dateFormat = "EEE MMM d"
+            if cal.isDateInToday(d) {
+                if hasTime { f.dateFormat = "h:mm a"; return "Today \(f.string(from: d))" }
+                return "Today"
+            }
+            if cal.isDateInTomorrow(d) {
+                if hasTime { f.dateFormat = "h:mm a"; return "Tomorrow \(f.string(from: d))" }
+                return "Tomorrow"
+            }
+            f.dateFormat = hasTime ? "EEE MMM d · h:mm a" : "EEE MMM d"
             return f.string(from: d)
         }
 
@@ -5243,10 +5252,10 @@ extension CasalistCottage {
         @Environment(\.managedObjectContext) private var moc
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)]) private var members: FetchedResults<FamilyMember>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)]) private var allTodos: FetchedResults<TaskItem>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)]) private var goals: FetchedResults<FamilyGoal>
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)]) private var households: FetchedResults<Household>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var goals: FetchedResults<FamilyGoal>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         @State private var redeemTarget: FamilyGoal? = nil
         @State private var celebrate: Bool = false
         @State private var confettiFlying: Bool = false
@@ -6139,7 +6148,7 @@ extension CasalistCottage {
         // UserDefaults at body-eval time.
         @AppStorage("paletteName") private var paletteName: String = Palette.defaultName
         @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
-        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)])
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
         private var members: FetchedResults<FamilyMember>
         @State private var showNamePrompt: Bool = false
         @State private var pendingName: String = ""

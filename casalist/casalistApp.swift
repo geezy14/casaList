@@ -165,7 +165,10 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         }
         if let dead = matches.min(by: { $0.createdAt < $1.createdAt }) {
             dead.restore()
-            dead.roleLevel = FamilyRole.standard.rawValue
+            // Preserve the role the admin set — do NOT force .standard here.
+            // Forcing it caused a CloudKit race: the admin's .kid setting would
+            // sync back and overwrite, then the next self-heal would force
+            // .standard again, creating an infinite flip-flop.
             UserDefaults.standard.set(dead.uid.uuidString, forKey: "meUid")
             try? context.save()
             return
@@ -459,8 +462,14 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             if target.deletedAtValue != nil {
                 target.restore()
                 appendShareLog("addJoinerAsFamilyMember: restored soft-deleted \(displayName)")
+                // Only reset to standard on restore if the role is kid — a
+                // fresh rejoin shouldn't force-demote an admin, but it should
+                // unblock someone accidentally left in kid mode with no admin
+                // present to fix it.
+                if target.level == .kid { target.roleLevel = FamilyRole.standard.rawValue }
             }
-            target.roleLevel = FamilyRole.standard.rawValue
+            // Do NOT force-set roleLevel for live records — the admin may have
+            // intentionally set kid/admin and CloudKit is the source of truth.
             UserDefaults.standard.set(target.uid.uuidString, forKey: "meUid")
             if let metadata, target.userID.isEmpty {
                 Task { @MainActor in

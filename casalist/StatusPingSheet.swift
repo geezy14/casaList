@@ -28,7 +28,7 @@ struct StatusPingSheet: View {
     }
 
     @State private var customText: String = ""
-    @State private var customExpiry: AnnouncementExpiry = .none
+    @State private var customExpiry: AnnouncementExpiry = .fourHours
     @State private var locationError: String? = nil
     @StateObject private var locator = OneShotLocator()
 
@@ -158,8 +158,7 @@ struct StatusPingSheet: View {
             // default to fourHours and let the user override.
             let remaining = due.timeIntervalSinceNow
             switch remaining {
-            case ..<900:                customExpiry = .fifteenMin   // <15 min left
-            case 900..<3600:            customExpiry = .fifteenMin
+            case ..<3600:               customExpiry = .oneHour
             case 3600..<(4 * 3600):     customExpiry = .oneHour
             case (4 * 3600)..<(8 * 3600): customExpiry = .fourHours
             default:                    customExpiry = .untilTomorrow
@@ -221,16 +220,15 @@ struct StatusPingSheet: View {
 /// just controls how long the message lingers as a banner in the
 /// Family tab. `.none` means push-only, no banner.
 enum AnnouncementExpiry: String, CaseIterable {
-    case none, fifteenMin, oneHour, fourHours, eightHours, untilTomorrow
+    case oneHour, fourHours, eightHours, untilTomorrow, none
 
     var label: String {
         switch self {
-        case .none:            return "Push only — no banner"
-        case .fifteenMin:      return "Push + banner, 15 min"
-        case .oneHour:         return "Push + banner, 1 hour"
-        case .fourHours:       return "Push + banner, 4 hours"
-        case .eightHours:      return "Push + banner, 8 hours"
-        case .untilTomorrow:   return "Push + banner, until tomorrow"
+        case .oneHour:         return "Banner, 1 hour"
+        case .fourHours:       return "Banner, 4 hours"
+        case .eightHours:      return "Banner, 8 hours"
+        case .untilTomorrow:   return "Banner, until tomorrow"
+        case .none:            return "Push only, no banner"
         }
     }
 
@@ -239,7 +237,6 @@ enum AnnouncementExpiry: String, CaseIterable {
         let cal = Calendar.current
         switch self {
         case .none:          return nil
-        case .fifteenMin:    return now.addingTimeInterval(15 * 60)
         case .oneHour:       return now.addingTimeInterval(3600)
         case .fourHours:     return now.addingTimeInterval(4 * 3600)
         case .eightHours:    return now.addingTimeInterval(8 * 3600)
