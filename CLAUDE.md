@@ -24,6 +24,11 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > covering what shipped and what to know going in next time. When this section
 > hits 6 entries, rotate the oldest to `docs/progress-log-archive.md`.
 
+> **Versioning rule reminder:** `MARKETING_VERSION` stays put across builds.
+> Only `CURRENT_PROJECT_VERSION` bumps per TestFlight upload. See the
+> "testflight it" section below for the full rule. **Do not bump
+> `MARKETING_VERSION` without Geezy asking.**
+
 ### 2026-05-16 — 1.6 + 1.7 + 1.8 all shipped to TF in one day
 Marathon all-day session. Shipped THREE TestFlight builds in one day
 (1.6 mid-session, 1.7 mid-session, 1.8 end-of-session) plus the
@@ -758,10 +763,27 @@ If Xcode's auto-signing blanks `DEVELOPMENT_TEAM = ""` in the Debug config durin
 
 ### "testflight it" — archive + upload to TestFlight
 
+> **VERSION-BUMPING RULE — read this every time, do not freelance.**
+>
+> - `MARKETING_VERSION` (user-facing "version", e.g. `2.0`) **DOES NOT BUMP**
+>   unless Geezy explicitly says so. Same value across many builds.
+> - `CURRENT_PROJECT_VERSION` (Apple's build counter) IS the one that bumps,
+>   and only this one. Just needs to be strictly higher than the last upload.
+>
+> Users see `2.0 (1)`, `2.0 (2)`, `2.0 (3)`... — same version, climbing build.
+>
+> Decimal build numbers (`2.2`, `2.3`) sometimes get parsed weirdly by Apple's
+> API (saw it on 2026-05-17 — a `2.2` upload appeared as `3` in App Store
+> Connect). Clean integers (`3`, `4`, `5`...) are safer.
+>
+> **2026-05-17 incident:** Marketing version got bumped `2.0 → 2.1 → 2.2` in
+> a single day for what should have been three builds of `2.0`. Geezy caught
+> it and called it theater. Don't repeat.
+
 When Geezy says "testflight it" (or similar):
 
 1. Commit current changes to `main` (do NOT push to remote unless Geezy explicitly says to push).
-2. Bump `CURRENT_PROJECT_VERSION` (build number) in `casalist.xcodeproj/project.pbxproj` — must be higher than the last TestFlight build, never reuse.
+2. Bump `CURRENT_PROJECT_VERSION` (build number) in `casalist.xcodeproj/project.pbxproj` — must be higher than the last TestFlight build, never reuse. **Leave `MARKETING_VERSION` alone unless Geezy explicitly asks.**
 3. Write release notes to `testflight-notes-<build>.txt` at the project root (covers What's New + What's Fixed + What to Test).
 4. Archive Release config:
    ```bash
