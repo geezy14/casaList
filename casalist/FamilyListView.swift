@@ -558,23 +558,32 @@ public struct FamilyListView: View {
     }
 
     private var hero: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .center, spacing: 18) {
             ZStack {
-                Circle().fill(Color.white.opacity(0.22)).frame(width: 76, height: 76)
-                Image(systemName: "tray.full.fill").font(.system(size: 30)).foregroundStyle(.white)
+                Circle().fill(Color.white.opacity(0.22)).frame(width: 86, height: 86)
+                Image(systemName: "tray.full.fill")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundStyle(.white)
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("FAMILY LIST").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
-                Text("\(openItems.count) up for grabs").font(.system(size: 22, weight: .heavy))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Family list")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded)).opacity(0.85)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(openItems.count)")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                    Text(openItems.count == 1 ? "up for grabs" : "up for grabs")
+                        .font(.system(size: 14, weight: .medium, design: .rounded)).opacity(0.85)
+                }
                 Text(openItems.isEmpty ? "Add something the family can pick up" : "Tap Claim to make it yours")
-                    .font(.system(size: 12, weight: .semibold)).opacity(0.85)
+                    .font(.system(size: 13, weight: .medium, design: .rounded)).opacity(0.85)
             }
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)
-        .padding(20)
-        .background(P.lavender)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 22).padding(.vertical, 22)
+        .background(P.heroGradient)
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .shadow(color: P.coral.opacity(0.28), radius: 18, x: 0, y: 8)
     }
 
     private var openSection: some View {
