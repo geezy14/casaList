@@ -2397,6 +2397,9 @@ extension CasalistCottage {
         @State private var showSettings = false
         @State private var showInbox = false
         @State private var editingTask: TaskItem? = nil
+        /// Bundle currently being edited via AddChoreBundleView. Driven
+        /// by the Edit button on an expanded bundle card.
+        @State private var editingBundle: TaskItem? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var newItem: String = ""
@@ -2639,6 +2642,9 @@ extension CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .sheet(isPresented: $showAddReminder) {
                 AddReminderView(initialTitle: quickReminderDraft)
+            }
+            .sheet(item: $editingBundle) { bundle in
+                AddChoreBundleView(editing: bundle)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { InboxView() }
@@ -3855,22 +3861,38 @@ extension CasalistCottage {
                         .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 8)
                         .background(P.surfaceAlt.opacity(0.3))
 
-                        // Admin delete button
+                        // Admin edit + delete buttons. Edit opens
+                        // AddChoreBundleView in edit mode (name,
+                        // category, assignee, bonus points).
                         if iAmAdmin {
-                            Button {
-                                children.forEach { $0.softDelete() }
-                                bundle.softDelete()
-                                try? modelContext.save()
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "trash").font(.system(size: 10, weight: .heavy))
-                                    Text("Delete bundle").font(.system(size: 11, weight: .heavy))
-                                }
-                                .foregroundStyle(Color.red.opacity(0.8))
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .frame(maxWidth: .infinity)
-                                .background(Color.red.opacity(0.08))
-                            }.buttonStyle(.row)
+                            HStack(spacing: 8) {
+                                Button {
+                                    editingBundle = bundle
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "pencil").font(.system(size: 10, weight: .heavy))
+                                        Text("Edit").font(.system(size: 11, weight: .heavy))
+                                    }
+                                    .foregroundStyle(P.peach)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .frame(maxWidth: .infinity)
+                                    .background(P.peach.opacity(0.12))
+                                }.buttonStyle(.row)
+                                Button {
+                                    children.forEach { $0.softDelete() }
+                                    bundle.softDelete()
+                                    try? modelContext.save()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "trash").font(.system(size: 10, weight: .heavy))
+                                        Text("Delete").font(.system(size: 11, weight: .heavy))
+                                    }
+                                    .foregroundStyle(Color.red.opacity(0.8))
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.red.opacity(0.08))
+                                }.buttonStyle(.row)
+                            }
                         }
                     }
                 }
