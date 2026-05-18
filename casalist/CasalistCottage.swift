@@ -635,6 +635,15 @@ public enum CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
+                #if DEBUG
+                // "Rings" layout (idea-D): rings hero only, no agenda
+                // ribbon, no quick-add chips. Tiles + What's New still
+                // surface day-to-day work below.
+                greetingCardRings
+                star
+                tiles
+                whatsNew
+                #else
                 greetingCard
                 stickyAgenda
                 quickAdd
@@ -642,6 +651,7 @@ public enum CasalistCottage {
                 star
                 tiles
                 whatsNew
+                #endif
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
@@ -803,6 +813,131 @@ public enum CasalistCottage {
                     .offset(x: 22, y: -18)
             }
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        }
+
+        // MARK: - Rings hero (Debug only)
+        // Apple-Fitness style concentric rings, mirroring FamilyListView's
+        // pattern. Three vector metrics for the Dashboard:
+        //   • Outer (peach):  Today      — completed today / scheduled today
+        //   • Middle (mint):  This Week  — completed this week / scheduled this week
+        //   • Inner (coral):  Streak     — current streak / longest streak (display target)
+
+        private var ringsToday: (done: Int, total: Int) {
+            let cal = Calendar.current
+            let total = allTodos.filter { t in
+                guard let due = t.dueDate else { return false }
+                return cal.isDateInToday(due)
+            }.count
+            let done = allTodos.filter { t in
+                t.isCompleted && cal.isDateInToday(t.completedAt ?? t.createdAt) &&
+                (t.dueDate.map { cal.isDateInToday($0) } ?? true)
+            }.count
+            return (done, total)
+        }
+
+        private var ringsThisWeek: (done: Int, total: Int) {
+            let cal = Calendar.current
+            let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())) ?? Date()
+            let end = cal.date(byAdding: .day, value: 7, to: start) ?? Date()
+            let total = allTodos.filter { t in
+                guard let due = t.dueDate else { return false }
+                return due >= start && due < end
+            }.count
+            let done = allTodos.filter { t in
+                guard t.isCompleted, let c = t.completedAt else { return false }
+                return c >= start && c < end
+            }.count
+            return (done, total)
+        }
+
+        private var ringsStreak: (current: Int, target: Int) {
+            guard let me = userMember else { return (0, 7) }
+            let cur = StreakTracker.effectiveCurrent(for: me.uid)
+            // Target ramps so the ring feels achievable but always
+            // shows headroom: round current up to next 7 (min 7).
+            let target = max(7, ((cur / 7) + 1) * 7)
+            return (cur, target)
+        }
+
+        private var greetingCardRings: some View {
+            HStack(alignment: .center, spacing: 18) {
+                ringsStack
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(greetingText)
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundStyle(P.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    ringLegendDash(label: "Today",
+                                   tint: P.peach,
+                                   done: ringsToday.done,
+                                   total: ringsToday.total)
+                    ringLegendDash(label: "This week",
+                                   tint: P.mint,
+                                   done: ringsThisWeek.done,
+                                   total: ringsThisWeek.total)
+                    ringLegendDash(label: "Streak",
+                                   tint: P.coral,
+                                   done: ringsStreak.current,
+                                   total: ringsStreak.target,
+                                   trailingLabel: "\(ringsStreak.current) day\(ringsStreak.current == 1 ? "" : "s")")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 4)
+        }
+
+        private var ringsTodayPct: Double {
+            let t = ringsToday
+            return t.total > 0 ? Double(t.done) / Double(t.total) : 0
+        }
+        private var ringsWeekPct: Double {
+            let w = ringsThisWeek
+            return w.total > 0 ? Double(w.done) / Double(w.total) : 0
+        }
+        private var ringsStreakPct: Double {
+            let s = ringsStreak
+            return s.target > 0 ? Double(s.current) / Double(s.target) : 0
+        }
+
+        private var ringsStack: some View {
+            ZStack {
+                dashRing(diameter: 140, lineWidth: 14, percent: ringsTodayPct,  tint: P.peach)
+                dashRing(diameter: 104, lineWidth: 14, percent: ringsWeekPct,   tint: P.mint)
+                dashRing(diameter: 68,  lineWidth: 12, percent: ringsStreakPct, tint: P.coral)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: ringsTodayPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsWeekPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsStreakPct)
+        }
+
+        private func dashRing(diameter: CGFloat, lineWidth: CGFloat,
+                              percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func ringLegendDash(label: String, tint: Color, done: Int, total: Int,
+                                    trailingLabel: String? = nil) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text(trailingLabel ?? "\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                    .monospacedDigit()
+            }
+            .opacity(total == 0 ? 0.55 : 1)
         }
 
         /// iMessage-style profile chip — 56pt dark circle. Shows the user's
@@ -5572,13 +5707,114 @@ extension CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
+                #if DEBUG
+                ringsHero
+                #else
                 hero
+                #endif
                 quickAddRow
                 listSection
                 if !linkedReminders.isEmpty {
                     linkedSection
                 }
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        // MARK: - Rings hero (Debug only)
+        // Three Reminders-flavored rings:
+        //   • Outer (coral): Pinned     — current count vs target (10)
+        //   • Middle (peach): Today     — reminders firing today / total reminders today
+        //   • Inner (mint):  Hourly ⟳   — current count vs target (5)
+
+        private var ringsPinnedTarget: Int { 10 }
+        private var ringsHourlyTarget: Int { 5 }
+
+        private var ringsRemindersToday: (done: Int, total: Int) {
+            let cal = Calendar.current
+            let dueToday = pinned.filter { t in
+                guard let d = t.dueDate else { return false }
+                return cal.isDateInToday(d)
+            }
+            let done = dueToday.filter(\.isCompleted).count
+            return (done, dueToday.count)
+        }
+
+        private var ringsPinnedPct: Double {
+            min(1.0, Double(pinned.count) / Double(ringsPinnedTarget))
+        }
+        private var ringsRemTodayPct: Double {
+            let r = ringsRemindersToday
+            return r.total > 0 ? Double(r.done) / Double(r.total) : 0
+        }
+        private var ringsHourlyPct: Double {
+            min(1.0, Double(hourlyReminders.count) / Double(ringsHourlyTarget))
+        }
+
+        private var ringsHero: some View {
+            HStack(alignment: .center, spacing: 18) {
+                remindersRingsStack
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("REMINDERS")
+                        .font(.system(size: 11, weight: .heavy)).tracking(0.8)
+                        .foregroundStyle(P.textDim)
+                    remRingLegend(label: "Pinned",
+                                  tint: P.coral,
+                                  done: pinned.count,
+                                  total: ringsPinnedTarget,
+                                  trailingLabel: "\(pinned.count)")
+                    remRingLegend(label: "Today",
+                                  tint: P.peach,
+                                  done: ringsRemindersToday.done,
+                                  total: ringsRemindersToday.total)
+                    remRingLegend(label: "Hourly ⟳",
+                                  tint: P.mint,
+                                  done: hourlyReminders.count,
+                                  total: ringsHourlyTarget,
+                                  trailingLabel: "\(hourlyReminders.count)")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 4)
+        }
+
+        private var remindersRingsStack: some View {
+            ZStack {
+                remDashRing(diameter: 140, lineWidth: 14, percent: ringsPinnedPct,   tint: P.coral)
+                remDashRing(diameter: 104, lineWidth: 14, percent: ringsRemTodayPct, tint: P.peach)
+                remDashRing(diameter: 68,  lineWidth: 12, percent: ringsHourlyPct,   tint: P.mint)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: ringsPinnedPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsRemTodayPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsHourlyPct)
+        }
+
+        private func remDashRing(diameter: CGFloat, lineWidth: CGFloat,
+                                 percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func remRingLegend(label: String, tint: Color, done: Int, total: Int,
+                                   trailingLabel: String? = nil) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text(trailingLabel ?? "\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                    .monospacedDigit()
+            }
+            .opacity(total == 0 && trailingLabel == nil ? 0.55 : 1)
         }
 
         private var linkedSection: some View {
