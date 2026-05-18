@@ -40,24 +40,24 @@ struct DeveloperSettingsSection: View {
     }
 }
 
-/// Picker for the live MyToDo design exploration. Geezy is comparing
-/// the original Daily Digest (default, ships to TF) against three
-/// candidate redesigns. Hidden under DEVELOPER until a winner is picked.
+/// App-wide layout picker. Now also surfaced in user-facing Settings →
+/// Appearance; kept here so dev builds still have a quick segmented
+/// switcher near the rest of the debug tools.
 private struct DevMyToDoDesignBlock: View {
-    @AppStorage("myToDoDesign") private var myToDoDesign: String = "digest"
+    @AppStorage("appLayout") private var appLayout: String = "rings"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("My To-Do design")
+            Text("App layout")
                 .font(.system(size: 14, weight: .heavy))
-            Picker("My To-Do design", selection: $myToDoDesign) {
-                Text("Digest").tag("digest")
-                Text("Calm").tag("calm")
-                Text("Cards").tag("cards")
+            Picker("App layout", selection: $appLayout) {
+                Text("Classic").tag("classic")
                 Text("Rings").tag("rings")
+                Text("Calm").tag("calm")
+                Text("Kanban").tag("kanban")
             }
             .pickerStyle(.segmented)
-            Text("Default Digest matches the TF build. Other layouts are dev-only.")
+            Text("Mirrors the picker in Settings → Appearance. Tabs without a variant fall back to classic.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)

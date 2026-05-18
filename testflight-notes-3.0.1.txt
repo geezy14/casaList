@@ -1,0 +1,23 @@
+Casalist 3.0 (build 1)
+
+What's new
+- Layout picker! Settings -> Appearance now has 4 layouts:
+  - Classic: the original Casalist look (2.2 style).
+  - Rings: Apple Fitness style rings on every tab.
+  - Calm: roomy rows with color-stripe cards. Falls back
+    to Classic on Dashboard / Groceries / Schedule.
+  - Kanban: 3-column board (Today / Upcoming / Done) for
+    tasks. Other tabs fall back to Classic.
+- Schedule supports "Weekdays only" repeats (Mon-Fri) -
+  same option Reminders has had.
+
+What to test
+- Settings -> Appearance -> Layout. Try each one. Tabs that
+  don't have your chosen layout should fall back to Classic
+  cleanly (no blank screens).
+- Create a recurring event in Schedule. Pick "Weekdays only".
+  Confirm the notification doesn't fire on Sat / Sun.
+- Family list, Reminders, Home, and My To-Do should all
+  reflect the layout you picked.
+
+Thanks!

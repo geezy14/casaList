@@ -335,6 +335,7 @@ public enum CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
         private var canManage: Bool {
@@ -633,12 +634,37 @@ public enum CasalistCottage {
             || reminderCount > 0 || scheduleUpcomingCount > 0 || familyListOpenCount > 0
         }
 
+        @ViewBuilder
         private var content: some View {
+            switch appLayout {
+            case "rings":  ringsDashContent
+            // Calm + Kanban don't have Dashboard variants per Geezy
+            // ("calm on all tabs but ... dashboard"). Fall back to classic.
+            default:       classicDashContent
+            }
+        }
+
+        /// "Rings" layout: rings hero + quick-add task bar + star + tiles +
+        /// What's New. No agenda ribbon, no quick-add chip row.
+        private var ringsDashContent: some View {
             VStack(alignment: .leading, spacing: 14) {
-                // "Rings" layout: rings hero + quick-add task bar.
-                // No agenda ribbon, no quick-add chip row.
                 greetingCardRings
                 quickAdd
+                star
+                tiles
+                whatsNew
+            }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// "Classic" layout: the original 2.2 dashboard. Peach greeting
+        /// banner, agenda ribbon, quick-add bar + chips, star, tiles,
+        /// What's New.
+        private var classicDashContent: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                greetingCard
+                stickyAgenda
+                quickAdd
+                if canManage { quickAddChips }
                 star
                 tiles
                 whatsNew
@@ -2544,13 +2570,10 @@ extension CasalistCottage {
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
-        /// MyToDo design exploration. "digest" (default, TF-visible),
-        /// "calm", "cards", "rings". Picker hidden behind Settings →
-        /// Developer; that section is wrapped in #if DEBUG so Release
-        /// builds only ever render the default. Idea-B (native Reminders
-        /// list) lives on its own branch -- folding it in here would
-        /// require swapping the ScrollView host for a List.
-        @AppStorage("myToDoDesign") private var myToDoDesign: String = "digest"
+        /// Global layout picker. Set via Settings → Appearance.
+        /// Values: "classic", "rings", "calm", "kanban".
+        /// Tabs that don't implement a chosen variant fall back to classic.
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
@@ -3302,6 +3325,140 @@ extension CasalistCottage {
             }
         }
 
+        // MARK: – Kanban layout (3-column board)
+        // Today / Upcoming / Done, horizontally scrollable. Reuses
+        // ringsTaskRow + completeTask. Tap a card to edit the same way
+        // as the other layouts.
+
+        private var kanbanOpen: [TaskItem] {
+            todos.filter { !$0.isCompleted && !isModuleCategory($0.category) && passesScope($0) }
+        }
+        private var kanbanToday: [TaskItem] {
+            kanbanOpen.filter { isToday($0.dueDate) }
+        }
+        private var kanbanUpcoming: [TaskItem] {
+            let cal = Calendar.current
+            let startOfTomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date())) ?? Date()
+            return kanbanOpen.filter { t in
+                guard let d = t.dueDate else { return true }  // undated → upcoming
+                return d >= startOfTomorrow
+            }
+        }
+        private var kanbanDone: [TaskItem] {
+            completed.filter { isToday($0.dueDate) || isToday($0.completedAt) }
+        }
+
+        private var kanbanContent: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                kanbanHero
+                if iAmAdmin { calmScopeToggle }
+                calmQuickAdd
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        kanbanColumn(title: "Today",    accent: P.peach, items: kanbanToday)
+                        kanbanColumn(title: "Upcoming", accent: P.mint,  items: kanbanUpcoming)
+                        kanbanColumn(title: "Done",     accent: P.coral, items: kanbanDone, isDone: true)
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .padding(.horizontal, -22)  // bleed into the screen edge
+            }
+            .padding(.horizontal, 22)
+            .padding(.bottom, 48)
+        }
+
+        private var kanbanHero: some View {
+            let (word, emoji) = greetingTime
+            let title = firstName.isEmpty ? word : "\(word), \(firstName)"
+            return VStack(alignment: .leading, spacing: 4) {
+                Text("\(title) \(emoji)")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text(todaySentence)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 12)
+        }
+
+        private func kanbanColumn(title: String, accent: Color,
+                                  items: [TaskItem],
+                                  isDone: Bool = false) -> some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Circle().fill(accent).frame(width: 8, height: 8)
+                    Text(title.uppercased())
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .tracking(1.0)
+                        .foregroundStyle(P.text)
+                    Text("\(items.count)")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.top, 12)
+
+                if items.isEmpty {
+                    Text(isDone ? "Nothing checked off yet" : "Clear")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 14).padding(.bottom, 14)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(items, id: \.objectID) { t in
+                            kanbanCard(t, accent: accent, struckOut: isDone)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.bottom, 12)
+                }
+            }
+            .frame(width: 280, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(P.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(P.border, lineWidth: 1)
+            )
+        }
+
+        private func kanbanCard(_ t: TaskItem, accent: Color, struckOut: Bool) -> some View {
+            Button { editingTask = t } label: {
+                HStack(spacing: 10) {
+                    Button { completeTask(t) } label: {
+                        Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(t.isCompleted ? accent : accent.opacity(0.7))
+                    }.buttonStyle(.row)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t.task)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(P.text)
+                            .strikethrough(struckOut)
+                            .lineLimit(2)
+                        if let d = t.dueDate {
+                            Text(whenString(d))
+                                .font(.system(size: 11, weight: .regular, design: .rounded))
+                                .foregroundStyle(P.textDim)
+                        }
+                    }
+                    Spacer(minLength: 4)
+                    avatarBlock(for: t)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(P.surfaceAlt)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(accent.opacity(0.18), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }.buttonStyle(.row)
+        }
+
         // MARK: – Calm layout (Direction A redesign)
 
         /// Simple greeting + one-line summary. No gradient, no progress
@@ -3531,21 +3688,21 @@ extension CasalistCottage {
             }.buttonStyle(.row)
         }
 
-        // MARK: – Layout switcher (design A / C / D)
+        // MARK: – Layout switcher
 
-        /// Picks the layout from `myToDoDesign` AppStorage:
-        ///   "calm"   -> idea-A (default): roomy rows, color stripe cards
-        ///   "cards"  -> idea-C: 2-column sticky-note tile grid
-        ///   "rings"  -> idea-D: Apple Fitness rings hero + compact list
-        /// Any other value falls back to calm. Switch via Settings →
-        /// Developer → My To-Do Design while Geezy is deciding.
+        /// Picks the layout from the global `appLayout` AppStorage:
+        ///   "classic" -> Daily Digest (the original 2.2 view)
+        ///   "calm"    -> roomy rows, color stripe cards
+        ///   "rings"   -> Apple Fitness rings hero + compact list
+        ///   "kanban"  -> swimlane board (Today / Upcoming / Done)
+        /// Anything else falls back to classic.
         @ViewBuilder
         private var content: some View {
-            switch myToDoDesign {
-            case "calm":  calmContent
-            case "cards": cardsContent
-            case "rings": ringsContent
-            default:      digestContent
+            switch appLayout {
+            case "calm":    calmContent
+            case "rings":   ringsContent
+            case "kanban":  kanbanContent
+            default:        digestContent
             }
         }
 
@@ -5459,6 +5616,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -5695,9 +5853,14 @@ extension CasalistCottage {
             LocationReminderService.shared.resyncMonitoredRegions(in: modelContext)
         }
 
+        @ViewBuilder
         private var content: some View {
             VStack(alignment: .leading, spacing: 14) {
-                ringsHero
+                switch appLayout {
+                case "rings": ringsHero
+                // Calm/Kanban don't have Reminders variants yet; fall to classic.
+                default:      hero
+                }
                 quickAddRow
                 listSection
                 if !linkedReminders.isEmpty {

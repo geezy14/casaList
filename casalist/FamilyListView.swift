@@ -14,6 +14,7 @@ public struct FamilyListView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("meUid") private var meUid: String = ""
+    @AppStorage("appLayout") private var appLayout: String = "rings"
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var allTasks: FetchedResults<TaskItem>
@@ -622,7 +623,17 @@ public struct FamilyListView: View {
         }.count
     }
 
+    @ViewBuilder
     private var hero: some View {
+        switch appLayout {
+        case "rings": ringsHero
+        // Calm + Kanban don't have a Family List variant yet -> classic.
+        default:      classicHero
+        }
+    }
+
+    /// Apple Fitness rings hero (the 2.5+ default).
+    private var ringsHero: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Family list 🪴")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -648,6 +659,32 @@ public struct FamilyListView: View {
             }
         }
         .padding(.top, 4)
+    }
+
+    /// Classic hero from build 2.2: lavender tray with up-for-grabs count.
+    private var classicHero: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle().fill(Color.white.opacity(0.22)).frame(width: 76, height: 76)
+                Image(systemName: "tray.full.fill")
+                    .font(.system(size: 30)).foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FAMILY LIST")
+                    .font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.85)
+                Text("\(openItems.count) up for grabs")
+                    .font(.system(size: 22, weight: .heavy))
+                Text(openItems.isEmpty
+                     ? "Add something the family can pick up"
+                     : "Tap Claim to make it yours")
+                    .font(.system(size: 12, weight: .semibold)).opacity(0.85)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(20)
+        .background(P.lavender)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     /// Apple-Fitness style concentric rings. Outer = all family items,

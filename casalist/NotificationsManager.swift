@@ -854,6 +854,20 @@ enum NotificationsManager {
                     trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
                 }
             }
+        } else if event.repeatKind == "weekdays" {
+            // Monday-Friday only. Register one repeating calendar trigger
+            // per weekday (2=Mon..6=Fri) with a -wdN id suffix, mirroring
+            // the multi-weekday path above. Return early; no single
+            // trigger to add at the bottom of this function.
+            let baseComps = cal.dateComponents([.hour, .minute], from: event.startDate)
+            for wd in 2...6 {
+                var dc = baseComps
+                dc.weekday = wd
+                let t = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                let req = UNNotificationRequest(identifier: "\(id)-wd\(wd)", content: content, trigger: t)
+                try? await center.add(req)
+            }
+            return
         } else {
             // Legacy kind strings.
             var dc: DateComponents

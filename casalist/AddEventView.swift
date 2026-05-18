@@ -52,11 +52,12 @@ struct AddEventView: View {
     private var hasCoordinates: Bool { latitude != 0 || longitude != 0 }
 
     private let repeatOptions: [(label: String, kind: String)] = [
-        ("None",    ""),
-        ("Daily",   "daily"),
-        ("Weekly",  "weekly"),
-        ("Monthly", "monthly"),
-        ("Yearly",  "yearly"),
+        ("None",          ""),
+        ("Daily",         "daily"),
+        ("Weekdays only", "weekdays"),
+        ("Weekly",        "weekly"),
+        ("Monthly",       "monthly"),
+        ("Yearly",        "yearly"),
     ]
 
     var body: some View {

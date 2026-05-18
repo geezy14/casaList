@@ -53,7 +53,8 @@ struct SettingsView: View {
     @State private var showHelp: Bool = false
     @AppStorage("hasSeenTutorial") private var hasSeenTutorial: Bool = false
     @AppStorage("appearancePref") private var appearancePref: String = "system"  // system | light | dark
-    @AppStorage("paletteName") private var paletteName: String = "vivid"  // ember | vivid | anchor
+    @AppStorage("paletteName") private var paletteName: String = "vivid"  // ember | vivid | anchor | sunrise
+    @AppStorage("appLayout") private var appLayout: String = "rings"     // classic | rings | calm | kanban
     @AppStorage("backupEnabled") private var backupEnabled: Bool = true
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
@@ -1111,6 +1112,24 @@ struct SettingsView: View {
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 divider
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("LAYOUT")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.0)
+                        .foregroundStyle(P.textMuted)
+                    Picker("Layout", selection: $appLayout) {
+                        Text("Classic").tag("classic")
+                        Text("Rings").tag("rings")
+                        Text("Calm").tag("calm")
+                        Text("Kanban").tag("kanban")
+                    }
+                    .pickerStyle(.segmented)
+                    Text(layoutBlurb(for: appLayout))
+                        .font(.system(size: 11, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                        .padding(.top, 2)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                divider
+                VStack(alignment: .leading, spacing: 10) {
                     Text("COLOR PALETTE")
                         .font(.system(size: 10, weight: .heavy)).tracking(1.0)
                         .foregroundStyle(P.textMuted)
@@ -1129,6 +1148,15 @@ struct SettingsView: View {
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
             .cardBg(P)
+        }
+    }
+
+    private func layoutBlurb(for layout: String) -> String {
+        switch layout {
+        case "rings":  return "Apple Fitness style rings on every tab (except Groceries & Schedule)."
+        case "calm":   return "Roomy rows with color-stripe cards. Falls back to Classic on Dashboard, Groceries & Schedule."
+        case "kanban": return "3-column board (Today / Upcoming / Done) for tasks. Other tabs fall back to Classic."
+        default:       return "The original 2.2 layout. Daily digest hero, agenda ribbon, quick-add chips."
         }
     }
 
