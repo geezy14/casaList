@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 import CloudKit
 import UIKit
+import Combine
 
 final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
@@ -647,6 +648,16 @@ struct CasalistApp: App {
 
     private let stack = CasaCoreDataStack.shared
 
+    /// Debounced relay for the heavy pipeline (dedupe + notifications).
+    /// NSPersistentStoreRemoteChange fires on EVERY local save, not just
+    /// remote ones. Running reconcile + dedupe on each fires causes a
+    /// cascade: each bg save triggers another notification which triggers
+    /// another save, keeping the SQLite WAL locked and preventing
+    /// NSPersistentCloudKitContainer from checkpointing its export queue.
+    /// 2-second debounce absorbs the burst; the CloudKit export completes
+    /// during the quiet window and remote devices see the change promptly.
+    private let remoteChangePipeline = PassthroughSubject<Void, Never>()
+
     var body: some Scene {
         WindowGroup {
             CasalistCottage.Root()
@@ -689,12 +700,21 @@ struct CasalistApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+                    // Step 1 — immediate UI refresh so @FetchRequest results
+                    // update the moment CloudKit delivers new data. Does NOT
+                    // save, so it can't cascade into another notification.
+                    stack.context.refreshAllObjects()
+                    // Step 2 — heavy pipeline fires after a 2-second quiet
+                    // window. NSPersistentStoreRemoteChange fires on every
+                    // local save too, so without the debounce each bg save
+                    // triggers another notification → another save → WAL stays
+                    // locked → NSPersistentCloudKitContainer can't export.
+                    // 2s of quiet gives the CloudKit export queue breathing room.
+                    remoteChangePipeline.send()
+                }
+                .onReceive(remoteChangePipeline.debounce(for: .seconds(2), scheduler: DispatchQueue.main)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
-                    // Dedupe + self-heal off-main (background context) to
-                    // avoid blocking the SQLite shared queue → watchdog kill.
                     CasalistAppDelegate.runDedupePipeline(userName: userName)
-                    // A remote change just landed — check for redemptions
-                    // and new assignments performed on another device.
                     if notificationsEnabled {
                         Task { @MainActor in
                             await NotificationsManager.detectAndNotifyRedemptions(in: stack.context)
@@ -708,8 +728,6 @@ struct CasalistApp: App {
                             await NotificationsManager.syncEventsFromContext(stack.context)
                         }
                     }
-                    // Snapshot may have changed — re-export so the
-                    // widget sees the new state.
                     WidgetDataExporter.export(from: stack.context)
                 }
         }

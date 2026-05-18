@@ -1,0 +1,16 @@
+What's New in 2.2
+
+Critical fix: TestFlight builds 2.0 and 2.1 were accidentally using the Development CloudKit environment instead of Production. This caused slow, unreliable sync between family members. 2.2 corrects the entitlements so all builds use the right CloudKit environment.
+
+Also in this build:
+- Sync fix: family items now push to other devices in seconds instead of needing a force-close/reopen (cascade of background saves was blocking the CloudKit export queue)
+- Announcements default to 4-hour banner; minimum is 1 hour
+- Calendar events now sync in production (schema fix for CD_endDate)
+- Kid mode no longer gets stuck after role changes
+- Fixed: tasks with no time were showing "Today 12:00 AM"
+
+What to Test
+
+- Create a family item on one device. Verify it appears on other devices within 30 seconds without force-closing.
+- Create a calendar event. Verify it shows on all devices.
+- Confirm announcements show as banners for all family members.
