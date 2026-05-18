@@ -2519,6 +2519,74 @@ extension CasalistCottage {
             guard let assignee, !assignee.isEmpty else { return nil }
             return members.first { $0.name.lowercased() == assignee.lowercased() }?.asCLMember
         }
+
+        /// Admin members of the household — owners + admins. Used to
+        /// render the avatar stack on admin-targeted reminders so the
+        /// card shows visually which people the reminder is for.
+        private var adminMembers: [CLFamilyMember] {
+            members
+                .filter { $0.deletedAt == nil && $0.canManageFamily }
+                .sorted { $0.createdAt < $1.createdAt }
+                .map { $0.asCLMember }
+        }
+
+        /// Visible household members for "everyone" targeting. Sorted to
+        /// match the same order admins appear in. Capped at first few
+        /// when rendered so a 5+ member family doesn't overflow the row.
+        private var everyoneMembers: [CLFamilyMember] {
+            members
+                .filter { $0.deletedAt == nil }
+                .sorted { $0.createdAt < $1.createdAt }
+                .map { $0.asCLMember }
+        }
+
+        /// Right-side avatar block for a task card. Decides which faces
+        /// to render based on the reminder's targeting:
+        ///   notifyMode == "admins"   -> overlapping admin avatars
+        ///   notifyMode == "everyone" -> overlapping household avatars
+        ///   assignee == "<name>"     -> the single assignee avatar
+        ///   loose                    -> no avatar (default)
+        @ViewBuilder
+        private func avatarBlock(for t: TaskItem) -> some View {
+            switch t.notifyMode {
+            case "admins":
+                stackedAvatars(adminMembers, size: 26)
+            case "everyone":
+                stackedAvatars(everyoneMembers, size: 26)
+            default:
+                if let cl = memberFor(t.assignee) {
+                    CLAvatar(cl, size: 28)
+                }
+            }
+        }
+
+        /// Overlapping circle row -- shows up to 3 avatars with negative
+        /// spacing, then a "+N" pill when there are more. Each avatar gets
+        /// a thin background ring so overlapping reads cleanly on any
+        /// card color.
+        @ViewBuilder
+        private func stackedAvatars(_ list: [CLFamilyMember], size: CGFloat) -> some View {
+            if list.isEmpty {
+                EmptyView()
+            } else {
+                let visible = Array(list.prefix(3))
+                let extras = list.count - visible.count
+                HStack(spacing: -size * 0.35) {
+                    ForEach(Array(visible.enumerated()), id: \.element.id) { _, m in
+                        CLAvatar(m, size: size)
+                            .overlay(Circle().stroke(P.surface, lineWidth: 2))
+                    }
+                    if extras > 0 {
+                        Text("+\(extras)")
+                            .font(.system(size: size * 0.4, weight: .heavy, design: .rounded))
+                            .foregroundStyle(P.text)
+                            .frame(width: size, height: size)
+                            .background(Circle().fill(P.surfaceAlt))
+                            .overlay(Circle().stroke(P.surface, lineWidth: 2))
+                    }
+                }
+            }
+        }
         private func whenString(_ d: Date) -> String {
             let cal = Calendar.current
             let comps = cal.dateComponents([.hour, .minute], from: d)
@@ -3113,9 +3181,9 @@ extension CasalistCottage {
 
                     Spacer(minLength: 4)
 
-                    // Right side: avatar + points
+                    // Right side: avatar(s) + points
                     VStack(alignment: .trailing, spacing: 6) {
-                        if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 28) }
+                        avatarBlock(for: t)
                         if t.points > 0 {
                             Text("+\(t.points)")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
