@@ -24,6 +24,8 @@ struct PersonalCardView: View {
         predicate: NSPredicate(format: "deletedAt == nil")
     ) private var allGoals: FetchedResults<FamilyGoal>
 
+    @StateObject private var gameRules = GameRulesStore.shared
+
     @State private var showEditPhoto = false
     @State private var showSharePreview = false
     @State private var showShareSheet = false
@@ -142,6 +144,7 @@ struct PersonalCardView: View {
                         heroHeader
                         statsAwardsCard
                         splitsCard
+                        tierProgressCard
                         projectionsCard
                     }
                     .padding(.horizontal, 16)
@@ -360,6 +363,75 @@ struct PersonalCardView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // ── Tier progress card ────────────────────────────────────────────────────
+
+    private var tierProgressCard: some View {
+        let pts = Int(me?.points ?? 0)
+        let sorted = gameRules.rules.rewardTiers.sorted { $0.minPoints < $1.minPoints }
+        let unlockedTier = sorted.last(where: { pts >= $0.minPoints })
+        let nextTier = sorted.first(where: { pts < $0.minPoints })
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("REWARD TIER")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(0.5)
+                .foregroundStyle(.white)
+
+            HStack(alignment: .center, spacing: 10) {
+                if let tier = unlockedTier {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tier.emoji + " " + tier.name)
+                            .font(.system(size: 18, weight: .heavy))
+                            .foregroundStyle(.white)
+                        Text("UNLOCKED")
+                            .font(.system(size: 8, weight: .heavy))
+                            .tracking(1)
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                } else {
+                    Text("No tier yet")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                Spacer()
+                Text("\(pts) pts")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            GeometryReader { geo in
+                let progress: CGFloat = {
+                    if let next = nextTier {
+                        let base = unlockedTier?.minPoints ?? 0
+                        let raw = CGFloat(pts - base) / CGFloat(next.minPoints - base)
+                        return min(max(raw, 0), 1)
+                    }
+                    return 1.0
+                }()
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.white.opacity(0.1))
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(nextTier != nil ? Color(rgb: 0x7B5EA7) : Color.green)
+                            .frame(width: geo.size.width * progress)
+                    }
+            }
+            .frame(height: 8)
+
+            if let next = nextTier {
+                Text("\(next.minPoints - pts) pts to \(next.emoji) \(next.name)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Max tier reached! 🏆")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.green)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
     }
 
     // ── Projections card ──────────────────────────────────────────────────────

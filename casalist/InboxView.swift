@@ -11,6 +11,8 @@ struct InboxView: View {
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("meUid") private var meUid: String = ""
 
+    @StateObject private var gameRules = GameRulesStore.shared
+
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
@@ -103,7 +105,8 @@ struct InboxView: View {
     }
 
     private func parentApprovalRow(_ g: FamilyGoal) -> some View {
-        ApprovalRow(goal: g, members: Array(members), palette: P, moc: moc)
+        ApprovalRow(goal: g, members: Array(members), palette: P, moc: moc,
+                    tiers: Array(gameRules.rules.rewardTiers))
     }
 
     /// Pulled out into its own View so it can hold per-goal `@State`
@@ -113,17 +116,21 @@ struct InboxView: View {
         let members: [FamilyMember]
         let palette: CasalistCottage.Palette
         let moc: NSManagedObjectContext
+        let tiers: [RewardTier]
         @State private var draftPrice: Int = 0
         @State private var initialized: Bool = false
 
         private var P: CasalistCottage.Palette { palette }
         private var realOwner: String { GoalApproval.realOwnerName(goal) }
         private var needsPrice: Bool { goal.targetPoints == 0 }
+        private var ownerMember: FamilyMember? {
+            members.first(where: { $0.name.lowercased() == realOwner.lowercased() })
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
-                    if let m = members.first(where: { $0.name.lowercased() == realOwner.lowercased() }) {
+                    if let m = ownerMember {
                         LeveledAvatar(member: m, size: 32)
                     } else {
                         ZStack {
@@ -133,10 +140,16 @@ struct InboxView: View {
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(goal.label).font(.system(size: 14, weight: .heavy))
-                        Text(needsPrice
-                             ? "\(realOwner) · needs a price"
-                             : "\(realOwner) · \(goal.targetPoints) pts")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                        HStack(spacing: 4) {
+                            Text(needsPrice
+                                 ? "\(realOwner) · needs a price"
+                                 : "\(realOwner) · \(goal.targetPoints) pts")
+                                .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                            if let m = ownerMember {
+                                Text("· \(m.points) pts")
+                                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                            }
+                        }
                     }
                     Spacer()
                 }
@@ -149,6 +162,28 @@ struct InboxView: View {
                         .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.4)))
                 }
                 if needsPrice {
+                    let sortedTiers = tiers.sorted { $0.minPoints < $1.minPoints }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(sortedTiers) { tier in
+                                Button {
+                                    draftPrice = tier.minPoints
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text(tier.emoji).font(.system(size: 16))
+                                        Text(tier.name).font(.system(size: 10, weight: .heavy))
+                                        Text("\(tier.minPoints) pts").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(RoundedRectangle(cornerRadius: 10).fill(draftPrice == tier.minPoints ? Color(rgb: 0x7B5EA7).opacity(0.2) : Color(.systemGray6)))
+                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(draftPrice == tier.minPoints ? Color(rgb: 0x7B5EA7) : Color.clear, lineWidth: 1.5))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+
                     HStack {
                         Text("Set price").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
                         Spacer()
@@ -231,12 +266,20 @@ struct InboxView: View {
     }
 
     private func submitterRow(_ g: FamilyGoal) -> some View {
-        HStack(spacing: 12) {
+        let myName = me?.name.lowercased() ?? userName.lowercased()
+        let member = members.first(where: { $0.name.lowercased() == myName })
+        return HStack(spacing: 12) {
             Text("⏳").font(.system(size: 22))
             VStack(alignment: .leading, spacing: 2) {
                 Text(g.label).font(.system(size: 14, weight: .heavy))
-                Text("\(g.targetPoints) pts target")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                HStack(spacing: 4) {
+                    Text("\(g.targetPoints) pts target")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    if let m = member {
+                        Text("· \(m.points) pts balance")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                }
             }
             Spacer()
             Button {

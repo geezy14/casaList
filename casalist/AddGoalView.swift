@@ -11,6 +11,8 @@ struct AddGoalView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var households: FetchedResults<Household>
 
+    @StateObject private var gameRules = GameRulesStore.shared
+
     @State private var ownerName: String = ""
     @State private var label: String = ""
     @State private var target: Int = 200
@@ -52,6 +54,33 @@ struct AddGoalView: View {
                         }
                     }
                 }
+                // Tier chips — shown to everyone. Admins use it to set price;
+                // standard users use it to suggest which tier they want.
+                Section(header: Text("Pick a reward tier"),
+                        footer: Text(iAmAdmin
+                                     ? "Tap a tier to set the target points."
+                                     : "Tap a tier to suggest what you're aiming for. A parent will set the final price.")) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(gameRules.rules.rewardTiers.sorted { $0.minPoints < $1.minPoints }) { tier in
+                                Button {
+                                    target = tier.minPoints
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text(tier.emoji).font(.system(size: 18))
+                                        Text(tier.name).font(.system(size: 11, weight: .heavy))
+                                        Text("\(tier.minPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(RoundedRectangle(cornerRadius: 12).fill(target == tier.minPoints ? Color(rgb: 0x7B5EA7).opacity(0.2) : Color(.systemGray6)))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(target == tier.minPoints ? Color(rgb: 0x7B5EA7) : Color.clear, lineWidth: 1.5))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 if iAmAdmin {
                     Section("Target points") {
                         Stepper(value: $target, in: 10...10_000, step: 10) {
@@ -66,7 +95,7 @@ struct AddGoalView: View {
                             .onChange(of: note) { _, new in
                                 if new.count > 120 { note = String(new.prefix(120)) }
                             }
-                        Text("A parent decides the points price when they approve.")
+                        Text("A parent decides the final points price when they approve.")
                             .font(.caption).foregroundStyle(.secondary)
                     } header: {
                         Text("Make your case (optional)")
@@ -97,9 +126,10 @@ struct AddGoalView: View {
     private func save() {
         let realOwner = resolvedOwner
         let storedOwner = iAmAdmin ? realOwner : GoalApproval.makePendingOwnerName(realOwner)
-        // Non-admins don't price their own goals — the admin sets it at
-        // approval time. Store 0 so the approval UI knows it needs a price.
-        let storedTarget = iAmAdmin ? target : 0
+        // Non-admins suggest a price via tier selection; admin confirms at approval.
+        // Store their suggestion (or 0 if they didn't pick) so the approval UI
+        // shows "Suggested: X pts" when non-zero.
+        let storedTarget = iAmAdmin ? target : (target > 0 ? target : 0)
         let g = FamilyGoal(
             context: moc,
             ownerName: storedOwner,

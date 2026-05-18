@@ -1702,6 +1702,7 @@ public enum CasalistCottage {
                                         }.buttonStyle(.row)
                                     }
                                 }
+                                standingsTierBadge(for: m)
                                 GeometryReader { g in
                                     RoundedRectangle(cornerRadius: 3).fill(P.surfaceAlt).overlay(alignment: .leading) {
                                         RoundedRectangle(cornerRadius: 3)
@@ -1731,6 +1732,24 @@ public enum CasalistCottage {
         private func memberFor(_ name: String) -> FamilyMember? {
             let trimmed = name.lowercased()
             return members.first { $0.name.lowercased() == trimmed }
+        }
+
+        @ViewBuilder
+        private func standingsTierBadge(for m: FamilyMember) -> some View {
+            let memberPts = Int(m.points)
+            let tiersSorted = GameRulesStore.shared.rules.rewardTiers.sorted { $0.minPoints < $1.minPoints }
+            if let memberTier = tiersSorted.last(where: { memberPts >= $0.minPoints }) {
+                HStack {
+                    HStack(spacing: 4) {
+                        Text(memberTier.emoji).font(.system(size: 10))
+                        Text(memberTier.name).font(.system(size: 10, weight: .heavy))
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Capsule().fill(Color(rgb: 0x7B5EA7).opacity(0.2)))
+                    .foregroundStyle(Color(rgb: 0x7B5EA7))
+                    Spacer()
+                }
+            }
         }
 
         private var goals: some View {
@@ -5735,10 +5754,14 @@ extension CasalistCottage {
             .task {
                 evaluateNamePrompt()
                 evaluateTutorial()
+                reconcileMyRole()
             }
             .onChange(of: userName) { _, _ in
                 evaluateNamePrompt()
                 evaluateTutorial()
+            }
+            .onChange(of: members.map { $0.roleLevel }) { _, _ in
+                reconcileMyRole()
             }
             .sheet(isPresented: $showNamePrompt) { namePromptSheet }
             .sheet(isPresented: $showTutorial) { HelpView() }
@@ -5767,6 +5790,48 @@ extension CasalistCottage {
             if userName.trimmingCharacters(in: .whitespaces).isEmpty {
                 pendingName = ""
                 showNamePrompt = true
+            }
+        }
+
+        /// Keep this device's "me" record in sync with the shared store.
+        ///
+        /// The admin always writes to the SHARED store record.  If this device's
+        /// `meUid` still points to a private-store record (the original local
+        /// copy created before joining the share), we re-point it at the shared
+        /// store record and mirror that record's role.  Works in BOTH directions
+        /// (kid → standard AND standard → kid) because we follow the shared store
+        /// unconditionally rather than just promoting.
+        private func reconcileMyRole() {
+            let stack = CasaCoreDataStack.shared
+            guard let sharedStore = stack.sharedStore else { return }
+
+            let myNameLower = userName.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !myNameLower.isEmpty else { return }
+
+            // Find the live shared-store record for this user's name.
+            guard let sharedRecord = members.first(where: {
+                $0.deletedAt == nil
+                && $0.name.lowercased() == myNameLower
+                && $0.objectID.persistentStore == sharedStore
+            }) else { return }
+
+            // Point meUid at the shared record so currentMember() always lands
+            // on the authoritative copy.
+            let sharedUID = sharedRecord.uid.uuidString
+            if meUid != sharedUID {
+                meUid = sharedUID
+            }
+
+            // If the local private-store record has a stale role, update it too
+            // (keeps dedupe from resurrecting the wrong role later).
+            if let privateRecord = members.first(where: {
+                $0.deletedAt == nil
+                && $0.name.lowercased() == myNameLower
+                && $0.objectID.persistentStore == stack.privateStore
+                && $0.uid != sharedRecord.uid
+            }), privateRecord.roleLevel != sharedRecord.roleLevel {
+                privateRecord.roleLevel = sharedRecord.roleLevel
+                try? moc.save()
             }
         }
 
