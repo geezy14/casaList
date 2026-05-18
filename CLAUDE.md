@@ -780,19 +780,39 @@ If Xcode's auto-signing blanks `DEVELOPMENT_TEAM = ""` in the Debug config durin
 > a single day for what should have been three builds of `2.0`. Geezy caught
 > it and called it theater. Don't repeat.
 
-> **CLOUDKIT SCHEMA GATE — required pre-archive check.**
+> **CLOUDKIT SCHEMA GATE — enforced automatically as of 2026-05-18.**
 >
-> Before ANY archive, run:
+> The casalist target has a Run Script build phase ("Preflight: CloudKit
+> schema gate") that runs FIRST on every build. In **Release** config it
+> calls `scripts/cloudkit-schema-diff.sh --ci`, which exits nonzero if
+> Production != Development. That aborts the archive BEFORE code signing.
+> Debug builds skip the check (Dev CloudKit auto-registers schema).
+>
+> Emergency bypass (almost never the right call):
+> ```bash
+> CASALIST_SKIP_SCHEMA_GATE=1 xcodebuild ... archive ...
+> ```
+>
+> The build phase consumes `scripts/cloudkit-schema-diff.sh` as an
+> inputPath so Xcode's user-script sandbox grants read access. Don't
+> rename the script without updating the inputPaths entry in pbxproj
+> or the gate will fail with a sandbox-deny.
+>
+> Ad-hoc check (informational, doesn't fail anything):
 > ```bash
 > bash scripts/cloudkit-schema-diff.sh
 > ```
 >
 > If it does NOT report `✅ Production and Development schemas are identical`,
-> **STOP**. Do not archive. Deploy the schema first (see "CloudKit schema
-> deploys" section below). Shipping with a Dev/Prod schema mismatch causes
-> silent sync failures — CloudKit Production rejects records with unknown
-> fields, and no error surfaces until the user notices that items aren't
-> syncing across devices.
+> **STOP**. Deploy the schema first (see "CloudKit schema deploys" section
+> below). Shipping with a Dev/Prod schema mismatch causes silent sync
+> failures — CloudKit Production rejects records with unknown fields, and
+> no error surfaces until the user notices that items aren't syncing
+> across devices. **Worse**: once devices have written rejected records,
+> NSPersistentCloudKitContainer marks those local mutations as terminal
+> failures. Even after deploying the schema later, those devices need a
+> delete-and-reinstall to clear the poisoned CKMirroredData store and
+> sync correctly again.
 >
 > This has bitten three times in two days:
 > - **TF 2.2 prep**: `CD_endDate` missing → calendar events stopped syncing

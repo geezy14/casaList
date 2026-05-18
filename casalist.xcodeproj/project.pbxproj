@@ -138,6 +138,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 9B5ECD582FAC6D7200278AD3 /* Build configuration list for PBXNativeTarget "casalist" */;
 			buildPhases = (
+				9BCC5C0E26CD5C0E26CD5C0E /* Preflight: CloudKit schema gate */,
 				9B5ECD462FAC6D6F00278AD3 /* Sources */,
 				9B5ECD472FAC6D6F00278AD3 /* Frameworks */,
 				9B5ECD482FAC6D6F00278AD3 /* Resources */,
@@ -251,6 +252,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		9BCC5C0E26CD5C0E26CD5C0E /* Preflight: CloudKit schema gate */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/cloudkit-schema-diff.sh",
+			);
+			name = "Preflight: CloudKit schema gate";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "# Refuse to archive a Release build when Production CloudKit\n# schema is behind Development. Has bitten three times. Never again.\nif [ \"$CONFIGURATION\" != \"Release\" ]; then\n    echo \"› schema gate: skipped (CONFIGURATION=$CONFIGURATION)\"\n    exit 0\nfi\nif [ \"${CASALIST_SKIP_SCHEMA_GATE:-0}\" = \"1\" ]; then\n    echo \"⚠️  schema gate: bypassed via CASALIST_SKIP_SCHEMA_GATE=1\"\n    exit 0\nfi\nbash \"$SRCROOT/scripts/cloudkit-schema-diff.sh\" --ci\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		9B697F2A2FB939790033761F /* PBXTargetDependency */ = {
