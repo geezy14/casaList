@@ -2649,30 +2649,43 @@ extension CasalistCottage {
         // MARK: – Hero
 
         private var progressHero: some View {
-            HStack(spacing: 16) {
+            HStack(alignment: .center, spacing: 18) {
                 ZStack {
-                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 6).frame(width: 76, height: 76)
+                    Circle().stroke(Color.white.opacity(0.22), lineWidth: 7).frame(width: 86, height: 86)
                     Circle().trim(from: 0, to: donePercent)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 76, height: 76)
-                    VStack(spacing: 0) {
-                        Text("\(Int(donePercent * 100))%").font(.system(size: 18, weight: .heavy))
-                        Text("done").font(.system(size: 9, weight: .heavy)).opacity(0.85)
+                        .frame(width: 86, height: 86)
+                        .animation(.easeInOut(duration: 0.5), value: donePercent)
+                    VStack(spacing: -2) {
+                        Text("\(Int(donePercent * 100))%").font(.system(size: 22, weight: .bold, design: .rounded))
+                        Text("done").font(.system(size: 10, weight: .medium)).opacity(0.8)
                     }
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(scopeAllowsEveryone ? "Family to-do" : "My to-do")
-                        .font(.system(size: 13, weight: .heavy)).opacity(0.9)
-                    Text("\(visibleItems.count) open").font(.system(size: 22, weight: .heavy))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded)).opacity(0.85)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(visibleItems.count)")
+                            .font(.system(size: 38, weight: .bold, design: .rounded))
+                        Text(visibleItems.count == 1 ? "task waiting" : "tasks waiting")
+                            .font(.system(size: 14, weight: .medium, design: .rounded)).opacity(0.85)
+                    }
                     Text(heroSubtitle)
-                        .font(.system(size: 12, weight: .semibold)).opacity(0.9)
+                        .font(.system(size: 13, weight: .medium, design: .rounded)).opacity(0.85)
                 }
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(.white).padding(20)
-            .background(P.coral)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 22).padding(.vertical, 22)
+            .background(
+                LinearGradient(
+                    colors: [P.peach, P.coral],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .shadow(color: P.coral.opacity(0.28), radius: 18, x: 0, y: 8)
         }
 
         // MARK: – Scope toggle (admin only)
@@ -2793,32 +2806,106 @@ extension CasalistCottage {
         // MARK: – Task list
 
         private var taskList: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(listHeader).font(.system(size: 13, weight: .heavy)).foregroundStyle(P.text).padding(.leading, 4)
-                    Spacer()
-                    Text("\(visibleItems.count)").font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
-                }
+            VStack(alignment: .leading, spacing: 14) {
                 if visibleItems.isEmpty {
-                    Button { showAddTodo = true } label: {
-                        VStack(spacing: 8) {
-                            Text("✨").font(.system(size: 36))
-                            Text("All clear!").font(.system(size: 15, weight: .heavy))
-                            Text("Nothing on your plate. Tap + to add something.").font(.system(size: 12, weight: .semibold)).opacity(0.7)
-                                .multilineTextAlignment(.center)
-                        }
-                        .foregroundStyle(P.text)
-                        .frame(maxWidth: .infinity).padding(24)
-                        .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
-                    }.buttonStyle(.row)
+                    emptyState
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(visibleItems, id: \.uid) { t in
-                            if t.isChoreBundle {
-                                choreBundleCard(t)
-                            } else {
-                                taskCard(t)
+                    groupedTaskList
+                }
+            }
+        }
+
+        /// Friendly empty-state card with a real SF Symbol illustration.
+        /// Tap to open the add-task sheet.
+        private var emptyState: some View {
+            Button { showAddTodo = true } label: {
+                VStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(P.mint.opacity(0.18)).frame(width: 80, height: 80)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 34, weight: .medium))
+                            .foregroundStyle(P.mint)
+                    }
+                    Text("All clear!").font(.system(size: 20, weight: .semibold, design: .rounded))
+                    Text("Nothing on your plate. Tap + to add something.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(P.textDim)
+                }
+                .foregroundStyle(P.text)
+                .frame(maxWidth: .infinity).padding(.vertical, 32).padding(.horizontal, 24)
+                .background(RoundedRectangle(cornerRadius: 24).fill(P.surface))
+                .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+            }.buttonStyle(.row)
+        }
+
+        /// Bucket type for the grouped task list. Order is canonical:
+        /// Today → Tomorrow → This week → Later → No date → Bundles.
+        private enum TaskBucket: Int, CaseIterable {
+            case overdue, today, tomorrow, thisWeek, later, noDate, bundles
+            var title: String {
+                switch self {
+                case .overdue:  return "Overdue"
+                case .today:    return "Today"
+                case .tomorrow: return "Tomorrow"
+                case .thisWeek: return "This week"
+                case .later:    return "Later"
+                case .noDate:   return "No date"
+                case .bundles:  return "Bundles"
+                }
+            }
+        }
+
+        /// Slot a task into the right bucket based on its due date.
+        /// Bundles get their own bucket regardless of date so they don't
+        /// get scattered through the day buckets.
+        private func bucket(for t: TaskItem) -> TaskBucket {
+            if t.isChoreBundle { return .bundles }
+            guard let d = t.dueDate else { return .noDate }
+            let cal = Calendar.current
+            let now = Date()
+            if d < cal.startOfDay(for: now) { return .overdue }
+            if cal.isDateInToday(d) { return .today }
+            if cal.isDateInTomorrow(d) { return .tomorrow }
+            if cal.isDate(d, equalTo: now, toGranularity: .weekOfYear) { return .thisWeek }
+            return .later
+        }
+
+        /// Visible items grouped by bucket, preserving the natural
+        /// dueDate-ascending order within each bucket.
+        private var bucketedItems: [(TaskBucket, [TaskItem])] {
+            var groups: [TaskBucket: [TaskItem]] = [:]
+            for t in visibleItems { groups[bucket(for: t), default: []].append(t) }
+            return TaskBucket.allCases.compactMap { b in
+                guard let items = groups[b], !items.isEmpty else { return nil }
+                return (b, items)
+            }
+        }
+
+        /// Task list grouped by Today / Tomorrow / This week / etc.
+        /// Each section has a sentence-case header in the same friendly
+        /// rounded family as the rest of the screen.
+        private var groupedTaskList: some View {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(bucketedItems, id: \.0) { (bucket, items) in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(bucket.title)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(bucket == .overdue ? P.coral : P.textDim)
+                                .padding(.leading, 4)
+                            Spacer()
+                            Text("\(items.count)")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(P.textMuted).padding(.trailing, 4)
+                        }
+                        VStack(spacing: 10) {
+                            ForEach(items, id: \.uid) { t in
+                                if t.isChoreBundle {
+                                    choreBundleCard(t)
+                                } else {
+                                    taskCard(t)
+                                }
                             }
                         }
                     }
@@ -2838,57 +2925,66 @@ extension CasalistCottage {
         private func taskCard(_ t: TaskItem) -> some View {
             let color = categoryColor(t.category)
             return Button { editingTask = t } label: {
-                HStack(spacing: 0) {
-                    // Left color stripe
-                    RoundedRectangle(cornerRadius: 3).fill(color)
-                        .frame(width: 5).padding(.vertical, 10)
-                    HStack(spacing: 12) {
-                        // Complete button
-                        Button {
-                            completeTask(t)
-                        } label: {
-                            if t.isCompleted {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 24)).foregroundStyle(color)
-                            } else {
-                                Circle().stroke(color, lineWidth: 2)
-                                    .frame(width: 24, height: 24)
-                            }
-                        }.buttonStyle(.row)
-
-                        // Text
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(t.task).font(.system(size: 15, weight: .heavy)).foregroundStyle(P.text)
-                                .lineLimit(2)
-                            HStack(spacing: 6) {
-                                if let d = t.dueDate {
-                                    Image(systemName: "clock").font(.system(size: 9, weight: .semibold)).foregroundStyle(P.textDim)
-                                    Text(whenString(d)).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
-                                    Text("·").foregroundStyle(P.textMuted)
-                                }
-                                Text(t.category.capitalized).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim)
-                            }
+                HStack(spacing: 14) {
+                    // Soft circular badge with the category icon — replaces the
+                    // industrial side stripe with something that reads as a
+                    // friendly category cue.
+                    ZStack {
+                        Circle().fill(color.opacity(0.18)).frame(width: 40, height: 40)
+                        Image(systemName: kindIcon(for: t.category))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(color)
+                    }
+                    // Complete button
+                    Button {
+                        completeTask(t)
+                    } label: {
+                        if t.isCompleted {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 26)).foregroundStyle(color)
+                        } else {
+                            Circle().stroke(color.opacity(0.55), lineWidth: 2)
+                                .frame(width: 26, height: 26)
                         }
+                    }.buttonStyle(.row)
 
-                        Spacer(minLength: 4)
-
-                        // Right side: avatar + points
-                        VStack(alignment: .trailing, spacing: 4) {
-                            if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 26) }
-                            if t.points > 0 {
-                                Text("+\(t.points)")
-                                    .font(.system(size: 10, weight: .heavy))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Capsule().fill(color.opacity(0.85)))
+                    // Text
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t.task)
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(P.text)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            if let d = t.dueDate {
+                                Text(whenString(d))
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(P.textDim)
+                                Text("·").foregroundStyle(P.textMuted)
                             }
+                            Text(t.category.capitalized)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(P.textDim)
                         }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 12)
+
+                    Spacer(minLength: 4)
+
+                    // Right side: avatar + points
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if let cl = memberFor(t.assignee) { CLAvatar(cl, size: 28) }
+                        if t.points > 0 {
+                            Text("+\(t.points)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(color)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Capsule().fill(color.opacity(0.15)))
+                        }
+                    }
                 }
+                .padding(.horizontal, 16).padding(.vertical, 14)
                 .background(P.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
             }.buttonStyle(.row)
         }
 
