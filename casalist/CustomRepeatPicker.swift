@@ -11,22 +11,35 @@ struct CustomRepeatPicker: View {
 
     @State private var interval: Int = 1
     @State private var unit: RepeatRule.Unit = .day
-    @State private var weekday: Int = 6   // Friday default
+    /// Selected weekdays when `unit == .week`. iOS convention 1=Sun..7=Sat.
+    @State private var selectedWeekdays: Set<Int> = [6]   // Friday default
 
     private let intervalOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
-    /// Preset shortcuts shown as chips.
-    private let presets: [(label: String, interval: Int, unit: RepeatRule.Unit)] = [
-        ("Hourly",     1,  .hour),
-        ("Every 2h",   2,  .hour),
-        ("Every 4h",   4,  .hour),
-        ("Every 8h",   8,  .hour),
-        ("Every 12h", 12,  .hour),
-        ("Daily",      1,  .day),
-        ("Weekly",     1,  .week),
-        ("Monthly",    1,  .month),
-        ("Yearly",     1,  .year),
+    /// Preset shortcuts shown as chips. The optional `weekdays` set is
+    /// applied when the preset is tapped (so "Weekdays" jumps straight
+    /// to Mon–Fri on a weekly cadence).
+    private let presets: [PresetSpec] = [
+        .init(label: "Hourly",    interval: 1,  unit: .hour,  weekdays: nil),
+        .init(label: "Every 2h",  interval: 2,  unit: .hour,  weekdays: nil),
+        .init(label: "Every 4h",  interval: 4,  unit: .hour,  weekdays: nil),
+        .init(label: "Every 8h",  interval: 8,  unit: .hour,  weekdays: nil),
+        .init(label: "Every 12h", interval: 12, unit: .hour,  weekdays: nil),
+        .init(label: "Daily",     interval: 1,  unit: .day,   weekdays: nil),
+        .init(label: "Weekdays",  interval: 1,  unit: .week,  weekdays: [2, 3, 4, 5, 6]),
+        .init(label: "Weekends",  interval: 1,  unit: .week,  weekdays: [1, 7]),
+        .init(label: "Weekly",    interval: 1,  unit: .week,  weekdays: nil),
+        .init(label: "Monthly",   interval: 1,  unit: .month, weekdays: nil),
+        .init(label: "Yearly",    interval: 1,  unit: .year,  weekdays: nil),
     ]
+
+    private struct PresetSpec: Identifiable {
+        var label: String
+        var interval: Int
+        var unit: RepeatRule.Unit
+        var weekdays: Set<Int>?
+        var id: String { label }
+    }
 
     var body: some View {
         NavigationStack {
@@ -37,7 +50,7 @@ struct CustomRepeatPicker: View {
                         GridItem(.flexible(), spacing: 8),
                         GridItem(.flexible(), spacing: 8),
                     ], spacing: 8) {
-                        ForEach(presets, id: \.label) { p in
+                        ForEach(presets) { p in
                             presetChip(p)
                         }
                     }
@@ -53,12 +66,7 @@ struct CustomRepeatPicker: View {
                         }
                     }
                     if unit == .week {
-                        Picker("On day", selection: $weekday) {
-                            let symbols = Calendar.current.standaloneWeekdaySymbols
-                            ForEach(1...7, id: \.self) { wd in
-                                Text(symbols[wd - 1]).tag(wd)
-                            }
-                        }
+                        weekdaySelector
                     }
                 }
                 Section {
@@ -81,12 +89,53 @@ struct CustomRepeatPicker: View {
         }
     }
 
-    private func presetChip(_ p: (label: String, interval: Int, unit: RepeatRule.Unit)) -> some View {
-        let isSelected = (interval == p.interval && unit == p.unit &&
-                          (unit != .week || weekday == 6))
+    private var weekdaySelector: some View {
+        // Two-row toggleable weekday chips (Sun → Sat). Tapping toggles
+        // membership; at least one day must remain selected — if the user
+        // tries to deselect the last day, we silently keep it.
+        let shorts = Calendar.current.veryShortStandaloneWeekdaySymbols  // ["S","M",...,"S"]
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("On these days").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                ForEach(1...7, id: \.self) { wd in
+                    let isOn = selectedWeekdays.contains(wd)
+                    Button {
+                        if isOn {
+                            if selectedWeekdays.count > 1 { selectedWeekdays.remove(wd) }
+                        } else {
+                            selectedWeekdays.insert(wd)
+                        }
+                    } label: {
+                        Text(shorts[wd - 1])
+                            .font(.system(size: 14, weight: .heavy))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                Circle().fill(isOn ? Color.accentColor : Color(.tertiarySystemBackground))
+                            )
+                            .foregroundStyle(isOn ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func presetChip(_ p: PresetSpec) -> some View {
+        let isSelected: Bool = {
+            guard interval == p.interval && unit == p.unit else { return false }
+            if p.unit == .week {
+                let presetDays = p.weekdays ?? [6]
+                return selectedWeekdays == presetDays
+            }
+            return true
+        }()
         return Button {
             interval = p.interval
             unit = p.unit
+            if p.unit == .week {
+                selectedWeekdays = p.weekdays ?? [6]
+            }
         } label: {
             Text(p.label)
                 .font(.system(size: 13, weight: .heavy))
@@ -100,7 +149,13 @@ struct CustomRepeatPicker: View {
     }
 
     private var previewLabel: String {
-        RepeatRule(interval: interval, unit: unit, weekday: unit == .week ? weekday : nil).label
+        let wds = unit == .week ? Array(selectedWeekdays).sorted() : []
+        if unit == .week && wds.count > 1 {
+            return RepeatRule(interval: interval, unit: unit, weekday: nil, weekdays: wds).label
+        }
+        return RepeatRule(interval: interval, unit: unit,
+                          weekday: unit == .week ? wds.first : nil,
+                          weekdays: nil).label
     }
 
     /// Pre-fill the builder from whatever's stored.
@@ -110,12 +165,14 @@ struct CustomRepeatPicker: View {
         if encoded.isEmpty {
             interval = 1
             unit = .day
+            selectedWeekdays = [6]
             return
         }
         if let r = RepeatRule.decode(encoded) {
             interval = r.interval
             unit = r.unit
-            if let wd = r.weekday { weekday = wd }
+            let wds = r.effectiveWeekdays
+            if !wds.isEmpty { selectedWeekdays = Set(wds) }
             return
         }
         if let r = RepeatRule.fromLegacy(encoded) {
@@ -125,11 +182,17 @@ struct CustomRepeatPicker: View {
     }
 
     private func save() {
-        let rule = RepeatRule(
-            interval: interval,
-            unit: unit,
-            weekday: unit == .week ? weekday : nil
-        )
+        let rule: RepeatRule
+        if unit == .week {
+            let wds = Array(selectedWeekdays).sorted()
+            if wds.count > 1 {
+                rule = RepeatRule(interval: interval, unit: unit, weekday: nil, weekdays: wds)
+            } else {
+                rule = RepeatRule(interval: interval, unit: unit, weekday: wds.first, weekdays: nil)
+            }
+        } else {
+            rule = RepeatRule(interval: interval, unit: unit, weekday: nil, weekdays: nil)
+        }
         encoded = rule.saveForm
         dismiss()
     }

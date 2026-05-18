@@ -408,6 +408,32 @@ enum NotificationsManager {
             return periodicOccurrences(due: due, now: now, maxCount: maxCount,
                                        component: .day, value: rule.interval, cal: cal)
         case .week:
+            // Multi-weekday rules ("Every weekday", "Every Mon, Wed, Fri")
+            // expand by walking forward day-by-day and emitting occurrences
+            // whose weekday is in the set. Single-weekday rules fall through
+            // to the existing weekOfYear cadence.
+            let wds = rule.effectiveWeekdays
+            if wds.count > 1 {
+                let timeComps = cal.dateComponents([.hour, .minute, .second], from: due)
+                var cursor = cal.startOfDay(for: max(due, now))
+                var results: [Date] = []
+                var safety = 0
+                while results.count < maxCount && safety < 365 {
+                    let wd = cal.component(.weekday, from: cursor)
+                    if wds.contains(wd) {
+                        var c = cal.dateComponents([.year, .month, .day], from: cursor)
+                        c.hour = timeComps.hour
+                        c.minute = timeComps.minute
+                        c.second = timeComps.second
+                        if let d = cal.date(from: c), d > now {
+                            results.append(d)
+                        }
+                    }
+                    cursor = cal.date(byAdding: .day, value: 1, to: cursor) ?? cursor.addingTimeInterval(86400)
+                    safety += 1
+                }
+                return results
+            }
             return periodicOccurrences(due: due, now: now, maxCount: maxCount,
                                        component: .weekOfYear, value: rule.interval, cal: cal)
         case .month:
@@ -661,7 +687,11 @@ enum NotificationsManager {
     static func scheduleEvent(for event: FamilyEvent) async {
         let id = eventIdPrefix + event.uid.uuidString
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [id])
+        // Cancel both the legacy single-trigger id and any per-weekday
+        // ids from a previous multi-weekday schedule. 1=Sun..7=Sat.
+        var stale = [id]
+        for wd in 1...7 { stale.append("\(id)-wd\(wd)") }
+        center.removePendingNotificationRequests(withIdentifiers: stale)
 
         guard event.deletedAt == nil else { return }
         // Don't schedule events in the past unless they're recurring.
@@ -722,6 +752,20 @@ enum NotificationsManager {
                     trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
                 }
             case .week:
+                // Multi-weekday ("Every weekday", "Every Mon, Wed, Fri") —
+                // register one repeating calendar trigger per weekday with
+                // a -wdN suffix on the id so each can be cancelled cleanly.
+                if rule.interval == 1, let wds = rule.weekdays, wds.count > 1 {
+                    let baseComps = cal.dateComponents([.hour, .minute], from: event.startDate)
+                    for wd in wds {
+                        var dc = baseComps
+                        dc.weekday = wd
+                        let t = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                        let req = UNNotificationRequest(identifier: "\(id)-wd\(wd)", content: content, trigger: t)
+                        try? await center.add(req)
+                    }
+                    return
+                }
                 // "Every Friday" → weekly weekday trigger. "Every other
                 // Friday" → weekly trigger that fires every Friday, but we
                 // skip alternates at delivery time? Hard. Cheap fix: every

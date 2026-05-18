@@ -35,6 +35,7 @@ struct GameRules: Codable {
         ],
         categoryRules: [
             CategoryPointRule(category: "Chores",      emoji: "🧹", defaultPoints: 10, description: "Daily household chores"),
+            CategoryPointRule(category: "Homework",    emoji: "📚", defaultPoints: 10, description: "School assignments and study time"),
             CategoryPointRule(category: "Home",        emoji: "🏠", defaultPoints: 15, description: "Home upkeep and repairs"),
             CategoryPointRule(category: "Maintenance", emoji: "🔧", defaultPoints: 20, description: "Larger maintenance tasks"),
             CategoryPointRule(category: "Family",      emoji: "👨‍👩‍👧", defaultPoints: 5,  description: "Family activities and errands"),
@@ -55,7 +56,15 @@ final class GameRulesStore: ObservableObject {
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
-           let decoded = try? JSONDecoder().decode(GameRules.self, from: data) {
+           var decoded = try? JSONDecoder().decode(GameRules.self, from: data) {
+            // Migration: append any default categories the user is missing
+            // (case-insensitive match). Lets new defaults like "Homework"
+            // reach existing installs without wiping their customizations.
+            let existing = Set(decoded.categoryRules.map { $0.category.lowercased() })
+            for defaultRule in GameRules.default.categoryRules
+            where !existing.contains(defaultRule.category.lowercased()) {
+                decoded.categoryRules.append(defaultRule)
+            }
             rules = decoded
         } else {
             rules = .default

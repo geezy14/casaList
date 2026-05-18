@@ -46,14 +46,28 @@ struct RepeatRule: Codable, Equatable {
     var interval: Int
     var unit: Unit
     /// iOS weekday convention: 1=Sun, 2=Mon, ..., 7=Sat. Only meaningful
-    /// when `unit == .week`.
+    /// when `unit == .week` and `weekdays` is empty.
     var weekday: Int?
+    /// Multi-weekday set ("every Mon, Wed, Fri" or "every weekday"). When
+    /// non-empty supersedes `weekday`. Each Int is iOS weekday convention.
+    /// Only meaningful when `unit == .week`.
+    var weekdays: [Int]?
 
     // Compact JSON keys to keep the encoded form short.
     private enum CodingKeys: String, CodingKey {
         case interval = "i"
         case unit = "u"
         case weekday = "d"
+        case weekdays = "dd"
+    }
+
+    /// Effective weekday list. `weekdays` wins when set; otherwise falls
+    /// back to a single-element list built from `weekday`. Returns []
+    /// when neither is set.
+    var effectiveWeekdays: [Int] {
+        if let wds = weekdays, !wds.isEmpty { return wds.sorted() }
+        if let wd = weekday { return [wd] }
+        return []
     }
 
     /// Human-readable label for use in the picker / event row.
@@ -68,17 +82,28 @@ struct RepeatRule: Codable, Equatable {
         case .year:   nounPlural = interval == 1 ? "year"   : "years"
         }
         var s = interval == 1 ? "Every \(nounPlural.dropFirst(0))" : "Every \(interval) \(nounPlural)"
-        // Simpler phrasing for "Every 1 X":
         if interval == 1 { s = "Every \(unit.singular)" }
-        if unit == .week, let wd = weekday {
-            let symbols = Calendar.current.standaloneWeekdaySymbols  // ["Sunday", ..., "Saturday"]
-            let idx = max(0, min(symbols.count - 1, wd - 1))
-            if interval == 1 {
-                s = "Every \(symbols[idx])"
-            } else if interval == 2 {
-                s = "Every other \(symbols[idx])"
-            } else {
-                s = "Every \(interval) weeks on \(symbols[idx])"
+        if unit == .week {
+            let wds = effectiveWeekdays
+            let symbols = Calendar.current.standaloneWeekdaySymbols
+            let shorts = Calendar.current.shortStandaloneWeekdaySymbols
+            // Special cases for multi-weekday sets
+            if Set(wds) == Set([2, 3, 4, 5, 6]) {
+                s = interval == 1 ? "Every weekday" : "Every \(interval) weeks on weekdays"
+            } else if Set(wds) == Set([1, 7]) {
+                s = interval == 1 ? "Every weekend" : "Every \(interval) weeks on weekends"
+            } else if wds.count > 1 {
+                let names = wds.map { shorts[max(0, min(6, $0 - 1))] }.joined(separator: ", ")
+                s = interval == 1 ? "Every week on \(names)" : "Every \(interval) weeks on \(names)"
+            } else if let wd = wds.first {
+                let idx = max(0, min(symbols.count - 1, wd - 1))
+                if interval == 1 {
+                    s = "Every \(symbols[idx])"
+                } else if interval == 2 {
+                    s = "Every other \(symbols[idx])"
+                } else {
+                    s = "Every \(interval) weeks on \(symbols[idx])"
+                }
             }
         }
         return s
@@ -129,6 +154,7 @@ struct RepeatRule: Codable, Equatable {
     /// only expresses as a `custom:…` JSON blob.
     var legacyEquivalent: String? {
         if weekday != nil { return nil }   // weekday-specific rules are always custom
+        if let wds = weekdays, !wds.isEmpty { return nil } // multi-weekday is always custom
         switch (unit, interval) {
         case (.hour, 1):   return "hourly"
         case (.hour, 2):   return "every2h"
