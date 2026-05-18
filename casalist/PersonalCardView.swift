@@ -27,7 +27,6 @@ struct PersonalCardView: View {
     @StateObject private var gameRules = GameRulesStore.shared
 
     @State private var showEditPhoto = false
-    @State private var showSharePreview = false
     @State private var showShareSheet = false
     @State private var shareImage: UIImage? = nil
 
@@ -52,6 +51,13 @@ struct PersonalCardView: View {
         f.dateFormat = "MMM d, yyyy"
         return f.string(from: d)
     }
+
+    private var myLifetimePoints: Int {
+        guard let m = me else { return 0 }
+        return Int(max(m.lifetimePoints, m.points))
+    }
+    private var myRankLabel: String { levelLabel(for: myLifetimePoints) }
+    private var myRankLevel: AvatarLevel { AvatarLevel(lifetimePoints: myLifetimePoints) }
 
     // ── Stat computations ─────────────────────────────────────────────────────
 
@@ -153,16 +159,6 @@ struct PersonalCardView: View {
             }
         }
         .sheet(isPresented: $showEditPhoto) { ProfilePhotoSheet() }
-        .sheet(isPresented: $showSharePreview) {
-            if let img = shareImage {
-                SharePreviewSheet(image: img, onShare: {
-                    showSharePreview = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        showShareSheet = true
-                    }
-                })
-            }
-        }
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage { ShareSheet(items: [img]) }
         }
@@ -221,14 +217,26 @@ struct PersonalCardView: View {
                 .offset(x: 2, y: 2)
             }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(myName)
                     .font(.system(size: 24, weight: .heavy))
                     .foregroundStyle(.white)
+                HStack(spacing: 5) {
+                    if let emblem = myRankLevel.emblem {
+                        Text(emblem).font(.system(size: 11))
+                    }
+                    Text(myRankLabel.uppercased())
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(myRankLevel == .rookie
+                            ? .white.opacity(0.5)
+                            : myRankLevel.ringColor)
+                }
                 Text("MEMBER SINCE")
                     .font(.system(size: 8, weight: .heavy))
                     .tracking(1.4)
                     .foregroundStyle(.white.opacity(0.45))
+                    .padding(.top, 2)
                 Text(memberSince)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.8))
@@ -240,11 +248,11 @@ struct PersonalCardView: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(rgb: 0x1C1C1E)))
     }
 
-    // ── STATS & AWARDS card ───────────────────────────────────────────────────
+    // ── SWEPT THE CHORES card ───────────────────────────────────────────────────
 
     private var statsAwardsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("STATS & AWARDS")
+            Text("SWEPT THE CHORES")
                 .font(.system(size: 11, weight: .heavy))
                 .tracking(0.5)
                 .foregroundStyle(.white)
@@ -325,7 +333,7 @@ struct PersonalCardView: View {
     private var splitsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("SPLITS")
+                Text("CHORES & SCORES")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(0.5)
                     .foregroundStyle(.white)
@@ -439,7 +447,7 @@ struct PersonalCardView: View {
     private var projectionsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("PROJECTIONS")
+                Text("KEEPING UP THE PACE")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(0.5)
                     .foregroundStyle(.white)
@@ -510,7 +518,7 @@ struct PersonalCardView: View {
         renderer.proposedSize = ProposedViewSize(width: 390, height: 780)
         if let img = renderer.uiImage {
             shareImage = img
-            showSharePreview = true
+            showShareSheet = true
         }
     }
 }
@@ -592,9 +600,9 @@ private struct CardSnapshotView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                // STATS & AWARDS
+                // SWEPT THE CHORES
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("STATS & AWARDS")
+                    Text("SWEPT THE CHORES")
                         .font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                     HStack(spacing: 0) {
                         snapAwardCol(icon: "checkmark.circle.fill", color: palette.sky,
@@ -614,7 +622,7 @@ private struct CardSnapshotView: View {
                 // SPLITS
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("SPLITS").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                        Text("CHORES & SCORES").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                         Spacer()
                         Text("\(currentYear) · YOUR YEAR IN TASKS")
                             .font(.system(size: 8, weight: .heavy)).tracking(0.7)
@@ -634,7 +642,7 @@ private struct CardSnapshotView: View {
                 // PROJECTIONS
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("PROJECTIONS").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                        Text("KEEPING UP THE PACE").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                         Spacer()
                         Text("YEAR END FORECAST")
                             .font(.system(size: 8, weight: .heavy)).tracking(0.7)

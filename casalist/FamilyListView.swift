@@ -195,10 +195,9 @@ public struct FamilyListView: View {
             if !activeAnnouncements.isEmpty { announcementsBanner }
             hero
             quickAddBar
-            if !agendaItems.isEmpty { agendaSection }
             if !trips.isEmpty { tripsSection }
             if !looseItems.isEmpty { looseSection }
-            if agendaItems.isEmpty && trips.isEmpty && looseItems.isEmpty { emptyCard }
+            if trips.isEmpty && looseItems.isEmpty { emptyCard }
             if !recentlyDone.isEmpty { doneSection }
         }
         .padding(.horizontal, 20)
@@ -315,7 +314,7 @@ public struct FamilyListView: View {
             context: moc,
             task: name,
             category: "family",
-            points: 0,
+            points: 5,
             createdBy: userName.trimmingCharacters(in: .whitespaces)
         )
         if let h = households.preferredTarget {
@@ -484,11 +483,63 @@ public struct FamilyListView: View {
 
     private var looseSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("QUICK ITEMS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
-            VStack(spacing: 8) {
-                ForEach(looseItems, id: \.uid) { t in row(t) }
+            Text("UP FOR GRABS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(looseItems, id: \.uid) { t in looseTile(t) }
             }
         }
+    }
+
+    private func looseTile(_ t: TaskItem) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Tap body to edit
+            Button { editingTask = t } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t.points > 0 ? "⭐ \(t.points) pts" : "⭐ 0 pts")
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(t.points > 0 ? Color.white : P.textMuted)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(t.points > 0 ? P.butter : P.surfaceAlt))
+                    Text(t.task)
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(P.text)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                    if !t.createdBy.isEmpty {
+                        Text("by \(t.createdBy)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(P.textMuted)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 10)
+            }
+            .buttonStyle(.row)
+
+            // Action buttons pinned to bottom
+            HStack(spacing: 8) {
+                Button { claim(t) } label: {
+                    Text("Claim")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(P.peach))
+                }
+                .buttonStyle(.row)
+                Button { markDone(t) } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(P.mint))
+                }
+                .buttonStyle(.row)
+            }
+            .padding(.horizontal, 14).padding(.bottom, 12)
+        }
+        .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
     }
 
     private var emptyCard: some View {
@@ -542,8 +593,8 @@ public struct FamilyListView: View {
                     .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
                 }.buttonStyle(.row)
             } else {
-                VStack(spacing: 8) {
-                    ForEach(openItems, id: \.uid) { t in row(t) }
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(openItems, id: \.uid) { t in looseTile(t) }
                 }
             }
         }
@@ -572,40 +623,6 @@ public struct FamilyListView: View {
         }
     }
 
-    private func row(_ t: TaskItem) -> some View {
-        HStack(spacing: 12) {
-            Button { editingTask = t } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t.task).font(.system(size: 14, weight: .heavy)).lineLimit(2).foregroundStyle(P.text)
-                    HStack(spacing: 6) {
-                        if t.points > 0 {
-                            Text("⭐ \(t.points)").font(.system(size: 10, weight: .heavy))
-                                .padding(.horizontal, 8).padding(.vertical, 2)
-                                .background(Capsule().fill(P.butter))
-                                .foregroundStyle(.white)
-                        }
-                        if !t.createdBy.isEmpty {
-                            Text("added by \(t.createdBy)").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }.buttonStyle(.row)
-            Button { claim(t) } label: {
-                Text("Claim").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Capsule().fill(P.peach))
-            }.buttonStyle(.row)
-            Button { markDone(t) } label: {
-                Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
-                    .frame(width: 32, height: 32).background(Circle().fill(P.mint))
-            }.buttonStyle(.row)
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
-    }
 
     private func claim(_ t: TaskItem) {
         let me = userName.trimmingCharacters(in: .whitespaces)

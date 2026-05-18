@@ -19,7 +19,7 @@ private let levelThresholds: [Int] = [
 ]
 
 private let levelLabels: [String] = [
-    "Rookie", "Learner", "Helper", "Doer", "Go-Getter",
+    "Rookie", "Broom Pilot", "Mop Jockey", "Chore Warrior", "Task Slayer",
     "Achiever", "Pro", "Expert", "Master", "Legend",
 ]
 

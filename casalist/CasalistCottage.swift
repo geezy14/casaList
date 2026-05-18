@@ -960,31 +960,36 @@ public enum CasalistCottage {
             let top = sorted.first
             let lead = (top?.points ?? 0) - (sorted.dropFirst().first?.points ?? 0)
             return ZStack(alignment: .bottomTrailing) {
-                    Text("🏆").font(.system(size: 80)).offset(x: -10, y: 30).opacity(0.2)
-                    VStack(alignment: .leading, spacing: 10) {
-                        if let top {
-                            HStack(spacing: 14) {
-                                LeveledAvatar(member: top, size: 56)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("1ST PLACE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.7)
-                                    Text(top.name).font(.system(size: 22, weight: .heavy))
-                                    Text("\(top.points) pts\(lead > 0 ? " · \(lead) ahead!" : "")").font(.system(size: 13, weight: .bold))
-                                }
-                            }
-                        }
-                        ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
-                            HStack(spacing: 10) {
-                                Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 14))
-                                Text(m.name).font(.system(size: 13, weight: .heavy))
-                                Spacer()
-                                Text("\(m.points)").font(.system(size: 13, weight: .heavy)).monospacedDigit()
+                Text("🏆").font(.system(size: 80)).offset(x: -10, y: 30).opacity(0.2)
+                VStack(alignment: .leading, spacing: 10) {
+                    if let top {
+                        HStack(spacing: 14) {
+                            LeveledAvatar(member: top, size: 56)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("1ST PLACE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.7)
+                                Text(top.name).font(.system(size: 22, weight: .heavy))
+                                Text("\(top.points) pts\(lead > 0 ? " · \(lead) ahead!" : "")").font(.system(size: 13, weight: .bold))
                             }
                         }
                     }
-                    .foregroundStyle(Color(rgb: 0x3B2A22)).padding(20)
+                    ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
+                        let lp = Int(max(m.lifetimePoints, m.points))
+                        let rank = levelLabel(for: lp)
+                        HStack(spacing: 10) {
+                            Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 14))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(m.name).font(.system(size: 13, weight: .heavy))
+                                Text(rank).font(.system(size: 10, weight: .semibold)).opacity(0.6)
+                            }
+                            Spacer()
+                            Text("\(m.points)").font(.system(size: 13, weight: .heavy)).monospacedDigit()
+                        }
+                    }
                 }
-                .background(P.butter)
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .foregroundStyle(Color(rgb: 0x3B2A22)).padding(20)
+            }
+            .background(P.butter)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
 
         private var myDashboardTodos: [TaskItem] {
@@ -3282,10 +3287,87 @@ extension CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 quickAddRow
+                staplesGrid
                 if !trips.isEmpty { tripsSection }
                 flatActiveSection
                 boughtSection
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        // MARK: – Staples grid
+
+        private static let staples: [(name: String, emoji: String)] = [
+            ("Milk",          "🥛"),
+            ("Eggs",          "🥚"),
+            ("Bread",         "🍞"),
+            ("Butter",        "🧈"),
+            ("Cheese",        "🧀"),
+            ("Chicken",       "🍗"),
+            ("Ground beef",   "🥩"),
+            ("Apples",        "🍎"),
+            ("Bananas",       "🍌"),
+            ("Broccoli",      "🥦"),
+            ("Tomatoes",      "🍅"),
+            ("Onions",        "🧅"),
+            ("Potatoes",      "🥔"),
+            ("Garlic",        "🧄"),
+            ("Lemons",        "🍋"),
+            ("Rice",          "🍚"),
+            ("Pasta",         "🍝"),
+            ("Cereal",        "🥣"),
+            ("Coffee",        "☕"),
+            ("Juice",         "🧃"),
+            ("Toilet paper",  "🧻"),
+            ("Dish soap",     "🧴"),
+            ("Sponges",       "🧽"),
+            ("Paper towels",  "🪣"),
+        ]
+
+        private var staplesGrid: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("STAPLES").font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                    .foregroundStyle(P.textDim).padding(.leading, 4)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(Self.staples, id: \.name) { staple in
+                        let alreadyOn = flatActive.contains { $0.task.lowercased() == staple.name.lowercased() }
+                        Button {
+                            if !alreadyOn { addStaple(staple.name) }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(staple.emoji).font(.system(size: 24))
+                                Text(staple.name)
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .foregroundStyle(alreadyOn ? P.textMuted : P.text)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12).padding(.horizontal, 6)
+                            .background(RoundedRectangle(cornerRadius: 16)
+                                .fill(alreadyOn ? P.surfaceAlt.opacity(0.5) : P.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 16)
+                                .stroke(alreadyOn ? P.mint.opacity(0.6) : P.border, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.row)
+                        .disabled(alreadyOn)
+                    }
+                }
+            }
+        }
+
+        private func addStaple(_ name: String) {
+            let it = TaskItem(
+                context: modelContext,
+                task: name,
+                category: "groceries",
+                points: 0,
+                createdBy: userName.trimmingCharacters(in: .whitespaces)
+            )
+            if let h = households.preferredTarget {
+                modelContext.assign(it, toStoreOf: h)
+                it.household = h
+            }
+            try? modelContext.save()
         }
 
         private var hero: some View {
@@ -3581,12 +3663,55 @@ extension CasalistCottage {
         /// labeled "Home" and lands here; default to the home category so the
         /// view title matches what the user just tapped.
         @State private var categoryPill: String = "Home"
+        @State private var quickAddTarget: DefaultChore? = nil
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTasks: FetchedResults<TaskItem>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
+        @AppStorage("userName") private var userName: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
+
+        // MARK: – Default chore catalogue
+
+        struct DefaultChore: Identifiable {
+            let id = UUID()
+            let name: String
+            let emoji: String
+            let points: Int
+            let category: String   // "home" or "maintenance"
+        }
+
+        private static let homeDefaults: [DefaultChore] = [
+            DefaultChore(name: "Vacuum floors",    emoji: "🧹", points: 15, category: "home"),
+            DefaultChore(name: "Mop floors",       emoji: "🪣", points: 15, category: "home"),
+            DefaultChore(name: "Clean bathrooms",  emoji: "🚿", points: 20, category: "home"),
+            DefaultChore(name: "Do laundry",       emoji: "🧺", points: 10, category: "home"),
+            DefaultChore(name: "Change bed sheets",emoji: "🛏️", points: 10, category: "home"),
+            DefaultChore(name: "Take out trash",   emoji: "🗑️", points: 10, category: "home"),
+            DefaultChore(name: "Clean kitchen",    emoji: "🍽️", points: 15, category: "home"),
+            DefaultChore(name: "Clean windows",    emoji: "🪟", points: 15, category: "home"),
+            DefaultChore(name: "Dust surfaces",    emoji: "🪶", points: 10, category: "home"),
+            DefaultChore(name: "Wipe counters",    emoji: "🧽", points: 10, category: "home"),
+        ]
+
+        private static let maintenanceDefaults: [DefaultChore] = [
+            DefaultChore(name: "Change air filter",  emoji: "💨", points: 20, category: "maintenance"),
+            DefaultChore(name: "Test smoke alarms",  emoji: "🔋", points: 15, category: "maintenance"),
+            DefaultChore(name: "Check under sinks",  emoji: "💧", points: 10, category: "maintenance"),
+            DefaultChore(name: "Clean gutters",      emoji: "🍂", points: 25, category: "maintenance"),
+            DefaultChore(name: "Replace light bulbs",emoji: "💡", points: 10, category: "maintenance"),
+            DefaultChore(name: "Clean dryer vent",   emoji: "🌀", points: 20, category: "maintenance"),
+            DefaultChore(name: "Check water heater", emoji: "🌡️", points: 15, category: "maintenance"),
+            DefaultChore(name: "Pest check",         emoji: "🐛", points: 15, category: "maintenance"),
+            DefaultChore(name: "Caulk & seals",      emoji: "🔩", points: 20, category: "maintenance"),
+            DefaultChore(name: "Check fire extinguisher", emoji: "🧯", points: 15, category: "maintenance"),
+        ]
+
+        private var currentDefaults: [DefaultChore] {
+            categoryPill == "Maintenance" ? Self.maintenanceDefaults : Self.homeDefaults
+        }
 
         private var activeCategoryTag: String {
             categoryPill == "Maintenance" ? "maintenance" : "home"
@@ -3629,6 +3754,9 @@ extension CasalistCottage {
             .preferredColorScheme(dark ? .dark : .light)
             .sheet(isPresented: $showAdd) {
                 AddTaskView(defaultCategory: categoryPill == "Maintenance" ? "Maintenance" : "home")
+            }
+            .sheet(item: $quickAddTarget) { chore in
+                quickAddSheet(chore)
             }
             .swipeToDismiss()
         }
@@ -3675,15 +3803,52 @@ extension CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 hero
                 pill
-                if active.isEmpty && done.isEmpty {
-                    emptyCard
-                } else {
+                quickAddGrid
+                if !active.isEmpty || !done.isEmpty {
                     section(title: "OVERDUE ⚠️", items: overdue, color: P.coral)
                     section(title: "DUE THIS WEEK 📅", items: dueSoon, color: P.butter)
                     section(title: "UPCOMING", items: laterItems, color: P.lavender)
                     section(title: "DONE ✓", items: done.suffix(5).map { $0 }, color: P.mint, completed: true)
                 }
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        private var quickAddGrid: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("QUICK ADD").font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                    .foregroundStyle(P.textDim).padding(.leading, 4)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(currentDefaults) { chore in
+                        Button { quickAddTarget = chore } label: {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(chore.emoji).font(.system(size: 32))
+                                Spacer()
+                                Text(chore.name)
+                                    .font(.system(size: 15, weight: .heavy))
+                                    .foregroundStyle(P.text)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(2)
+                                Text("\(chore.points) pts")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(P.lavender)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .frame(minHeight: 120)
+                            .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.row)
+                    }
+                }
+            }
+        }
+
+        private func quickAddSheet(_ chore: DefaultChore) -> some View {
+            QuickChoreSheet(chore: chore, members: Array(members), households: Array(households),
+                            userName: userName, palette: P, moc: modelContext) {
+                quickAddTarget = nil
+            }
         }
 
         private var hero: some View {
@@ -3780,6 +3945,156 @@ extension CasalistCottage {
             let f = DateFormatter()
             f.dateFormat = "MMM d"
             return f.string(from: d)
+        }
+    }
+
+    // MARK: – Quick Chore Sheet
+
+    private struct QuickChoreSheet: View {
+        let chore: Maintenance.DefaultChore
+        let members: [FamilyMember]
+        let households: [Household]
+        let userName: String
+        let palette: Palette
+        let moc: NSManagedObjectContext
+        let onDone: () -> Void
+
+        @State private var points: Int
+        @State private var assignee: String = ""
+        @State private var dueDate: Date = Calendar.current.startOfDay(for: Date())
+        @State private var hasDueDate: Bool = true
+
+        init(chore: Maintenance.DefaultChore, members: [FamilyMember], households: [Household],
+             userName: String, palette: Palette, moc: NSManagedObjectContext, onDone: @escaping () -> Void) {
+            self.chore = chore
+            self.members = members
+            self.households = households
+            self.userName = userName
+            self.palette = palette
+            self.moc = moc
+            self.onDone = onDone
+            _points = State(initialValue: chore.points)
+        }
+
+        private var P: Palette { palette }
+
+        var body: some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    VStack(spacing: 0) {
+                        // Header
+                        VStack(spacing: 6) {
+                            Text(chore.emoji).font(.system(size: 52))
+                            Text(chore.name).font(.system(size: 22, weight: .heavy)).multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+
+                        // Options
+                        VStack(spacing: 0) {
+                            // Points row
+                            HStack {
+                                Label("Points", systemImage: "star.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(P.text)
+                                Spacer()
+                                Stepper("\(points) pts", value: $points, in: 5...500, step: 5)
+                                    .labelsHidden()
+                                Text("\(points) pts")
+                                    .font(.system(size: 14, weight: .heavy))
+                                    .foregroundStyle(P.lavender)
+                                    .frame(width: 56, alignment: .trailing)
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 14)
+                            Divider().padding(.leading, 20)
+
+                            // Assignee row
+                            HStack {
+                                Label("Assign to", systemImage: "person.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(P.text)
+                                Spacer()
+                                Picker("", selection: $assignee) {
+                                    Text("Anyone").tag("")
+                                    ForEach(members, id: \.uid) { m in
+                                        Text(m.name).tag(m.name)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(P.lavender)
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 14)
+                            Divider().padding(.leading, 20)
+
+                            // Due date row
+                            HStack {
+                                Label("Due", systemImage: "calendar")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(P.text)
+                                Spacer()
+                                if hasDueDate {
+                                    DatePicker("", selection: $dueDate, displayedComponents: .date)
+                                        .datePickerStyle(.compact).labelsHidden()
+                                }
+                                Toggle("", isOn: $hasDueDate).labelsHidden()
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 14)
+                        }
+                        .background(RoundedRectangle(cornerRadius: 22).fill(P.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(P.border, lineWidth: 1.5))
+                        .padding(.horizontal, 20)
+
+                        Spacer()
+
+                        // Add button
+                        Button {
+                            addChore()
+                        } label: {
+                            Text("Add to List")
+                                .font(.system(size: 16, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Capsule().fill(P.lavender))
+                        }
+                        .buttonStyle(.row)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 32)
+                    }
+                }
+                .foregroundStyle(P.text)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { onDone() }
+                            .foregroundStyle(P.text)
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+
+        private func addChore() {
+            let task = TaskItem(
+                context: moc,
+                task: chore.name,
+                assignee: assignee.isEmpty ? nil : assignee,
+                dueDate: hasDueDate ? dueDate : nil,
+                category: chore.category,
+                isCompleted: false,
+                points: points,
+                createdBy: userName,
+                repeatHours: 0,
+                repeatKind: ""
+            )
+            if let h = households.preferredTarget {
+                moc.assign(task, toStoreOf: h)
+                task.household = h
+            }
+            try? moc.save()
+            Task { await NotificationsManager.scheduleNow(for: task) }
+            onDone()
         }
     }
 
