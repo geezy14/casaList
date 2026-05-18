@@ -780,18 +780,45 @@ If Xcode's auto-signing blanks `DEVELOPMENT_TEAM = ""` in the Debug config durin
 > a single day for what should have been three builds of `2.0`. Geezy caught
 > it and called it theater. Don't repeat.
 
+> **CLOUDKIT SCHEMA GATE — required pre-archive check.**
+>
+> Before ANY archive, run:
+> ```bash
+> bash scripts/cloudkit-schema-diff.sh
+> ```
+>
+> If it does NOT report `✅ Production and Development schemas are identical`,
+> **STOP**. Do not archive. Deploy the schema first (see "CloudKit schema
+> deploys" section below). Shipping with a Dev/Prod schema mismatch causes
+> silent sync failures — CloudKit Production rejects records with unknown
+> fields, and no error surfaces until the user notices that items aren't
+> syncing across devices.
+>
+> This has bitten three times in two days:
+> - **TF 2.2 prep**: `CD_endDate` missing → calendar events stopped syncing
+> - **TF 2.3 ship**: `CD_notifyMode` missing → all new tasks/reminders stopped
+>   syncing
+> - (earlier) field-name typo in 1.x line
+>
+> Any commit that adds `@NSManaged` to an NSManagedObject subclass OR
+> `attr(...)` to `CasaCoreData.swift` IS a schema change. The first build
+> from that commit silently registers the field in Dev CloudKit. Production
+> stays empty until you explicitly deploy via the Dashboard. The diff
+> script catches this; running it is the only reliable defense.
+
 When Geezy says "testflight it" (or similar):
 
 1. Commit current changes to `main` (do NOT push to remote unless Geezy explicitly says to push).
-2. Bump `CURRENT_PROJECT_VERSION` (build number) in `casalist.xcodeproj/project.pbxproj` — must be higher than the last TestFlight build, never reuse. **Leave `MARKETING_VERSION` alone unless Geezy explicitly asks.**
-3. Write release notes to `testflight-notes-<build>.txt` at the project root (covers What's New + What's Fixed + What to Test).
-4. Archive Release config:
+2. **Run `bash scripts/cloudkit-schema-diff.sh`. If diffs exist, STOP — deploy schema first.** (See "CloudKit schema deploys" section below.)
+3. Bump `CURRENT_PROJECT_VERSION` (build number) in `casalist.xcodeproj/project.pbxproj` — must be higher than the last TestFlight build, never reuse. **Leave `MARKETING_VERSION` alone unless Geezy explicitly asks.**
+4. Write release notes to `testflight-notes-<build>.txt` at the project root (covers What's New + What's Fixed + What to Test).
+5. Archive Release config:
    ```bash
    xcodebuild -project casalist.xcodeproj -scheme casalist -configuration Release \
      -destination 'generic/platform=iOS' \
      -archivePath build/casalist.xcarchive archive -allowProvisioningUpdates
    ```
-5. Export the IPA using the App Store Connect API key (this is the critical trick — without these flags, export fails because no iOS Distribution cert is in the local keychain):
+6. Export the IPA using the App Store Connect API key (this is the critical trick — without these flags, export fails because no iOS Distribution cert is in the local keychain):
    ```bash
    xcodebuild -exportArchive \
      -archivePath build/casalist.xcarchive \
@@ -803,12 +830,12 @@ When Geezy says "testflight it" (or similar):
      -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_RSZWNZ7YL3.p8
    ```
    The `-authenticationKey*` flags pull the iOS Distribution cert via the API on the fly. Don't skip them.
-6. Upload to App Store Connect:
+7. Upload to App Store Connect:
    ```bash
    xcrun altool --upload-app -f build/export/casalist.ipa -t ios \
      --apiKey RSZWNZ7YL3 --apiIssuer 69a6de73-6a85-47e3-e053-5b8c7c11a4d1
    ```
-7. (Optional) Set the "What to Test" notes on the build via the API. Write a small Python script using PyJWT to call the App Store Connect API and PATCH the build's `betaBuildLocalizations` with the contents of `testflight-notes-<build>.txt`. See casaBills2 history for a working `set_testflight_notes.py` template — the auth flow is identical, just swap the bundle ID filter to `com.gbrown10.casalist`.
+8. (Optional) Set the "What to Test" notes on the build via the API. Write a small Python script using PyJWT to call the App Store Connect API and PATCH the build's `betaBuildLocalizations` with the contents of `testflight-notes-<build>.txt`. See casaBills2 history for a working `set_testflight_notes.py` template — the auth flow is identical, just swap the bundle ID filter to `com.gbrown10.casalist`.
 
    **Keep `testflight-notes-*.txt` PURE ASCII.** Apple's App Store Connect API rejects certain glyphs in the `whatsNew` field with `409 ENTITY_ERROR.ATTRIBUTE.INVALID.INVALID_TEXT`. The filter is inconsistent — some emojis pass, others don't — so the safe rule is `ord(c) <= 127` for every char. Concrete substitutions when writing notes (these are the ones I personally keep typing on autopilot):
 
