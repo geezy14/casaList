@@ -105,18 +105,18 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
     /// from blocking the queue that CloudKit needs.
     static func runDedupePipeline(userName: String) {
         let stack = CasaCoreDataStack.shared
-        // Use container.performBackgroundTask so Apple manages the bg
-        // context's lifetime — released as soon as the block returns.
-        // The previous newBackgroundContext() + automaticallyMergesChangesFromParent
-        // path leaked: each remote-change cycle minted a fresh context that
-        // stuck around observing parent saves. Over a foreground session,
-        // dozens of these accumulated, each auto-merging every save, taxing
-        // SQLite enough that NSPersistentCloudKitContainer's export queue
-        // could starve. Symptom: changes on Air wouldn't push to 15 until
-        // Air was force-closed (which released every leaked context).
-        stack.container.performBackgroundTask { bg in
+        // REVERTED to 2.2's pattern in TF 2.5 (2026-05-18). The
+        // performBackgroundTask variant was theory-correct but empirically
+        // broke cross-device sync on Production even after clean
+        // reinstalls. Whatever the actual interaction with
+        // NSPersistentCloudKitContainer's export queue, 2.2's
+        // newBackgroundContext() + automaticallyMergesChangesFromParent
+        // worked, so we ship what worked.
+        let bg = stack.container.newBackgroundContext()
+        bg.automaticallyMergesChangesFromParent = true
+        bg.perform {
             // Dedupe pipeline on a private-queue context. All saves go
-            // through the bg block, NOT the main thread — so the SQLite WAL
+            // through bg.perform, NOT the main thread — so the SQLite WAL
             // checkpoint can't deadlock the scene-update watchdog.
             // Stamping the user's own cloudKitUserID is async (needs
             // CKContainer.userRecordID), so we kick that off in parallel

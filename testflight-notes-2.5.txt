@@ -1,0 +1,14 @@
+Casalist 2.2 (build 2.5)
+
+What's new
+- Sync recovery. Restores 2.2-era cross-device sync. Chores,
+  reminders, and grocery items push between phones within
+  seconds again.
+
+What to test
+- Add a chore on Device A. Watch Device B within ~30 seconds.
+- Check off a reminder on Device A. Strike-through should mirror
+  to Device B without reopening.
+- Add a grocery item on Device A; appears on Device B.
+
+Thanks for testing!
