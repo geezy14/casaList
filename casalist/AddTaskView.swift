@@ -26,14 +26,16 @@ struct AddTaskView: View {
     @State private var hasTime: Bool = false
     @State private var points: Int = 10
     @State private var repeatKind: String = ""
+    @State private var showCustomRepeat: Bool = false
 
-    private let repeatOptions: [(label: String, kind: String)] = [
-        ("None",     ""),
-        ("Daily",    "daily"),
-        ("Weekly",   "weekly"),
-        ("Monthly",  "monthly"),
-        ("Yearly",   "yearly"),
-    ]
+    /// Pretty label for the current `repeatKind`, matching the
+    /// AddReminderView convention so the two screens read the same.
+    private var repeatRowLabel: String {
+        if repeatKind.isEmpty { return "Never" }
+        if let rule = RepeatRule.decode(repeatKind) { return rule.label }
+        if let rule = RepeatRule.fromLegacy(repeatKind) { return rule.label }
+        return repeatKind.capitalized
+    }
 
     // "task" or "bundle"
     @State private var mode: String
@@ -172,12 +174,31 @@ struct AddTaskView: View {
             }
         }
         Section("Repeat") {
-            Picker("Repeat", selection: $repeatKind) {
-                ForEach(repeatOptions, id: \.kind) { o in Text(o.label).tag(o.kind) }
+            Button {
+                showCustomRepeat = true
+            } label: {
+                HStack {
+                    Text("Repeat").foregroundStyle(.primary)
+                    Spacer()
+                    Text(repeatRowLabel).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
+            .buttonStyle(.plain)
             if !repeatKind.isEmpty {
-                Text(repeatFooter).font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text(repeatFooter).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Clear") { repeatKind = "" }
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
+        }
+        .sheet(isPresented: $showCustomRepeat) {
+            CustomRepeatPicker(encoded: $repeatKind)
         }
     }
 
