@@ -319,6 +319,9 @@ public enum CasalistCottage {
         @State private var showMaintenance = false
         @State private var showReminders = false
         @State private var showMyToDo = false
+        /// Drives the slow pulse on the starCard's 1st-place avatar so users
+        /// notice it's tappable and links to the chore card.
+        @State private var pulsePhase: Bool = false
         @State private var showSchedule = false
         @State private var showFamilyList = false
         @State private var selectedAgendaTask: TaskItem? = nil
@@ -638,33 +641,100 @@ public enum CasalistCottage {
         private var content: some View {
             switch appLayout {
             case "rings":  ringsDashContent
-            // Calm + Kanban don't have Dashboard variants per Geezy
-            // ("calm on all tabs but ... dashboard"). Fall back to classic.
+            case "calm":   calmDashContent
+            case "kanban": kanbanDashContent
             default:       classicDashContent
             }
         }
 
-        /// "Rings" layout: rings hero + quick-add task bar + star + tiles +
-        /// What's New. No agenda ribbon, no quick-add chip row.
-        private var ringsDashContent: some View {
+        /// Kanban-style Dashboard: kanban header (title + "Tap a card to
+        /// edit") replaces the colored greeting. Pulsing profile chip
+        /// above the title (same as rings + calm) so the chore-card path
+        /// stays consistent. Star + tiles + What's New stay below.
+        private var kanbanDashContent: some View {
             VStack(alignment: .leading, spacing: 14) {
-                greetingCardRings
-                quickAdd
+                VStack(alignment: .leading, spacing: 10) {
+                    if let me = userMember {
+                        Button { showPersonalCard = true } label: {
+                            ZStack {
+                                Circle()
+                                    .stroke(P.peach.opacity(pulsePhase ? 0.0 : 0.55), lineWidth: 2)
+                                    .frame(width: 52, height: 52)
+                                    .scaleEffect(pulsePhase ? 1.4 : 1.0)
+                                    .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false),
+                                               value: pulsePhase)
+                                LeveledAvatar(member: me, size: 52)
+                            }
+                        }
+                        .buttonStyle(.row)
+                        .onAppear { pulsePhase = true }
+                    }
+                    Text(greetingText)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    Text("Tap a card to edit")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                }
+                .padding(.top, 16)
                 star
                 tiles
                 whatsNew
             }.padding(.horizontal, 20).padding(.bottom, 28)
         }
 
-        /// "Classic" layout: the original 2.2 dashboard. Peach greeting
-        /// banner, agenda ribbon, quick-add bar + chips, star, tiles,
-        /// What's New.
+        /// Calm layout: roomy text greeting + pulsing profile chip.
+        /// Quick-add task bar + tiles + What's New stay below.
+        private var calmDashContent: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let me = userMember {
+                        Button { showPersonalCard = true } label: {
+                            ZStack {
+                                Circle()
+                                    .stroke(P.peach.opacity(pulsePhase ? 0.0 : 0.55), lineWidth: 2)
+                                    .frame(width: 52, height: 52)
+                                    .scaleEffect(pulsePhase ? 1.4 : 1.0)
+                                    .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false),
+                                               value: pulsePhase)
+                                LeveledAvatar(member: me, size: 52)
+                            }
+                        }
+                        .buttonStyle(.row)
+                        .onAppear { pulsePhase = true }
+                    }
+                    Text(greetingText)
+                        .font(.system(size: 32, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.text)
+                    Text(thingsTodayText)
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                }
+                .padding(.top, 16)
+                star
+                tiles
+                whatsNew
+            }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// "Rings" layout: rings hero + star + tiles + What's New.
+        /// QuickAdd + agenda removed; new tasks live in their own flows.
+        private var ringsDashContent: some View {
+            VStack(alignment: .leading, spacing: 14) {
+                greetingCardRings
+                    .padding(.top, 16)
+                star
+                tiles
+                whatsNew
+            }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// "Classic" layout: the original 2.2 greeting banner, minus the
+        /// agenda ribbon and quick-add row (per Geezy's call after rings
+        /// shipped).
         private var classicDashContent: some View {
             VStack(alignment: .leading, spacing: 14) {
                 greetingCard
-                stickyAgenda
-                quickAdd
-                if canManage { quickAddChips }
                 star
                 tiles
                 whatsNew
@@ -876,9 +946,30 @@ public enum CasalistCottage {
         }
 
         private var greetingCardRings: some View {
-            HStack(alignment: .center, spacing: 18) {
+            HStack(alignment: .center, spacing: 14) {
                 ringsStack
+                    .fixedSize()
+                    .padding(.leading, 18)  // stroke + lineCap bleeds past the frame; pad inward so it can't clip the screen edge
                 VStack(alignment: .leading, spacing: 10) {
+                    // Pulsing profile chip — taps into the chore card.
+                    // Same sonar-ring effect as the starCard avatar; only
+                    // shown when we have a matching FamilyMember for the
+                    // current user.
+                    if let me = userMember {
+                        Button { showPersonalCard = true } label: {
+                            ZStack {
+                                Circle()
+                                    .stroke(P.peach.opacity(pulsePhase ? 0.0 : 0.55), lineWidth: 2)
+                                    .frame(width: 52, height: 52)
+                                    .scaleEffect(pulsePhase ? 1.4 : 1.0)
+                                    .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false),
+                                               value: pulsePhase)
+                                LeveledAvatar(member: me, size: 52)
+                            }
+                        }
+                        .buttonStyle(.row)
+                        .onAppear { pulsePhase = true }
+                    }
                     Text(greetingText)
                         .font(.system(size: 22, weight: .heavy, design: .rounded))
                         .foregroundStyle(P.text)
@@ -1150,19 +1241,21 @@ public enum CasalistCottage {
 
         private var quickAdd: some View {
             HStack(spacing: 10) {
-                Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(P.textDim)
+                Image(systemName: "plus.circle").font(.system(size: 16)).foregroundStyle(P.textDim)
                 TextField("Quick task...", text: $quickTaskText)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .submitLabel(.done)
                     .onSubmit(addQuickTask)
                 Button { addQuickTask() } label: {
-                    Image(systemName: "arrow.up").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).background(Circle().fill(P.peach))
+                    Image(systemName: "arrow.up").font(.system(size: 13, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).background(Circle().fill(P.peach))
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 4).padding(.trailing, 4)
+            .padding(.horizontal, 14).padding(.vertical, 2).padding(.trailing, 4)
             .background(Capsule().fill(P.surface))
             .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)  // narrows the bar inside the dashboard
         }
 
         private func addQuickTask() {
@@ -1222,7 +1315,13 @@ public enum CasalistCottage {
                 VStack(alignment: .leading, spacing: 10) {
                     if let top {
                         HStack(spacing: 14) {
-                            LeveledAvatar(member: top, size: 56)
+                            // Tappable avatar — still opens the chore card.
+                            // No pulse here; the rings hero avatar above is
+                            // the single attention-getter.
+                            Button { showPersonalCard = true } label: {
+                                LeveledAvatar(member: top, size: 56)
+                            }
+                            .buttonStyle(.row)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("1ST PLACE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.7)
                                 Text(top.name).font(.system(size: 22, weight: .heavy))
@@ -1568,6 +1667,7 @@ public enum CasalistCottage {
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var sorted: [FamilyMember] { members.sorted { $0.points > $1.points } }
         private var topScore: Int { Int(sorted.first?.points ?? 0) }
@@ -1793,13 +1893,31 @@ public enum CasalistCottage {
 
         private var content: some View {
             VStack(alignment: .leading, spacing: 16) {
-                heroCard
+                if appLayout == "calm" { calmHero } else { heroCard }
                 podium
                 standings
                 goals
                 redeemed
                 available
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// Calm layout: roomy text header, no big stat card.
+        private var calmHero: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Rewards")
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                if let me = myMember {
+                    let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
+                    Text("#\(myRank) · \(me.points) pts")
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                } else {
+                    Text("Earn points, level up").font(.system(size: 17, weight: .regular, design: .rounded)).foregroundStyle(P.textDim)
+                }
+            }
+            .padding(.top, 12)
         }
 
         /// Full-width card for the current user's stats.
@@ -2603,14 +2721,19 @@ extension CasalistCottage {
 
         /// True if this reminder/task is targeted at me through any of
         /// the routing rules. Used to decide if it belongs in my My To-Do.
-        ///   notifyMode "everyone" -> always in my My To-Do
+        ///   notifyMode "everyone" -> LOOSE: lives in Reminders tab only,
+        ///                            never in anyone's My To-Do
         ///   notifyMode "admins"   -> in my My To-Do if I'm owner/admin
-        ///   notifyMode ""         -> in my My To-Do if assignee == me
+        ///   notifyMode ""         -> in my My To-Do if assignee == me;
+        ///                            if no assignee, LOOSE (Reminders only)
         private func isTargetedAtMe(_ t: TaskItem) -> Bool {
             switch t.notifyMode {
-            case "everyone": return true
+            case "everyone": return false   // loose
             case "admins":   return iAmAdmin
-            default:         return isMine(t)
+            default:
+                let assignee = (t.assignee ?? "").trimmingCharacters(in: .whitespaces)
+                if assignee.isEmpty { return false } // loose
+                return isMine(t)
             }
         }
 
@@ -3356,7 +3479,7 @@ extension CasalistCottage {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
                         kanbanColumn(title: "Today",    accent: P.peach, items: kanbanToday)
-                        kanbanColumn(title: "Upcoming", accent: P.mint,  items: kanbanUpcoming)
+                        kanbanColumn(title: "Soon",     accent: P.mint,  items: kanbanUpcoming)
                         kanbanColumn(title: "Done",     accent: P.coral, items: kanbanDone, isDone: true)
                     }
                     .padding(.horizontal, 4)
@@ -3385,18 +3508,20 @@ extension CasalistCottage {
                                   items: [TaskItem],
                                   isDone: Bool = false) -> some View {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Circle().fill(accent).frame(width: 8, height: 8)
                     Text(title.uppercased())
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
-                        .tracking(1.0)
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .tracking(0.8)
                         .foregroundStyle(P.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text("\(items.count)")
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .foregroundStyle(P.textMuted)
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 14).padding(.top, 12)
+                .padding(.horizontal, 12).padding(.top, 12)
 
                 if items.isEmpty {
                     Text(isDone ? "Nothing checked off yet" : "Clear")
@@ -3412,7 +3537,7 @@ extension CasalistCottage {
                     .padding(.horizontal, 10).padding(.bottom, 12)
                 }
             }
-            .frame(width: 280, alignment: .leading)
+            .frame(width: 124, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(P.surface)
@@ -4666,6 +4791,7 @@ extension CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -4828,7 +4954,46 @@ extension CasalistCottage {
             try? modelContext.save()
         }
 
+        @ViewBuilder
         private var hero: some View {
+            switch appLayout {
+            case "rings":  ringsHero
+            case "calm":   calmHero
+            case "kanban": kanbanHero
+            default:       classicHero
+            }
+        }
+
+        /// Kanban-style header — title + "Tap a card to edit". No 3-column
+        /// board for Grocery; the staples grid + trips below stay as-is.
+        private var kanbanHero: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Grocery 🛒")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text("Tap a card to edit")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 16)
+        }
+
+        /// Calm layout: roomy text header, no colored banner.
+        private var calmHero: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Grocery")
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text(activeCount == 0
+                     ? (boughtCount == 0 ? "Tap + to plan a trip" : "\(boughtCount) in the cart")
+                     : "\(activeCount) to get\(boughtCount > 0 ? " · \(boughtCount) in the cart" : "")")
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 12)
+        }
+
+        private var classicHero: some View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 76, height: 76)
@@ -4844,6 +5009,91 @@ extension CasalistCottage {
             .foregroundStyle(.white).padding(20)
             .background(P.mint)
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+
+        // MARK: - Grocery rings hero
+        // Three at-a-glance metrics:
+        //   • Outer (mint):    To get      (active count vs target 20)
+        //   • Middle (peach):  In cart     (bought / active+bought)
+        //   • Inner  (coral):  Active trips (count vs target 5)
+
+        private var ringsToGetTarget: Int { 20 }
+        private var ringsTripsTarget: Int { 5 }
+
+        private var ringsToGetPct: Double {
+            min(1.0, Double(activeCount) / Double(ringsToGetTarget))
+        }
+        private var ringsInCartPct: Double {
+            let total = activeCount + boughtCount
+            return total > 0 ? Double(boughtCount) / Double(total) : 0
+        }
+        private var ringsTripsPct: Double {
+            min(1.0, Double(trips.count) / Double(ringsTripsTarget))
+        }
+
+        private var ringsHero: some View {
+            HStack(alignment: .center, spacing: 18) {
+                VStack(alignment: .center, spacing: 10) {
+                    Text("Grocery 🛒")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    ringsStack
+                        .fixedSize()
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 10) {
+                    ringLegend(label: "To get",   tint: P.mint,
+                               done: activeCount, total: ringsToGetTarget,
+                               trailingLabel: "\(activeCount)")
+                    ringLegend(label: "In cart",  tint: P.peach,
+                               done: boughtCount, total: activeCount + boughtCount)
+                    ringLegend(label: "Trips",    tint: P.coral,
+                               done: trips.count, total: ringsTripsTarget,
+                               trailingLabel: "\(trips.count)")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 28)
+        }
+
+        private var ringsStack: some View {
+            ZStack {
+                dashRing(diameter: 140, lineWidth: 14, percent: ringsToGetPct,  tint: P.mint)
+                dashRing(diameter: 104, lineWidth: 14, percent: ringsInCartPct, tint: P.peach)
+                dashRing(diameter: 68,  lineWidth: 12, percent: ringsTripsPct,  tint: P.coral)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: ringsToGetPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsInCartPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsTripsPct)
+        }
+
+        private func dashRing(diameter: CGFloat, lineWidth: CGFloat,
+                              percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func ringLegend(label: String, tint: Color, done: Int, total: Int,
+                                trailingLabel: String? = nil) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text(trailingLabel ?? "\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                    .monospacedDigit()
+            }
+            .opacity(total == 0 && trailingLabel == nil ? 0.55 : 1)
         }
 
         private var quickAddRow: some View {
@@ -5129,6 +5379,7 @@ extension CasalistCottage {
         @AppStorage("userName") private var userName: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         public init() {}
 
@@ -5258,19 +5509,124 @@ extension CasalistCottage {
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
 
+        @ViewBuilder
         private var content: some View {
+            if appLayout == "kanban" {
+                kanbanContent
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    hero
+                    pill
+                    quickAddRow
+                    quickAddGrid
+                    if !active.isEmpty || !done.isEmpty {
+                        section(title: "OVERDUE ⚠️", items: overdue, color: P.coral)
+                        section(title: "DUE THIS WEEK 📅", items: dueSoon, color: P.butter)
+                        section(title: "UPCOMING", items: laterItems, color: P.lavender)
+                        section(title: "DONE ✓", items: done.suffix(5).map { $0 }, color: P.mint, completed: true)
+                    }
+                }.padding(.horizontal, 20).padding(.bottom, 28)
+            }
+        }
+
+        // MARK: - Kanban for Home / Maintenance
+        // Kanban banner up top (3 columns: Overdue / This week / Done) +
+        // the regular quick-add row and emoji grid so users still have
+        // one-tap access to staple chores.
+
+        private var kanbanContent: some View {
             VStack(alignment: .leading, spacing: 14) {
-                hero
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(categoryPill) \(categoryPill == "Maintenance" ? "🔧" : "🏠")")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    Text("Tap a card to edit")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                }
+                .padding(.top, 16)
                 pill
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        kanbanCol(title: "Overdue",   accent: P.coral,    items: overdue)
+                        kanbanCol(title: "This week", accent: P.butter,   items: dueSoon)
+                        kanbanCol(title: "Done",      accent: P.mint,     items: done.suffix(5).map { $0 }, struckOut: true)
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .padding(.horizontal, -22)
                 quickAddRow
                 quickAddGrid
-                if !active.isEmpty || !done.isEmpty {
-                    section(title: "OVERDUE ⚠️", items: overdue, color: P.coral)
-                    section(title: "DUE THIS WEEK 📅", items: dueSoon, color: P.butter)
-                    section(title: "UPCOMING", items: laterItems, color: P.lavender)
-                    section(title: "DONE ✓", items: done.suffix(5).map { $0 }, color: P.mint, completed: true)
+            }
+            .padding(.horizontal, 22)
+            .padding(.bottom, 28)
+        }
+
+        private func kanbanCol(title: String, accent: Color,
+                               items: [TaskItem],
+                               struckOut: Bool = false) -> some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Circle().fill(accent).frame(width: 8, height: 8)
+                    Text(title.uppercased())
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .tracking(0.8)
+                        .foregroundStyle(P.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("\(items.count)")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                    Spacer(minLength: 0)
                 }
-            }.padding(.horizontal, 20).padding(.bottom, 28)
+                .padding(.horizontal, 12).padding(.top, 12)
+
+                if items.isEmpty {
+                    Text(struckOut ? "Nothing checked off yet" : "Clear")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 14).padding(.bottom, 14)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(items, id: \.objectID) { t in
+                            kanbanRow(t, accent: accent, struckOut: struckOut)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.bottom, 12)
+                }
+            }
+            .frame(width: 124, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(P.border, lineWidth: 1))
+        }
+
+        private func kanbanRow(_ t: TaskItem, accent: Color, struckOut: Bool) -> some View {
+            HStack(spacing: 10) {
+                Button {
+                    FamilyPoints.toggle(t, in: members)
+                    try? modelContext.save()
+                } label: {
+                    Image(systemName: t.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18))
+                        .foregroundStyle(t.isCompleted ? accent : accent.opacity(0.7))
+                }.buttonStyle(.row)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t.task)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.text)
+                        .strikethrough(struckOut)
+                        .lineLimit(2)
+                    if let d = t.dueDate {
+                        Text(d.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 11, weight: .regular, design: .rounded))
+                            .foregroundStyle(P.textDim)
+                    }
+                }
+                Spacer(minLength: 4)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(P.surfaceAlt))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(accent.opacity(0.18), lineWidth: 1))
         }
 
         private var quickAddRow: some View {
@@ -5350,7 +5706,32 @@ extension CasalistCottage {
             }
         }
 
+        @ViewBuilder
         private var hero: some View {
+            switch appLayout {
+            case "rings": ringsHero
+            case "calm":  calmHero
+            // Kanban falls back to classic.
+            default:      classicHero
+            }
+        }
+
+        /// Calm layout: roomy text header, no colored banner.
+        private var calmHero: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(categoryPill)
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text(active.isEmpty
+                     ? "All clear"
+                     : "\(active.count) on the list\(overdue.isEmpty ? "" : " · \(overdue.count) overdue")")
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 12)
+        }
+
+        private var classicHero: some View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 76, height: 76)
@@ -5367,6 +5748,86 @@ extension CasalistCottage {
             .foregroundStyle(.white).padding(20)
             .background(P.lavender)
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+
+        // MARK: - Rings hero for the Home tab
+        // Three at-a-glance metrics:
+        //   • Outer (coral):    Overdue / active     (red signal)
+        //   • Middle (peach):   Due this week / active
+        //   • Inner  (mint):    Done lifetime / capped at 20 (motivation)
+
+        private var ringsOverduePct: Double {
+            active.isEmpty ? 0 : Double(overdue.count) / Double(active.count)
+        }
+        private var ringsThisWeekPct: Double {
+            active.isEmpty ? 0 : Double(dueSoon.count) / Double(active.count)
+        }
+        private var ringsDonePct: Double {
+            min(1.0, Double(done.count) / 20.0)
+        }
+
+        private var ringsHero: some View {
+            HStack(alignment: .center, spacing: 18) {
+                VStack(alignment: .center, spacing: 10) {
+                    Text("\(categoryPill) \(categoryPill == "Maintenance" ? "🔧" : "🏠")")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    ringsStack
+                        .fixedSize()
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 10) {
+                    ringLegend(label: "Overdue",   tint: P.coral,
+                               done: overdue.count, total: active.count)
+                    ringLegend(label: "This week", tint: P.peach,
+                               done: dueSoon.count, total: active.count)
+                    ringLegend(label: "Done",      tint: P.mint,
+                               done: done.count, total: 20,
+                               trailingLabel: "\(done.count)")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 28)
+        }
+
+        private var ringsStack: some View {
+            ZStack {
+                dashRing(diameter: 140, lineWidth: 14, percent: ringsOverduePct, tint: P.coral)
+                dashRing(diameter: 104, lineWidth: 14, percent: ringsThisWeekPct, tint: P.peach)
+                dashRing(diameter: 68,  lineWidth: 12, percent: ringsDonePct,    tint: P.mint)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: ringsOverduePct)
+            .animation(.easeInOut(duration: 0.5), value: ringsThisWeekPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsDonePct)
+        }
+
+        private func dashRing(diameter: CGFloat, lineWidth: CGFloat,
+                              percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func ringLegend(label: String, tint: Color, done: Int, total: Int,
+                                trailingLabel: String? = nil) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text(trailingLabel ?? "\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(total == 0 ? P.textMuted : P.textDim)
+                    .monospacedDigit()
+            }
+            .opacity(total == 0 && trailingLabel == nil ? 0.55 : 1)
         }
 
         private var emptyCard: some View {
@@ -5855,18 +6316,132 @@ extension CasalistCottage {
 
         @ViewBuilder
         private var content: some View {
+            if appLayout == "kanban" {
+                kanbanContent
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    switch appLayout {
+                    case "rings": ringsHero
+                    case "calm":  calmHero
+                    default:      hero
+                    }
+                    quickAddRow
+                        .padding(.top, appLayout == "rings" || appLayout == "calm" ? 12 : 0)
+                    listSection
+                    if !linkedReminders.isEmpty {
+                        linkedSection
+                    }
+                }.padding(.horizontal, 20).padding(.bottom, 28)
+            }
+        }
+
+        // MARK: - Kanban for Reminders
+        // 3 columns: Pinned / Today / Hourly. Each card is a tap-to-edit
+        // reminder tile.
+
+        private var kanbanTodayReminders: [TaskItem] {
+            let cal = Calendar.current
+            return pinned.filter { t in
+                guard let d = t.dueDate else { return false }
+                return cal.isDateInToday(d)
+            }
+        }
+
+        private var kanbanContent: some View {
             VStack(alignment: .leading, spacing: 14) {
-                switch appLayout {
-                case "rings": ringsHero
-                // Calm/Kanban don't have Reminders variants yet; fall to classic.
-                default:      hero
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Reminders 📌")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    Text("Tap a card to edit")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
                 }
+                .padding(.top, 16)
                 quickAddRow
-                listSection
-                if !linkedReminders.isEmpty {
-                    linkedSection
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        kanbanColumn(title: "Pinned",   accent: P.coral, items: pinned)
+                        kanbanColumn(title: "Today",    accent: P.peach, items: kanbanTodayReminders)
+                        kanbanColumn(title: "Hourly",   accent: P.mint,  items: hourlyReminders)
+                    }
+                    .padding(.horizontal, 4)
                 }
-            }.padding(.horizontal, 20).padding(.bottom, 28)
+                .padding(.horizontal, -22)  // bleed to screen edge
+            }
+            .padding(.horizontal, 22)
+            .padding(.bottom, 28)
+        }
+
+        private func kanbanColumn(title: String, accent: Color,
+                                  items: [TaskItem]) -> some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Circle().fill(accent).frame(width: 8, height: 8)
+                    Text(title.uppercased())
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .tracking(0.8)
+                        .foregroundStyle(P.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("\(items.count)")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12).padding(.top, 12)
+
+                if items.isEmpty {
+                    Text("Nothing here")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textMuted)
+                        .padding(.horizontal, 14).padding(.bottom, 14)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(items, id: \.objectID) { t in
+                            kanbanCard(t, accent: accent)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.bottom, 12)
+                }
+            }
+            .frame(width: 124, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(P.surface))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(P.border, lineWidth: 1))
+        }
+
+        private func kanbanCard(_ t: TaskItem, accent: Color) -> some View {
+            Button { editingReminder = t } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(accent)
+                    Text(t.task)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(P.text)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(P.surfaceAlt))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(accent.opacity(0.18), lineWidth: 1))
+                .contentShape(Rectangle())
+            }.buttonStyle(.row)
+        }
+
+        /// Calm layout: roomy text-first header, no colored banner.
+        private var calmHero: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Reminders")
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text(pinned.isEmpty
+                     ? "Pin info you reference often"
+                     : "\(pinned.count) pinned")
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 12)
         }
 
         // MARK: - Rings hero (Debug only)
@@ -5900,30 +6475,34 @@ extension CasalistCottage {
         }
 
         private var ringsHero: some View {
-            HStack(alignment: .center, spacing: 18) {
-                remindersRingsStack
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("REMINDERS")
-                        .font(.system(size: 11, weight: .heavy)).tracking(0.8)
-                        .foregroundStyle(P.textDim)
-                    remRingLegend(label: "Pinned",
-                                  tint: P.coral,
-                                  done: pinned.count,
-                                  total: ringsPinnedTarget,
-                                  trailingLabel: "\(pinned.count)")
-                    remRingLegend(label: "Today",
-                                  tint: P.peach,
-                                  done: ringsRemindersToday.done,
-                                  total: ringsRemindersToday.total)
-                    remRingLegend(label: "Hourly ⟳",
-                                  tint: P.mint,
-                                  done: hourlyReminders.count,
-                                  total: ringsHourlyTarget,
-                                  trailingLabel: "\(hourlyReminders.count)")
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Reminders 📌")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(P.text)
+                HStack(alignment: .center, spacing: 14) {
+                    remindersRingsStack
+                        .fixedSize()
+                        .padding(.leading, 18)
+                    VStack(alignment: .leading, spacing: 10) {
+                        remRingLegend(label: "Pinned",
+                                      tint: P.coral,
+                                      done: pinned.count,
+                                      total: ringsPinnedTarget,
+                                      trailingLabel: "\(pinned.count)")
+                        remRingLegend(label: "Today",
+                                      tint: P.peach,
+                                      done: ringsRemindersToday.done,
+                                      total: ringsRemindersToday.total)
+                        remRingLegend(label: "Hourly ⟳",
+                                      tint: P.mint,
+                                      done: hourlyReminders.count,
+                                      total: ringsHourlyTarget,
+                                      trailingLabel: "\(hourlyReminders.count)")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 4)
+            .padding(.top, 28)
         }
 
         private var remindersRingsStack: some View {
@@ -6218,11 +6797,8 @@ extension CasalistCottage {
         @ViewBuilder
         private var pinnedSection: some View {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("PINNED 📌").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
-                    Spacer()
-                    Text("\(pinned.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted).padding(.trailing, 4)
-                }
+                // PINNED header removed -- everything in this section is
+                // pinned anyway, so the label was redundant.
                 if pinned.isEmpty && hourlyReminders.isEmpty {
                     VStack(spacing: 8) {
                         Text("📋").font(.system(size: 36))
@@ -6357,6 +6933,7 @@ extension CasalistCottage {
         @AppStorage("meUid") private var meUid: String = ""
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
+        @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
         private var canAddEvents: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canCreateEvents ?? true
@@ -6506,7 +7083,139 @@ extension CasalistCottage {
 
         // MARK: – Hero
 
+        @ViewBuilder
         private var hero: some View {
+            switch appLayout {
+            case "calm":   calmHero
+            case "rings":  ringsHero
+            case "kanban": kanbanHero
+            default:       classicHero
+            }
+        }
+
+        /// Kanban-style header — title + "Tap a card to edit". No 3-column
+        /// board for Schedule; the day strip + event list below stay as-is.
+        private var kanbanHero: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Schedule 📅")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Text("Tap a card to edit")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.textDim)
+            }
+            .padding(.top, 16)
+        }
+
+        // MARK: - Rings hero for Schedule
+        // Three at-a-glance metrics:
+        //   • Outer (sky):   Upcoming this week (capped at 7)
+        //   • Middle (peach): Today's events (capped at 5)
+        //   • Inner (coral):  Total upcoming (capped at 20)
+
+        private var ringsUpcomingThisWeek: [FamilyEvent] {
+            let cal = Calendar.current
+            let start = cal.startOfDay(for: Date())
+            let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
+            return upcoming.filter { $0.startDate < end && $0.startDate >= start }
+        }
+        private var ringsTodayEvents: [FamilyEvent] { todayEvents }
+        private var ringsWeekPct: Double {
+            min(1.0, Double(ringsUpcomingThisWeek.count) / 7.0)
+        }
+        private var ringsTodayPct: Double {
+            min(1.0, Double(ringsTodayEvents.count) / 5.0)
+        }
+        private var ringsAllPct: Double {
+            min(1.0, Double(upcoming.count) / 20.0)
+        }
+
+        private var ringsHero: some View {
+            HStack(alignment: .center, spacing: 18) {
+                VStack(alignment: .center, spacing: 10) {
+                    Text("Schedule 📅")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(P.text)
+                    ringsStack
+                        .fixedSize()
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 10) {
+                    ringLegend(label: "This week", tint: P.sky,
+                               done: ringsUpcomingThisWeek.count, total: 7,
+                               trailingLabel: "\(ringsUpcomingThisWeek.count)")
+                    ringLegend(label: "Today",     tint: P.peach,
+                               done: ringsTodayEvents.count, total: 5,
+                               trailingLabel: "\(ringsTodayEvents.count)")
+                    ringLegend(label: "Upcoming",  tint: P.coral,
+                               done: upcoming.count, total: 20,
+                               trailingLabel: "\(upcoming.count)")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 28)
+        }
+
+        private var ringsStack: some View {
+            ZStack {
+                dashRing(diameter: 140, lineWidth: 14, percent: ringsWeekPct,  tint: P.sky)
+                dashRing(diameter: 104, lineWidth: 14, percent: ringsTodayPct, tint: P.peach)
+                dashRing(diameter: 68,  lineWidth: 12, percent: ringsAllPct,   tint: P.coral)
+            }
+            .frame(width: 140, height: 140)
+            .animation(.easeInOut(duration: 0.5), value: ringsWeekPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsTodayPct)
+            .animation(.easeInOut(duration: 0.5), value: ringsAllPct)
+        }
+
+        private func dashRing(diameter: CGFloat, lineWidth: CGFloat,
+                              percent: Double, tint: Color) -> some View {
+            ZStack {
+                Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: max(0.0001, CGFloat(percent)))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+
+        private func ringLegend(label: String, tint: Color, done: Int, total: Int,
+                                trailingLabel: String? = nil) -> some View {
+            HStack(spacing: 8) {
+                Circle().fill(tint).frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.text)
+                Spacer(minLength: 4)
+                Text(trailingLabel ?? "\(done)/\(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(P.textDim)
+                    .monospacedDigit()
+            }
+        }
+
+        /// Calm layout: roomy text header, no blue card.
+        private var calmHero: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Schedule")
+                    .font(.system(size: 32, weight: .regular, design: .rounded))
+                    .foregroundStyle(P.text)
+                if let next = nextEvent {
+                    Text("\(upcoming.count) upcoming · Next: \(next.title)")
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                        .lineLimit(1)
+                } else {
+                    Text("Nothing scheduled")
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundStyle(P.textDim)
+                }
+            }
+            .padding(.top, 12)
+        }
+
+        private var classicHero: some View {
             HStack(spacing: 16) {
                 // Month/day badge
                 VStack(spacing: 0) {
@@ -6663,11 +7372,9 @@ extension CasalistCottage {
                                     Text(e.location).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textDim).lineLimit(1)
                                 }
                             }
-                            if !e.attendees.isEmpty {
-                                Text(e.attendees).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted).lineLimit(1)
-                            }
                         }
                         Spacer(minLength: 4)
+                        eventAttendeeAvatar(e)
                         Image(systemName: "chevron.right").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.textMuted)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 12)
@@ -6677,6 +7384,30 @@ extension CasalistCottage {
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(P.border, lineWidth: 1.5))
                 .opacity(isPast ? 0.6 : 1)
             }.buttonStyle(.row)
+        }
+
+        /// Avatar for the event's attendee. Single-attendee mode shows the
+        /// matching FamilyMember's avatar; empty attendees (household-wide)
+        /// shows a small house badge instead.
+        @ViewBuilder
+        private func eventAttendeeAvatar(_ e: FamilyEvent) -> some View {
+            let name = e.attendees.trimmingCharacters(in: .whitespaces)
+            if name.isEmpty {
+                Image(systemName: "house.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(P.textDim)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(P.surfaceAlt))
+            } else if let m = members.first(where: { $0.name.lowercased() == name.lowercased() }) {
+                CLAvatar(m.asCLMember, size: 28)
+            } else {
+                // Fallback: typed-in attendee with no matching member.
+                Text(String(name.prefix(1)).uppercased())
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(P.lavender))
+            }
         }
 
         // MARK: – Apple Calendar section

@@ -21,6 +21,11 @@ public final class FamilyEvent: NSManagedObject {
     @NSManaged public var deletedAt: Date?
     /// Optional end time. nil when isAllDay or no end time was set.
     @NSManaged public var endDate: Date?
+    /// When true, the notification body uses the household-wide broadcast
+    /// prefix (📢) even if `attendees` is set to a single person. Lets
+    /// admins say "this is Donovan's soccer practice" on the calendar
+    /// while still pinging the whole family.
+    @NSManaged public var announceHousehold: Bool
     @NSManaged public var household: Household?
 
     var isLive: Bool { deletedAt == nil }

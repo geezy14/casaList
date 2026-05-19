@@ -21,6 +21,7 @@ struct AddEventView: View {
     @State private var latitude: Double
     @State private var longitude: Double
     @State private var attendees: String
+    @State private var announceHousehold: Bool
     @State private var notes: String
     @State private var repeatKind: String
     @State private var confirmDelete: Bool = false
@@ -45,6 +46,7 @@ struct AddEventView: View {
         _latitude = State(initialValue: editing?.latitude ?? 0)
         _longitude = State(initialValue: editing?.longitude ?? 0)
         _attendees = State(initialValue: editing?.attendees ?? "")
+        _announceHousehold = State(initialValue: editing?.announceHousehold ?? false)
         _notes = State(initialValue: editing?.notes ?? "")
         _repeatKind = State(initialValue: editing?.repeatKind ?? "")
     }
@@ -145,8 +147,23 @@ struct AddEventView: View {
                             Label("Attendees", systemImage: attendees.isEmpty ? "house.fill" : "person.fill")
                         }
                     }
+                    // Announcement toggle. Only meaningful when a specific
+                    // attendee is picked -- "Everyone" already pings the
+                    // household. Lets admins say "this is Donovan's
+                    // event" on the calendar but still broadcast.
+                    if !attendees.isEmpty {
+                        Toggle(isOn: $announceHousehold) {
+                            Label("Announce to household",
+                                  systemImage: "megaphone.fill")
+                        }
+                    }
                     if attendees.isEmpty {
                         Label("Notifies the whole household", systemImage: "megaphone.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if announceHousehold {
+                        Label("Family will be notified; card shows \(attendees)",
+                              systemImage: "info.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -200,6 +217,7 @@ struct AddEventView: View {
             editing.latitude = latitude
             editing.longitude = longitude
             editing.attendees = attendees
+            editing.announceHousehold = announceHousehold
             editing.notes = notes
             editing.repeatKind = repeatKind
         } else {
@@ -215,6 +233,7 @@ struct AddEventView: View {
                 createdBy: userName.trimmingCharacters(in: .whitespaces)
             )
             event.latitude = latitude
+            event.announceHousehold = announceHousehold
             event.longitude = longitude
             event.endDate = isAllDay ? nil : endDate
             if let h = households.preferredTarget {

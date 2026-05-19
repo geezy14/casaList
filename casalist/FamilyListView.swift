@@ -626,10 +626,42 @@ public struct FamilyListView: View {
     @ViewBuilder
     private var hero: some View {
         switch appLayout {
-        case "rings": ringsHero
-        // Calm + Kanban don't have a Family List variant yet -> classic.
-        default:      classicHero
+        case "rings":  ringsHero
+        case "calm":   calmHero
+        case "kanban": kanbanHero
+        default:       classicHero
         }
+    }
+
+    /// Kanban-style header only — borrowed from the My To-Do / Home
+    /// kanban boards. Big title + "Tap a card to edit" subtitle. The
+    /// family-list sections below stay as they are; no 3-column board
+    /// for this tab.
+    private var kanbanHero: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Family list 🪴")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(P.text)
+            Text("Tap a card to edit")
+                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .foregroundStyle(P.textDim)
+        }
+        .padding(.top, 16)
+    }
+
+    /// Calm layout: roomy text header, no colored banner.
+    private var calmHero: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Family list")
+                .font(.system(size: 32, weight: .regular, design: .rounded))
+                .foregroundStyle(P.text)
+            Text(openItems.isEmpty
+                 ? "Nothing on the wall yet"
+                 : "\(openItems.count) up for grabs")
+                .font(.system(size: 17, weight: .regular, design: .rounded))
+                .foregroundStyle(P.textDim)
+        }
+        .padding(.top, 12)
     }
 
     /// Apple Fitness rings hero (the 2.5+ default).

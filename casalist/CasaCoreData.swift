@@ -366,6 +366,12 @@ final class CasaCoreDataStack {
             attr("deletedAt", .dateAttributeType),
             // Optional end time for timed events (nil when isAllDay or no end set).
             attr("endDate", .dateAttributeType),
+            // When true, the notification body uses the household-wide
+            // broadcast prefix (📢) even if `attendees` is set to a single
+            // person. Lets admins say "this is Donovan's soccer practice"
+            // while still pinging the whole family. Schema redeploy
+            // required before this syncs in Production CloudKit.
+            attr("announceHousehold", .booleanAttributeType, def: false),
         ]
 
         // ------- Relationships (Household is the share root) -------

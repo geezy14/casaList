@@ -752,10 +752,12 @@ enum NotificationsManager {
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
 
-        // Empty attendees → household-wide broadcast. Different prefix +
-        // body so users can distinguish "trash night" reminders from
-        // personal events with specific attendees.
+        // Empty attendees → household-wide broadcast by default.
+        // `announceHousehold` ALSO forces the broadcast prefix even when a
+        // specific attendee is set, so admins can announce "this is
+        // Donovan's event" without losing the family-wide ping.
         let isBroadcast = event.attendees.trimmingCharacters(in: .whitespaces).isEmpty
+            || event.announceHousehold
         let content = UNMutableNotificationContent()
         content.title = isBroadcast ? "📢 \(event.title)" : "📅 \(event.title)"
         var bodyParts: [String] = []
