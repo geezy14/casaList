@@ -319,3 +319,30 @@ Do not guess on schema.
 Do not modify Casalist `main` to make Profar work.
 
 Create Profar as a clean standalone app path instead.
+
+---
+
+## Carryover Gotchas — Real Lessons From Casalist Integration
+
+These bit us while Profar was wired into Casalist. Internalize before you start.
+
+1. **HealthKit auth re-prompt** — when you add a new `HKQuantityType` identifier to `readTypes`, the OS treats it as a new permission request. Re-trigger `requestAuthorization` on appear with a diff check against the previously-requested types so users actually see the new toggle. See commit `2d5de0c` ("Profar: re-trigger HealthKit auth on every appear") on the `profar` branch.
+
+2. **Heart rate is a "live" metric** — use `fetchLatestQuantity` with a 60-minute lookback to show the current reading. Do **not** use `fetchTodayDiscreteAverage` for heart rate; you'll show a stale 24-hour mean. Commit `6fda2d3` for the fix.
+
+3. **Observer queries** for HR, breathing, blood oxygen, resting HR should be set up at app launch (commit `5e06760`) so the UI auto-refreshes when new samples arrive.
+
+4. **Recovery score formula** (commit `df8017c`, refined in `176f005`):
+
+   ```
+   recovery = hrv_score   * 0.40
+            + rhr_score   * 0.15
+            + sleep_score * 0.35
+            + bodyTemp    * 0.10
+   ```
+
+   Sleep stage weighting: `deep * 1.5 + REM * 1.3 + core * 0.8`. Baselines computed over a 14-day rolling window.
+
+5. **iPad doesn't have HealthKit** — guard with `HKHealthStore.isHealthDataAvailable()`. Show an "Unsupported device" screen if Profar is universal; otherwise restrict distribution to iPhone-only.
+
+6. **Don't over-request HealthKit permissions** — App Review rejects apps that ask for types they never use. Keep `readTypes` lean.

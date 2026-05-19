@@ -314,6 +314,7 @@ public enum CasalistCottage {
         @State private var showInvite = false
         @State private var showSettings = false
         @State private var showInbox = false
+        @State private var showSearch = false
         @State private var showAddTodo = false
         @State private var showGrocery = false
         @State private var showMaintenance = false
@@ -378,6 +379,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showInvite) { InviteFamilyView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showInbox) { LeaderboardInboxView() }
+            .sheet(isPresented: $showSearch) { SearchView() }
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
@@ -605,6 +607,11 @@ public enum CasalistCottage {
                 Spacer()
                 Button { showInvite = true } label: {
                     Image(systemName: "person.crop.circle.badge.plus").font(.system(size: 15)).foregroundStyle(P.text)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(P.surfaceAlt))
+                }
+                Button { showSearch = true } label: {
+                    Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .bold)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
                 }
