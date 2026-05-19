@@ -33,8 +33,15 @@ enum ReminderActionHandler {
             // Cancel the next pending one-shot for this task so the following
             // occurrence becomes the new "next fire." No history entry — a skip
             // is intentional silence, not a snooze or a completion.
-            let baseId = "task-\(Int(task.createdAt.timeIntervalSince1970 * 1000))"
-            Task { await NotificationsManager.skipNextOccurrence(baseId: baseId) }
+            let baseId = NotificationsManager.notificationBaseId(for: task)
+            let legacyBase = NotificationsManager.legacyNotificationBaseId(for: task)
+            Task {
+                await NotificationsManager.skipNextOccurrence(baseId: baseId)
+                // Migration: also cancel legacy-format pending notifs
+                // so the next ALREADY-SCHEDULED occurrence using the
+                // old id doesn't bypass the skip.
+                await NotificationsManager.skipNextOccurrence(baseId: legacyBase)
+            }
         default:
             // Default tap (UNNotificationDefaultActionIdentifier) or
             // dismiss — no-op, the app opens normally.

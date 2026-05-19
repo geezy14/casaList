@@ -10,6 +10,23 @@ private struct NotificationPlan {
 }
 
 enum NotificationsManager {
+    /// Canonical notification id prefix for a task — uid-based.
+    /// Stable across reschedules, migrations, CloudKit syncs. Used to
+    /// scope cancel / lookup operations to a single task.
+    static func notificationBaseId(for task: TaskItem) -> String {
+        "task-\(task.uid)"
+    }
+
+    /// Pre-migration id prefix using the task's `createdAt` timestamp
+    /// in milliseconds. Kept ONLY for the migration sweep — when the
+    /// new code reschedules a task, we cancel both prefixes so any
+    /// leftover legacy ids in `UNUserNotificationCenter` are cleaned
+    /// up. Safe to delete after a few releases when no app on a real
+    /// device still has legacy pending notifications.
+    static func legacyNotificationBaseId(for task: TaskItem) -> String {
+        "task-\(Int(task.createdAt.timeIntervalSince1970 * 1000))"
+    }
+
     @discardableResult
     static func requestAuth() async -> Bool {
         let center = UNUserNotificationCenter.current()
@@ -43,16 +60,33 @@ enum NotificationsManager {
 
         let now = Date()
         var plans: [NotificationPlan] = []
+        let myName = UserDefaults.standard.string(forKey: "userName")?
+            .trimmingCharacters(in: .whitespaces) ?? ""
         for t in tasks {
             // Recurring reminders keep firing even when checked off; one-shot
             // tasks stop once completed.
             let isRecurring = !t.effectiveRepeatKind.isEmpty
             guard !t.isCompleted || isRecurring else { continue }
+            // Honor the same per-device routing logic that scheduleNow uses
+            // so the bulk sync doesn't accidentally schedule reminders this
+            // device shouldn't fire (e.g. a reminder targeted at admins on a
+            // standard member's device). Tasks not routed to this device
+            // simply don't get added to `plans` — their existing pending
+            // ids end up in the `toCancel` set below.
+            if t.category.lowercased() == "reminders" {
+                let shouldSchedule = shouldDeviceScheduleReminder(
+                    notifyMode: t.notifyMode.lowercased(),
+                    assignee: (t.assignee ?? "").trimmingCharacters(in: .whitespaces),
+                    myName: myName
+                )
+                guard shouldSchedule else { continue }
+            }
             let content = UNMutableNotificationContent()
             content.title = t.task
             content.body = subtitle(for: t)
             content.sound = .default
-            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
+            let baseId = notificationBaseId(for: t)
+            let legacyBase = legacyNotificationBaseId(for: t)
             let cal = Calendar.current
             for date in nextOccurrenceDates(
                 kind: t.effectiveRepeatKind,
@@ -65,6 +99,13 @@ enum NotificationsManager {
                 dc.second = 0
                 let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
                 plans.append(NotificationPlan(id: id, content: content, trigger: trigger))
+            }
+            // Migration sweep: any pending notification for this task that
+            // still uses the legacy timestamp-based base id should be
+            // cancelled here so it doesn't fire stale.
+            let stale = existingIds.filter { $0.hasPrefix(legacyBase) }
+            if !stale.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: Array(stale))
             }
         }
 
@@ -144,7 +185,8 @@ enum NotificationsManager {
 
     static func scheduleNow(for task: TaskItem) async {
         // Capture properties synchronously on MainActor.
-        let baseId = "task-\(Int(task.createdAt.timeIntervalSince1970 * 1000))"
+        let baseId = notificationBaseId(for: task)
+        let legacyBase = legacyNotificationBaseId(for: task)
         let title = task.task
         let body = subtitle(for: task)
         let kind = task.effectiveRepeatKind
@@ -175,7 +217,9 @@ enum NotificationsManager {
                 // before bailing — the reminder may have been
                 // re-routed away from this user.
                 let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
-                let toCancel = pending.map(\.identifier).filter { $0.hasPrefix(baseId) }
+                let toCancel = pending.map(\.identifier).filter {
+                    $0.hasPrefix(baseId) || $0.hasPrefix(legacyBase)
+                }
                 if !toCancel.isEmpty {
                     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: toCancel)
                 }
@@ -187,9 +231,13 @@ enum NotificationsManager {
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
         let center = UNUserNotificationCenter.current()
 
-        // Remove anything already scheduled for this task.
+        // Remove anything already scheduled for this task. Includes both
+        // the new uid-based base id AND any leftover legacy timestamp-
+        // based ids so the migration sweeps as users open the app.
         let pending = await center.pendingNotificationRequests()
-        let toCancel = pending.map(\.identifier).filter { $0.hasPrefix(baseId) }
+        let toCancel = pending.map(\.identifier).filter {
+            $0.hasPrefix(baseId) || $0.hasPrefix(legacyBase)
+        }
         if !toCancel.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: toCancel)
         }

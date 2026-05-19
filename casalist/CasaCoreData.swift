@@ -1,6 +1,7 @@
 import Foundation
 import CoreData
 import CloudKit
+import Combine
 
 /// CloudKit container identifier shared across the app.
 let casalistCloudKitContainerID = "iCloud.com.gbrown10.casalist"
@@ -14,7 +15,16 @@ let casalistCloudKitContainerID = "iCloud.com.gbrown10.casalist"
 /// the private database. Recipients accept the share and the records appear in
 /// their **shared** store. Both stores back the same entity definitions so views
 /// can query across both.
-final class CasaCoreDataStack {
+extension Notification.Name {
+    /// Posted by `CasaCoreDataStack.save()` when `try ctx.save()` throws.
+    /// `userInfo["error"]` holds the underlying `Error`. The save itself
+    /// rolls back as before; this notification lets observers (settings,
+    /// diagnostics views, future banners) surface that the change didn't
+    /// actually persist instead of failing silently.
+    static let casaCoreDataSaveDidFail = Notification.Name("CasaCoreDataSaveDidFail")
+}
+
+final class CasaCoreDataStack: ObservableObject {
     static let shared = CasaCoreDataStack()
 
     let container: NSPersistentCloudKitContainer
@@ -173,11 +183,34 @@ final class CasaCoreDataStack {
     func save() {
         let ctx = container.viewContext
         guard ctx.hasChanges else { return }
-        do { try ctx.save() } catch {
+        do {
+            try ctx.save()
+            // Successful save clears any previously-published error.
+            if lastSaveError != nil {
+                DispatchQueue.main.async { [weak self] in self?.lastSaveError = nil }
+            }
+        } catch {
             NSLog("Casa Core Data save error: \(error)")
             ctx.rollback()
+            // Surface the failure to anyone observing — settings can show
+            // a diagnostic banner, dev tools can list recent errors, etc.
+            // Doesn't pop UI on its own; just exposes the state.
+            DispatchQueue.main.async { [weak self] in
+                self?.lastSaveError = error
+            }
+            NotificationCenter.default.post(
+                name: .casaCoreDataSaveDidFail,
+                object: self,
+                userInfo: ["error": error]
+            )
         }
     }
+
+    /// Most recent unhandled Core Data save error. nil after a
+    /// subsequent successful save. Observed by Settings → DEVELOPER
+    /// (and any future sync-failure banner) so a silent rollback no
+    /// longer hides real issues. Published on the main queue.
+    @Published var lastSaveError: Error? = nil
 
     // MARK: Model
 

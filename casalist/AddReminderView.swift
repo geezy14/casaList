@@ -692,7 +692,7 @@ struct AddReminderView: View {
 
     private func refreshNextFires() async {
         if let t = editing {
-            let baseId = "task-\(Int(t.createdAt.timeIntervalSince1970 * 1000))"
+            let baseId = NotificationsManager.notificationBaseId(for: t)
             nextFireDates = await NotificationsManager.upcomingFireDates(
                 baseId: baseId, taskUid: t.uid, limit: 3
             )
