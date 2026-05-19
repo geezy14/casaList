@@ -54,7 +54,7 @@ public final class FamilyEvent: NSManagedObject {
         repeatKind: String = "",
         createdBy: String = ""
     ) {
-        let entity = NSEntityDescription.entity(forEntityName: "FamilyEvent", in: context)!
+        let entity = CasaEntity.resolve("FamilyEvent", in: context)
         self.init(entity: entity, insertInto: context)
         self.title = title
         self.startDate = startDate

@@ -30,7 +30,7 @@ public final class ChoreTemplate: NSManagedObject {
         points: Int = 10,
         symbol: String = "checkmark.circle"
     ) {
-        let entity = NSEntityDescription.entity(forEntityName: "ChoreTemplate", in: context)!
+        let entity = CasaEntity.resolve("ChoreTemplate", in: context)
         self.init(entity: entity, insertInto: context)
         self.label = label
         self.points = Int64(points)

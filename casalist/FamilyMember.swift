@@ -80,7 +80,7 @@ public final class FamilyMember: NSManagedObject {
         photoBlob: Data? = nil,
         roleLevel: FamilyRole = .standard
     ) {
-        let entity = NSEntityDescription.entity(forEntityName: "FamilyMember", in: context)!
+        let entity = CasaEntity.resolve("FamilyMember", in: context)
         self.init(entity: entity, insertInto: context)
         self.name = name
         self.role = role

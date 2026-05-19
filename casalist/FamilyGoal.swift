@@ -35,7 +35,7 @@ public final class FamilyGoal: NSManagedObject {
         label: String = "",
         targetPoints: Int = 100
     ) {
-        let entity = NSEntityDescription.entity(forEntityName: "FamilyGoal", in: context)!
+        let entity = CasaEntity.resolve("FamilyGoal", in: context)
         self.init(entity: entity, insertInto: context)
         self.ownerName = ownerName
         self.label = label

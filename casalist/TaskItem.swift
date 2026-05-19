@@ -95,7 +95,7 @@ public final class TaskItem: NSManagedObject {
         uid: String = "",
         parentUid: String = ""
     ) {
-        let entity = NSEntityDescription.entity(forEntityName: "TaskItem", in: context)!
+        let entity = CasaEntity.resolve("TaskItem", in: context)
         self.init(entity: entity, insertInto: context)
         self.task = task
         self.assignee = assignee
