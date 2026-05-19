@@ -1,0 +1,22 @@
+Casalist 3.0 (build 3)
+
+What's new
+- Weekly calendar events now sync to Apple Calendar correctly.
+  A "weekly every Monday" event repeats every Monday, not just
+  the first week. Daily / weekdays-only / monthly / yearly and
+  custom intervals all carry across now too.
+- Calendar mirror also honors your event end time and applies
+  rule changes to the whole series when you edit.
+- New Inbox on the tray icon. Three shapes in a picker:
+  Activity (live feed of completions, redemptions, approvals),
+  Standings (this week's race + leader card), Goals (in-flight
+  progress bars). Switch any time.
+
+What to test
+- Schedule a weekly recurring event with a kid as the attendee.
+  Confirm it shows up on every following Monday in Apple Calendar.
+- Tap the tray icon on Dashboard / My To-Do / Family list.
+  Cycle through the three Inbox shapes.
+- Confirm cross-device sync is still instant.
+
+Thanks!

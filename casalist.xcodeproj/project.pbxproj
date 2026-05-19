@@ -236,23 +236,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXSourcesBuildPhase section */
-		9B5ECD462FAC6D6F00278AD3 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		9B697F132FB939770033761F /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXSourcesBuildPhase section */
-
 /* Begin PBXShellScriptBuildPhase section */
 		9BCC5C0E26CD5C0E26CD5C0E /* Preflight: CloudKit schema gate */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -276,6 +259,23 @@
 		};
 /* End PBXShellScriptBuildPhase section */
 
+/* Begin PBXSourcesBuildPhase section */
+		9B5ECD462FAC6D6F00278AD3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B697F132FB939770033761F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
 /* Begin PBXTargetDependency section */
 		9B697F2A2FB939790033761F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -290,9 +290,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Dev";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = casalist/casalist-Debug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "casalist/casalist-Debug.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -327,9 +327,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = casalist/casalist-Release.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "casalist/casalist-Release.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -486,7 +486,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = CasalistWidgetsExtensionRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CasalistWidgets/Info.plist;
@@ -517,7 +517,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = CasalistWidgetsExtensionRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 57Z9HL3SZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CasalistWidgets/Info.plist;
