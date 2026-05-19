@@ -1922,6 +1922,37 @@ public enum CasalistCottage {
 
         private var redeemItems: [RedeemableItem] { gameRules.rules.redeemableItems }
 
+        /// My current points balance — drives the "Need X more pts" hint
+        /// on the catalog rows.
+        private var myPoints: Int {
+            Int(myMember?.points ?? 0)
+        }
+
+        /// Set of label strings for redeem items I've already proposed
+        /// (pending in the admin inbox). Used to flip a row to a
+        /// disabled "Pending" state instead of letting me re-tap and
+        /// stack duplicate requests.
+        private var myPendingRedeemLabels: Set<String> {
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces).lowercased()
+            guard !myName.isEmpty else { return [] }
+            return Set(goalsQuery.compactMap { g in
+                guard GoalApproval.isPending(g), g.isLive, !g.isRedeemed else { return nil }
+                guard GoalApproval.realOwnerName(g).lowercased() == myName else { return nil }
+                return g.label
+            })
+        }
+
+        private func isPending(_ item: RedeemableItem) -> Bool {
+            myPendingRedeemLabels.contains("\(item.emoji) \(item.name)")
+        }
+        private func canAfford(_ item: RedeemableItem) -> Bool {
+            myPoints >= item.points
+        }
+        private func shortfall(_ item: RedeemableItem) -> Int {
+            max(0, item.points - myPoints)
+        }
+
         @ViewBuilder
         private var redeemCatalog: some View {
             if redeemItems.isEmpty {
@@ -1968,9 +1999,25 @@ public enum CasalistCottage {
                 GridItem(.flexible(), spacing: 10)
             ], spacing: 10) {
                 ForEach(redeemItems) { item in
-                    Button { pendingRedeemConfirmation = item } label: {
+                    let pending = isPending(item)
+                    let affordable = canAfford(item)
+                    Button {
+                        guard !pending else { return }
+                        pendingRedeemConfirmation = item
+                    } label: {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(item.emoji).font(.system(size: 32))
+                            HStack(alignment: .top) {
+                                Text(item.emoji).font(.system(size: 32))
+                                Spacer(minLength: 0)
+                                if pending {
+                                    Text("PENDING")
+                                        .font(.system(size: 8, weight: .heavy, design: .rounded))
+                                        .tracking(0.6)
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 5).padding(.vertical, 2)
+                                        .background(Capsule().fill(P.peach))
+                                }
+                            }
                             Text(item.name)
                                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                                 .foregroundStyle(P.text)
@@ -1986,13 +2033,21 @@ public enum CasalistCottage {
                                     .foregroundStyle(P.textMuted)
                                     .lineLimit(1)
                             }
+                            if !affordable && !pending {
+                                Text("Need \(shortfall(item)) more")
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(P.coral)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
                         .frame(minHeight: 110)
                         .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
-                    }.buttonStyle(.row)
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(pending ? P.peach.opacity(0.6) : P.border, lineWidth: 1.5))
+                        .opacity(pending ? 0.7 : 1)
+                    }
+                    .buttonStyle(.row)
+                    .disabled(pending)
                 }
             }
         }
@@ -2001,28 +2056,52 @@ public enum CasalistCottage {
         private var redeemInline: some View {
             VStack(spacing: 6) {
                 ForEach(redeemItems) { item in
-                    Button { pendingRedeemConfirmation = item } label: {
+                    let pending = isPending(item)
+                    let affordable = canAfford(item)
+                    Button {
+                        guard !pending else { return }
+                        pendingRedeemConfirmation = item
+                    } label: {
                         HStack(spacing: 10) {
                             Text(item.emoji).font(.system(size: 22))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.name)
                                     .font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundStyle(P.text)
-                                Text(item.category)
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(P.textMuted)
+                                HStack(spacing: 6) {
+                                    Text(item.category)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(P.textMuted)
+                                    if !affordable && !pending {
+                                        Text("· need \(shortfall(item)) more")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(P.coral)
+                                    }
+                                }
                             }
                             Spacer(minLength: 6)
-                            Text("\(item.points) pts")
-                                .font(.system(size: 12, weight: .heavy))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Capsule().fill(P.lavender))
+                            if pending {
+                                Text("PENDING")
+                                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                    .tracking(0.6)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6).padding(.vertical, 3)
+                                    .background(Capsule().fill(P.peach))
+                            } else {
+                                Text("\(item.points) pts")
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(P.lavender))
+                            }
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(P.border, lineWidth: 1))
-                    }.buttonStyle(.row)
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(pending ? P.peach.opacity(0.6) : P.border, lineWidth: 1))
+                        .opacity(pending ? 0.7 : 1)
+                    }
+                    .buttonStyle(.row)
+                    .disabled(pending)
                 }
             }
         }
@@ -2072,14 +2151,28 @@ public enum CasalistCottage {
                                         GridItem(.flexible(), spacing: 10)
                                     ], spacing: 10) {
                                         ForEach(items) { item in
+                                            let pending = isPending(item)
+                                            let affordable = canAfford(item)
                                             Button {
+                                                guard !pending else { return }
                                                 showRedeemSheet = false
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                                     pendingRedeemConfirmation = item
                                                 }
                                             } label: {
                                                 VStack(alignment: .leading, spacing: 6) {
-                                                    Text(item.emoji).font(.system(size: 30))
+                                                    HStack(alignment: .top) {
+                                                        Text(item.emoji).font(.system(size: 30))
+                                                        Spacer(minLength: 0)
+                                                        if pending {
+                                                            Text("PENDING")
+                                                                .font(.system(size: 8, weight: .heavy, design: .rounded))
+                                                                .tracking(0.6)
+                                                                .foregroundStyle(.white)
+                                                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                                                .background(Capsule().fill(P.peach))
+                                                        }
+                                                    }
                                                     Text(item.name)
                                                         .font(.system(size: 13, weight: .heavy, design: .rounded))
                                                         .foregroundStyle(P.text)
@@ -2088,13 +2181,21 @@ public enum CasalistCottage {
                                                     Text("\(item.points) pts")
                                                         .font(.system(size: 11, weight: .heavy))
                                                         .foregroundStyle(P.lavender)
+                                                    if !affordable && !pending {
+                                                        Text("Need \(shortfall(item)) more")
+                                                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                                            .foregroundStyle(P.coral)
+                                                    }
                                                 }
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                                 .padding(14)
                                                 .frame(minHeight: 110)
                                                 .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
-                                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
-                                            }.buttonStyle(.row)
+                                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(pending ? P.peach.opacity(0.6) : P.border, lineWidth: 1.5))
+                                                .opacity(pending ? 0.7 : 1)
+                                            }
+                                            .buttonStyle(.row)
+                                            .disabled(pending)
                                         }
                                     }
                                 }
