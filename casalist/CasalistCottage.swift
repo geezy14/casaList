@@ -377,7 +377,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddMember) { AddFamilyMemberView() }
             .sheet(isPresented: $showInvite) { InviteFamilyView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .sheet(isPresented: $showInbox) { InboxView() }
+            .sheet(isPresented: $showInbox) { LeaderboardInboxView() }
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
@@ -2922,7 +2922,7 @@ extension CasalistCottage {
                 AddChoreBundleView(editing: bundle)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .sheet(isPresented: $showInbox) { InboxView() }
+            .sheet(isPresented: $showInbox) { LeaderboardInboxView() }
             .sheet(item: $editingTask) { t in
                 // Reminders get the full AddReminderView edit experience
                 // (alert toggle, location panel, repeat, color, photo, etc.)

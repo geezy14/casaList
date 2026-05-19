@@ -135,7 +135,7 @@ public struct FamilyListView: View {
         .preferredColorScheme(dark ? .dark : .light)
         .sheet(isPresented: $showAdd) { AddFamilyTripView() }
         .sheet(isPresented: $showSettings) { SettingsView() }
-        .sheet(isPresented: $showInbox) { InboxView() }
+        .sheet(isPresented: $showInbox) { LeaderboardInboxView() }
         .sheet(isPresented: $showStatusPing) { StatusPingSheet() }
         .sheet(isPresented: $showFamilyMap) { FamilyMapView() }
         .sheet(item: $editingTask) { t in TaskDetailView(task: t) }

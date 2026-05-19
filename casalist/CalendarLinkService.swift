@@ -45,40 +45,37 @@ final class CalendarLinkService: NSObject, ObservableObject {
 
     // MARK: – Authorization
 
-    /// Asks the user for calendar access. iOS 17+ has the distinction
-    /// between write-only and full-access; we ask for full because we
-    /// need to both write our mirrored events AND read events for the
-    /// schedule display.
+    /// Asks the user for calendar access. We ask for full access because
+    /// we need both write (mirror our events into the linked calendar)
+    /// AND read (display the linked calendar's events on the Schedule
+    /// tab). Deployment target is iOS 17+ so the pre-17 path is gone.
     func requestAccess() async {
-        if #available(iOS 17.0, *) {
-            do {
-                _ = try await store.requestFullAccessToEvents()
-            } catch {
-                // User declined or some other error — status reflects it.
-            }
-        } else {
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                store.requestAccess(to: .event) { _, _ in
-                    cont.resume()
-                }
-            }
+        do {
+            _ = try await store.requestFullAccessToEvents()
+        } catch {
+            // User declined or some other error — status reflects it.
         }
         self.authorizationStatus = EKEventStore.authorizationStatus(for: .event)
         if hasReadAccess { refreshCalendars() }
     }
 
-    private var hasReadAccess: Bool {
-        if #available(iOS 17.0, *) {
-            return authorizationStatus == .fullAccess || authorizationStatus == .authorized
+    /// Re-check the authorization status from EventKit. Call this when
+    /// returning to the foreground in case the user toggled permission
+    /// in Settings → Privacy.
+    func refreshAuthorizationStatus() {
+        let next = EKEventStore.authorizationStatus(for: .event)
+        if next != authorizationStatus {
+            authorizationStatus = next
         }
-        return authorizationStatus == .authorized
+        if hasReadAccess { refreshCalendars() }
+    }
+
+    private var hasReadAccess: Bool {
+        authorizationStatus == .fullAccess
     }
 
     private var hasWriteAccess: Bool {
-        if #available(iOS 17.0, *) {
-            return authorizationStatus == .fullAccess || authorizationStatus == .writeOnly || authorizationStatus == .authorized
-        }
-        return authorizationStatus == .authorized
+        authorizationStatus == .fullAccess || authorizationStatus == .writeOnly
     }
 
     // MARK: – Calendar list
@@ -110,20 +107,109 @@ final class CalendarLinkService: NSObject, ObservableObject {
         ek.calendar = cal
         ek.title = event.title
         ek.startDate = event.startDate
-        ek.endDate = event.isAllDay
-            ? Calendar.current.date(byAdding: .day, value: 1, to: event.startDate) ?? event.startDate.addingTimeInterval(3600)
-            : event.startDate.addingTimeInterval(3600)
+        // Honor the user-set endDate when present; otherwise fall back
+        // to all-day (24h) or a 1h default for timed events.
+        if let end = event.endDate, end > event.startDate {
+            ek.endDate = end
+        } else if event.isAllDay {
+            ek.endDate = Calendar.current.date(byAdding: .day, value: 1, to: event.startDate) ?? event.startDate.addingTimeInterval(3600)
+        } else {
+            ek.endDate = event.startDate.addingTimeInterval(3600)
+        }
         ek.isAllDay = event.isAllDay
         ek.location = event.location.isEmpty ? nil : event.location
         ek.notes = "Casalist: \(event.attendees.isEmpty ? "Family-wide" : event.attendees)\n\(event.notes)"
+        // Translate Casalist's repeatKind into an EKRecurrenceRule so the
+        // event actually recurs in Apple Calendar. Without this, a "weekly
+        // every Monday" event syncs as a one-shot. Replace any existing
+        // rules every time so updates flow through cleanly.
+        ek.recurrenceRules = nil
+        if let rule = recurrenceRule(for: event) {
+            ek.addRecurrenceRule(rule)
+        }
         do {
-            try store.save(ek, span: .thisEvent)
+            // .futureEvents propagates rule changes across the recurring
+            // series when we're updating an existing mirrored event;
+            // EventKit falls back to .thisEvent semantics for one-shots.
+            try store.save(ek, span: existing != nil ? .futureEvents : .thisEvent)
             var m = mapping
             m[familyUid] = ek.eventIdentifier
             saveMapping(m)
             return true
         } catch {
             return false
+        }
+    }
+
+    /// Build an EKRecurrenceRule from a FamilyEvent's `repeatKind`.
+    /// Returns nil for non-recurring events.
+    private func recurrenceRule(for event: FamilyEvent) -> EKRecurrenceRule? {
+        let kind = event.repeatKind
+        if kind.isEmpty { return nil }
+
+        // Custom RepeatRule (encoded as `custom:{...}` JSON in repeatKind)
+        if let rule = RepeatRule.decode(kind) {
+            switch rule.unit {
+            case .minute, .hour:
+                // EventKit doesn't support sub-day frequencies; skip.
+                return nil
+            case .day:
+                return EKRecurrenceRule(recurrenceWith: .daily, interval: max(1, rule.interval), end: nil)
+            case .week:
+                let days: [EKRecurrenceDayOfWeek]?
+                if let wds = rule.weekdays, !wds.isEmpty {
+                    days = wds.compactMap { EKWeekday(rawValue: $0).map { EKRecurrenceDayOfWeek($0) } }
+                } else if let wd = rule.weekday, let day = EKWeekday(rawValue: wd) {
+                    days = [EKRecurrenceDayOfWeek(day)]
+                } else {
+                    days = nil
+                }
+                return EKRecurrenceRule(
+                    recurrenceWith: .weekly,
+                    interval: max(1, rule.interval),
+                    daysOfTheWeek: days,
+                    daysOfTheMonth: nil,
+                    monthsOfTheYear: nil,
+                    weeksOfTheYear: nil,
+                    daysOfTheYear: nil,
+                    setPositions: nil,
+                    end: nil
+                )
+            case .month:
+                return EKRecurrenceRule(recurrenceWith: .monthly, interval: max(1, rule.interval), end: nil)
+            case .year:
+                return EKRecurrenceRule(recurrenceWith: .yearly, interval: max(1, rule.interval), end: nil)
+            }
+        }
+
+        // Legacy string kinds
+        switch kind {
+        case "daily":
+            return EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)
+        case "weekly":
+            return EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: nil)
+        case "monthly":
+            return EKRecurrenceRule(recurrenceWith: .monthly, interval: 1, end: nil)
+        case "yearly":
+            return EKRecurrenceRule(recurrenceWith: .yearly, interval: 1, end: nil)
+        case "weekdays":
+            // Mon-Fri only — weekly recurrence on weekdays 2..6.
+            let weekdays: [EKRecurrenceDayOfWeek] = (2...6).compactMap { raw in
+                EKWeekday(rawValue: raw).map { EKRecurrenceDayOfWeek($0) }
+            }
+            return EKRecurrenceRule(
+                recurrenceWith: .weekly,
+                interval: 1,
+                daysOfTheWeek: weekdays,
+                daysOfTheMonth: nil,
+                monthsOfTheYear: nil,
+                weeksOfTheYear: nil,
+                daysOfTheYear: nil,
+                setPositions: nil,
+                end: nil
+            )
+        default:
+            return nil
         }
     }
 
