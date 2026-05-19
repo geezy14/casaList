@@ -1,0 +1,29 @@
+Casalist 3.0 (build 5)
+
+What's new
+- Curated redeemable items. Rewards tab has a new REDEEM section
+  with 10 pre-built rewards (screen time, gaming, pick the movie,
+  pick dinner, stay up late, skip a chore, ice cream trip, store
+  trip, arcade day, small toy). Tap one to send a request to an
+  admin at a fixed point cost.
+- Three layouts for the catalog: Grid, List, or Sheet. Switch
+  any time with the segmented picker.
+- Items you've already requested show a PENDING pill so you
+  don't double-submit.
+- Items you can't afford yet show "Need X more pts" so kids
+  see what they're working toward.
+- Admins can customize the catalog. Settings -> Game Rules ->
+  REDEEMABLE ITEMS lets you add, edit, or delete any item.
+
+What to test
+- Tap any item in the catalog. Confirm the request lands in the
+  admin inbox at the right price.
+- Try requesting the same item twice. Second tap should be
+  blocked with a PENDING pill.
+- Admin: Settings -> Game Rules -> REDEEMABLE ITEMS. Add a new
+  reward, edit one, delete one. Confirm it shows up in the
+  catalog instantly.
+- Switch the catalog layout (Grid / List / Sheet) and confirm
+  all three render correctly.
+
+Thanks!
