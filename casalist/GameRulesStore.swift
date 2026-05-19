@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import CoreData
 
 // MARK: - Model
 
@@ -26,6 +27,33 @@ struct GameRules: Codable {
     var rewardTiers: [RewardTier]
     var categoryRules: [CategoryPointRule]
     var pointsPerDollar: Int // global exchange rate: how many points = $1
+    /// How many days after a chore's dueDate (or createdAt if no dueDate)
+    /// before it counts as expired. 0 = never expire. Expired chores can
+    /// still be completed but award 0 points instead of their configured
+    /// value.
+    var expirationWindowDays: Int = 0
+
+    // Custom decoder so legacy installs that don't have expirationWindowDays
+    // in their saved JSON decode cleanly with the default value.
+    private enum CodingKeys: String, CodingKey {
+        case rewardTiers, categoryRules, pointsPerDollar, expirationWindowDays
+    }
+    init(rewardTiers: [RewardTier],
+         categoryRules: [CategoryPointRule],
+         pointsPerDollar: Int,
+         expirationWindowDays: Int = 0) {
+        self.rewardTiers = rewardTiers
+        self.categoryRules = categoryRules
+        self.pointsPerDollar = pointsPerDollar
+        self.expirationWindowDays = expirationWindowDays
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.rewardTiers = try c.decode([RewardTier].self, forKey: .rewardTiers)
+        self.categoryRules = try c.decode([CategoryPointRule].self, forKey: .categoryRules)
+        self.pointsPerDollar = try c.decode(Int.self, forKey: .pointsPerDollar)
+        self.expirationWindowDays = (try? c.decode(Int.self, forKey: .expirationWindowDays)) ?? 0
+    }
 
     static let `default` = GameRules(
         rewardTiers: [
@@ -40,26 +68,85 @@ struct GameRules: Codable {
             CategoryPointRule(category: "Maintenance", emoji: "🔧", defaultPoints: 20, description: "Larger maintenance tasks"),
             CategoryPointRule(category: "Family",      emoji: "👨‍👩‍👧", defaultPoints: 5,  description: "Family activities and errands"),
         ],
-        pointsPerDollar: 10
+        pointsPerDollar: 10,
+        expirationWindowDays: 0
     )
+}
+
+// MARK: - Household-synced wrapper
+
+/// On-disk shape for `Household.routinesJSON`. Wrapping the original
+/// `[ChoreRoutineTemplate]` array inside a struct lets us also carry
+/// GameRules (reward tiers, category point rules, expiration window)
+/// without adding a new Core Data field. Decode is backward-compatible:
+/// legacy installs that wrote the bare array still load (routines
+/// preserved, rules default).
+struct HouseholdRulesEnvelope: Codable {
+    var routines: [ChoreRoutineTemplate]
+    var rules: GameRules
+
+    static let `default` = HouseholdRulesEnvelope(
+        routines: [],
+        rules: .default
+    )
+
+    /// Decode either the new wrapper object OR the legacy bare array.
+    /// Used by both `ChoreRoutineStore.load` and `GameRulesStore`.
+    static func decode(_ json: String) -> HouseholdRulesEnvelope {
+        guard !json.isEmpty, let data = json.data(using: .utf8) else {
+            return .default
+        }
+        // Try wrapper first
+        if let env = try? JSONDecoder().decode(HouseholdRulesEnvelope.self, from: data) {
+            return env
+        }
+        // Legacy: bare [ChoreRoutineTemplate]
+        if let routines = try? JSONDecoder().decode([ChoreRoutineTemplate].self, from: data) {
+            return HouseholdRulesEnvelope(routines: routines, rules: .default)
+        }
+        return .default
+    }
+
+    func encodedJSON() -> String {
+        guard let data = try? JSONEncoder().encode(self),
+              let s = String(data: data, encoding: .utf8) else { return "" }
+        return s
+    }
 }
 
 // MARK: - Store
 
+/// `GameRulesStore` is now backed by `Household.routinesJSON` (shared
+/// envelope with chore routines). UserDefaults is the legacy fallback
+/// for fresh launches and pre-sync installs; once a Household exists,
+/// every write goes to the household record so settings sync across
+/// devices.
 final class GameRulesStore: ObservableObject {
     static let shared = GameRulesStore()
-    private let key = "gameRules_v1"
+    private let legacyKey = "gameRules_v1"
+
+    /// Set this once the Core Data stack + a Household is available
+    /// (CasalistApp on first launch). All subsequent reads/writes go
+    /// through this household.
+    private weak var household: Household?
+    private weak var context: NSManagedObjectContext?
 
     @Published var rules: GameRules {
         didSet { save() }
     }
 
+    /// Toggle so the `didSet` doesn't loop when we reload from the
+    /// household after a remote sync.
+    private var suppressSave: Bool = false
+
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        // Seed from UserDefaults legacy blob. Household will take over
+        // once attached.
+        if let data = UserDefaults.standard.data(forKey: legacyKey),
            var decoded = try? JSONDecoder().decode(GameRules.self, from: data) {
-            // Migration: append any default categories the user is missing
-            // (case-insensitive match). Lets new defaults like "Homework"
-            // reach existing installs without wiping their customizations.
+            // Append any default categories missing in the saved blob
+            // (case-insensitive). New defaults like "Homework" reach
+            // existing installs without wiping their customizations.
             let existing = Set(decoded.categoryRules.map { $0.category.lowercased() })
             for defaultRule in GameRules.default.categoryRules
             where !existing.contains(defaultRule.category.lowercased()) {
@@ -71,10 +158,54 @@ final class GameRulesStore: ObservableObject {
         }
     }
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(rules) {
-            UserDefaults.standard.set(data, forKey: key)
+    /// Wire the store to a Household. Reloads rules from the household's
+    /// `routinesJSON` envelope; if the household has none yet but
+    /// UserDefaults has a legacy blob, migrates it up. Safe to call
+    /// repeatedly (e.g. after a remote-change refresh).
+    func attach(to household: Household?, context: NSManagedObjectContext?) {
+        self.household = household
+        self.context = context
+        guard let h = household else { return }
+        let env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        // If the household has no rules saved yet AND we still have a
+        // UserDefaults legacy blob, push the legacy blob up to the
+        // household so it syncs to the rest of the family.
+        let isLegacyDefault = h.routinesJSON.isEmpty
+        if isLegacyDefault {
+            let migrated = HouseholdRulesEnvelope(routines: env.routines, rules: rules)
+            h.routinesJSON = migrated.encodedJSON()
+            try? context?.save()
+        } else {
+            suppressSave = true
+            rules = env.rules
+            suppressSave = false
         }
+    }
+
+    /// Re-read rules from the attached household. Call on remote-change
+    /// notifications so settings edited on another device propagate.
+    func refreshFromHousehold() {
+        guard let h = household else { return }
+        let env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        guard env.rules != rules else { return }
+        suppressSave = true
+        rules = env.rules
+        suppressSave = false
+    }
+
+    private func save() {
+        if suppressSave { return }
+        // Always mirror to UserDefaults as a device-local fallback.
+        if let data = try? JSONEncoder().encode(rules) {
+            UserDefaults.standard.set(data, forKey: legacyKey)
+        }
+        // If we have a household, write the merged envelope back so the
+        // change syncs through CloudKit.
+        guard let h = household else { return }
+        var env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        env.rules = rules
+        h.routinesJSON = env.encodedJSON()
+        try? context?.save()
     }
 
     func reset() {
@@ -88,3 +219,9 @@ final class GameRulesStore: ObservableObject {
         }
     }
 }
+
+// `GameRules` needs to be Equatable so `refreshFromHousehold` can short-
+// circuit on no-op syncs. The contents are all Codable/Equatable already.
+extension GameRules: Equatable {}
+extension RewardTier {}
+extension CategoryPointRule {}

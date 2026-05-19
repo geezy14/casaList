@@ -6939,12 +6939,22 @@ extension CasalistCottage {
 
         // MARK: – Computed lists
 
+        /// Events visible in the Schedule. Includes:
+        ///   • Future or today's one-shot events (startDate today/onward)
+        ///   • Any recurring event whose original startDate is in the
+        ///     past — its rule generates occurrences forever forward,
+        ///     so we keep it in `upcoming` and rely on `occurs(on:)`
+        ///     for per-day filtering.
         private var upcoming: [FamilyEvent] {
-            allEvents.filter { $0.startDate >= Calendar.current.startOfDay(for: Date()) }
-                .sorted { $0.startDate < $1.startDate }
+            let today = Calendar.current.startOfDay(for: Date())
+            return allEvents.filter { e in
+                if !e.repeatKind.isEmpty { return true }
+                return e.startDate >= today
+            }
+            .sorted { $0.startDate < $1.startDate }
         }
         private var past: [FamilyEvent] {
-            allEvents.filter { $0.startDate < Calendar.current.startOfDay(for: Date()) }
+            allEvents.filter { $0.repeatKind.isEmpty && $0.startDate < Calendar.current.startOfDay(for: Date()) }
                 .sorted { $0.startDate > $1.startDate }
         }
         private var nextEvent: FamilyEvent? { upcoming.first }
@@ -6953,13 +6963,89 @@ extension CasalistCottage {
             Calendar.current.isDate(a, inSameDayAs: b)
         }
 
+        /// Returns true if a FamilyEvent occurs on the given day, honoring
+        /// its `repeatKind` (legacy strings + custom RepeatRule JSON).
+        /// Apple Calendar mirrors the same rule via EKRecurrenceRule, so
+        /// this keeps Casalist's day strip and Apple Calendar in sync.
+        private func occurs(_ e: FamilyEvent, on day: Date) -> Bool {
+            let cal = Calendar.current
+            let dayStart = cal.startOfDay(for: day)
+            let eventStart = cal.startOfDay(for: e.startDate)
+            // Never before the event's own start date.
+            if dayStart < eventStart { return false }
+            // One-shot — same-day match.
+            if e.repeatKind.isEmpty {
+                return cal.isDate(e.startDate, inSameDayAs: day)
+            }
+            // Same-day always matches (the original occurrence).
+            if cal.isDate(e.startDate, inSameDayAs: day) { return true }
+
+            let dayWd = cal.component(.weekday, from: day)
+
+            // Custom RepeatRule (encoded JSON)
+            if let rule = RepeatRule.decode(e.repeatKind) {
+                switch rule.unit {
+                case .minute, .hour:
+                    // Sub-day cadence — treat as "every day going forward".
+                    return true
+                case .day:
+                    let daysSince = cal.dateComponents([.day], from: eventStart, to: dayStart).day ?? 0
+                    return daysSince > 0 && daysSince % max(1, rule.interval) == 0
+                case .week:
+                    if let wds = rule.weekdays, !wds.isEmpty {
+                        return wds.contains(dayWd)
+                    }
+                    if let wd = rule.weekday {
+                        if rule.interval == 1 { return wd == dayWd }
+                        let weeks = cal.dateComponents([.weekOfYear], from: eventStart, to: dayStart).weekOfYear ?? 0
+                        return wd == dayWd && weeks % rule.interval == 0
+                    }
+                    let startWd = cal.component(.weekday, from: e.startDate)
+                    return dayWd == startWd
+                case .month:
+                    let startDom = cal.component(.day, from: e.startDate)
+                    let dayDom = cal.component(.day, from: day)
+                    return startDom == dayDom
+                case .year:
+                    let startDom = cal.component(.day, from: e.startDate)
+                    let startMon = cal.component(.month, from: e.startDate)
+                    let dayDom = cal.component(.day, from: day)
+                    let dayMon = cal.component(.month, from: day)
+                    return startDom == dayDom && startMon == dayMon
+                }
+            }
+
+            // Legacy string kinds
+            switch e.repeatKind {
+            case "daily":
+                return true
+            case "weekdays":
+                return dayWd >= 2 && dayWd <= 6
+            case "weekly":
+                let startWd = cal.component(.weekday, from: e.startDate)
+                return startWd == dayWd
+            case "monthly":
+                let startDom = cal.component(.day, from: e.startDate)
+                let dayDom = cal.component(.day, from: day)
+                return startDom == dayDom
+            case "yearly":
+                let startDom = cal.component(.day, from: e.startDate)
+                let startMon = cal.component(.month, from: e.startDate)
+                let dayDom = cal.component(.day, from: day)
+                let dayMon = cal.component(.month, from: day)
+                return startDom == dayDom && startMon == dayMon
+            default:
+                return cal.isDate(e.startDate, inSameDayAs: day)
+            }
+        }
+
         /// Events to show — filtered by selected day strip if one is picked.
         private var filteredUpcoming: [FamilyEvent] {
             guard let day = selectedDay else { return upcoming }
-            return upcoming.filter { isSameDay($0.startDate, day) }
+            return upcoming.filter { occurs($0, on: day) }
         }
 
-        private var todayEvents: [FamilyEvent] { upcoming.filter { Calendar.current.isDateInToday($0.startDate) } }
+        private var todayEvents: [FamilyEvent] { upcoming.filter { occurs($0, on: Date()) } }
 
         /// Next 7 calendar days starting today for the day strip.
         private var stripDays: [Date] {
@@ -7113,8 +7199,18 @@ extension CasalistCottage {
         private var ringsUpcomingThisWeek: [FamilyEvent] {
             let cal = Calendar.current
             let start = cal.startOfDay(for: Date())
-            let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
-            return upcoming.filter { $0.startDate < end && $0.startDate >= start }
+            // Walk the next 7 days and union every event that occurs on
+            // any of them. Recurring events with multi-day weekday sets
+            // get counted once, not per-day.
+            var hit = Set<UUID>()
+            var out: [FamilyEvent] = []
+            for offset in 0..<7 {
+                let day = cal.date(byAdding: .day, value: offset, to: start) ?? start
+                for e in upcoming where occurs(e, on: day) {
+                    if hit.insert(e.uid).inserted { out.append(e) }
+                }
+            }
+            return out
         }
         private var ringsTodayEvents: [FamilyEvent] { todayEvents }
         private var ringsWeekPct: Double {
@@ -7263,7 +7359,7 @@ extension CasalistCottage {
                     ForEach(stripDays, id: \.self) { day in
                         let isSelected = selectedDay.map { isSameDay($0, day) } ?? false
                         let isToday = Calendar.current.isDateInToday(day)
-                        let count = upcoming.filter { isSameDay($0.startDate, day) }.count
+                        let count = upcoming.filter { occurs($0, on: day) }.count
                         Button { selectedDay = isSelected ? nil : day } label: {
                             VStack(spacing: 2) {
                                 Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
@@ -7325,7 +7421,13 @@ extension CasalistCottage {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(filteredUpcoming) { e in
-                            eventCard(e, isPast: false)
+                            // When a recurring event surfaces via the
+                            // selected day, show that day in the badge
+                            // instead of the event's original startDate.
+                            eventCard(e, isPast: false,
+                                      displayDate: selectedDay.flatMap { day in
+                                          e.repeatKind.isEmpty ? nil : day
+                                      })
                         }
                         if selectedDay == nil {
                             ForEach(past.prefix(5).map { $0 }) { e in
@@ -7337,8 +7439,13 @@ extension CasalistCottage {
             }
         }
 
-        private func eventCard(_ e: FamilyEvent, isPast: Bool) -> some View {
+        private func eventCard(_ e: FamilyEvent, isPast: Bool, displayDate: Date? = nil) -> some View {
             let color = isPast ? P.textMuted : eventColor(e)
+            // For recurring events shown on a non-origin day (via the
+            // selected-day filter), `displayDate` is the day they were
+            // surfaced on so the badge reads that date instead of the
+            // event's original startDate.
+            let badgeDate = displayDate ?? e.startDate
             return Button { editingEvent = e } label: {
                 HStack(spacing: 0) {
                     // Left color stripe
@@ -7347,8 +7454,8 @@ extension CasalistCottage {
                     HStack(spacing: 12) {
                         // Date badge
                         VStack(spacing: 1) {
-                            Text(dayLabel(e.startDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
-                            Text(monthLabel(e.startDate)).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(P.textDim)
+                            Text(dayLabel(badgeDate)).font(.system(size: 18, weight: .heavy)).foregroundStyle(color)
+                            Text(monthLabel(badgeDate)).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(P.textDim)
                         }
                         .frame(width: 40)
                         .padding(.vertical, 6)

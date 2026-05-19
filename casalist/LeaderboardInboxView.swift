@@ -31,6 +31,8 @@ struct LeaderboardInboxView: View {
     private var goals: FetchedResults<FamilyGoal>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.completedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil AND isCompleted == YES"))
     private var completedTasks: FetchedResults<TaskItem>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"))
+    private var allTasks: FetchedResults<TaskItem>
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
 
@@ -248,6 +250,11 @@ struct LeaderboardInboxView: View {
             sectionHeader("THIS WEEK'S RACE", tint: P.mint, count: members.count)
             weeklyRaceCard
 
+            if iAmAdmin {
+                sectionHeader("CHORE STATS", tint: P.coral, count: members.count)
+                adminChoreStatsCard
+            }
+
             sectionHeader("RECENT REDEMPTIONS", tint: P.lavender, count: redeemedGoals.count)
             if redeemedGoals.isEmpty {
                 emptyCard("Nothing redeemed yet.")
@@ -257,6 +264,61 @@ struct LeaderboardInboxView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Admin chore stats
+
+    /// Categories that count as "chores" for the admin stats — excludes
+    /// reminders, events, and category-less items so admins see real
+    /// chore throughput, not pinned-info noise.
+    private let choreCategories: Set<String> = ["chores", "home", "maintenance"]
+
+    private func choreStats(for m: FamilyMember) -> (assigned: Int, done: Int) {
+        let mine = allTasks.filter { t in
+            let cat = t.category.lowercased()
+            guard choreCategories.contains(cat) else { return false }
+            return (t.assignee ?? "").lowercased() == m.name.lowercased()
+        }
+        let done = mine.filter(\.isCompleted).count
+        return (mine.count, done)
+    }
+
+    private var adminChoreStatsCard: some View {
+        VStack(spacing: 10) {
+            ForEach(members, id: \.uid) { m in
+                let (assigned, done) = choreStats(for: m)
+                let rate = assigned > 0 ? Double(done) / Double(assigned) : 0
+                HStack(spacing: 10) {
+                    CLAvatar(m.asCLMember, size: 22)
+                    Text(m.name)
+                        .font(.system(size: 13, weight: .heavy))
+                        .lineLimit(1)
+                        .frame(width: 84, alignment: .leading)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(P.surfaceAlt.opacity(0.6))
+                            Capsule().fill(rate >= 1.0 ? P.mint : P.coral)
+                                .frame(width: geo.size.width * CGFloat(rate))
+                        }
+                    }
+                    .frame(height: 10)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(done)/\(assigned)")
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(P.textDim)
+                            .monospacedDigit()
+                        Text(assigned == 0 ? "—" : "\(Int((rate * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(rate >= 1.0 ? P.mint : P.textMuted)
+                            .monospacedDigit()
+                    }
+                    .frame(width: 56, alignment: .trailing)
+                }
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
     }
 
     private var standingsLeaderCard: some View {

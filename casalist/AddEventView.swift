@@ -72,7 +72,11 @@ struct AddEventView: View {
                 Section("When") {
                     Toggle("All-day", isOn: $isAllDay.animation())
                     DatePicker(
-                        "Starts",
+                        // For recurring events the date pickers always
+                        // edit the SERIES root, not the occurrence the
+                        // user tapped. Label them accordingly so
+                        // "tap May 19, see May 18" stops being a wat.
+                        repeatKind.isEmpty ? "Starts" : "Series starts",
                         selection: $startDate,
                         displayedComponents: isAllDay ? .date : [.date, .hourAndMinute]
                     )
@@ -80,11 +84,17 @@ struct AddEventView: View {
                         if endDate <= newStart { endDate = newStart.addingTimeInterval(3600) }
                     }
                     DatePicker(
-                        "Ends",
+                        repeatKind.isEmpty ? "Ends" : "First end",
                         selection: $endDate,
                         in: startDate...,
                         displayedComponents: isAllDay ? .date : [.date, .hourAndMinute]
                     )
+                    if !repeatKind.isEmpty {
+                        Label("Edits affect every occurrence.",
+                              systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section("Repeat") {
                     Picker("Repeat", selection: $repeatKind) {

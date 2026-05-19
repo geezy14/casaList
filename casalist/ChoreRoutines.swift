@@ -49,30 +49,35 @@ enum ChoreRoutineStore {
 
     /// Load routines for a specific household. Falls back to the legacy
     /// UserDefaults store the first time so anything created on the device
-    /// before the Core Data migration is preserved.
+    /// before the Core Data migration is preserved. Reads through the
+    /// HouseholdRulesEnvelope wrapper so legacy bare-array JSON and the
+    /// new wrapper format both decode.
     static func load(from household: Household?) -> [ChoreRoutineTemplate] {
-        if let h = household, !h.routinesJSON.isEmpty,
-           let data = h.routinesJSON.data(using: .utf8),
-           let arr = try? JSONDecoder().decode([ChoreRoutineTemplate].self, from: data) {
-            return arr
+        if let h = household, !h.routinesJSON.isEmpty {
+            return HouseholdRulesEnvelope.decode(h.routinesJSON).routines
         }
-        if let data = UserDefaults.standard.string(forKey: legacyKey)?.data(using: .utf8),
-           let arr = try? JSONDecoder().decode([ChoreRoutineTemplate].self, from: data) {
-            return arr
+        if let json = UserDefaults.standard.string(forKey: legacyKey) {
+            return HouseholdRulesEnvelope.decode(json).routines
         }
         return []
     }
 
-    /// Save routines onto the supplied household. If no household exists yet
-    /// we fall back to UserDefaults so the parent's edits aren't lost.
+    /// Save routines onto the supplied household. Preserves the rules
+    /// slot of the envelope on every save so the chore-routine UI
+    /// doesn't clobber GameRules and vice versa. Falls back to
+    /// UserDefaults if no household exists yet.
     static func save(_ routines: [ChoreRoutineTemplate], to household: Household?, context: NSManagedObjectContext?) {
-        guard let data = try? JSONEncoder().encode(routines),
-              let json = String(data: data, encoding: .utf8) else { return }
         if let h = household {
-            h.routinesJSON = json
+            var env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+            env.routines = routines
+            h.routinesJSON = env.encodedJSON()
             try? context?.save()
             UserDefaults.standard.removeObject(forKey: legacyKey)
         } else {
+            // No household yet — keep the legacy device-local blob format
+            // (bare array, not envelope) so older code paths still work.
+            guard let data = try? JSONEncoder().encode(routines),
+                  let json = String(data: data, encoding: .utf8) else { return }
             UserDefaults.standard.set(json, forKey: legacyKey)
         }
     }
