@@ -672,9 +672,6 @@ public enum CasalistCottage {
                     Text(greetingText)
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(P.text)
-                    Text("Tap a card to edit")
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
-                        .foregroundStyle(P.textDim)
                 }
                 .padding(.top, 16)
                 star
