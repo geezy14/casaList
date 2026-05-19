@@ -8,6 +8,100 @@ When `CLAUDE.md`'s Progress Log hits 6 entries, move the oldest paragraph from t
 
 ---
 
+### 2026-05-15 — TestFlight 1.5: identity rebuild on CKUserID + crash trio fixed
+Long debug session. Started chasing a duplicate "Dakoda" record on the
+joiner side that wouldn't dedupe; ended up rebuilding the identity
+foundation and fixing two unrelated crashes that had been masquerading
+as Settings bugs.
+
+**Headline architectural change**: `FamilyMember` now carries a
+`cloudKitUserID` field (the iCloud user record ID via
+`CKContainer.userRecordID()` / `CKShare.Metadata.share.currentUserParticipant.userIdentity.userRecordID`).
+That ID is stable per-Apple-ID-per-container across app reinstall,
+device change, and name changes — confirmed in Apple Forums thread
+114322 and verified end-to-end on two physical iCloud accounts.
+Dedupe is keyed on it via `FamilyDedupe.mergeByCloudKitUserID`.
+Legacy records (synced down from pre-1.5 CloudKit data) get their ID
+copied from any stamped same-name same-household sibling via
+`mergeLegacyNameDupes` — non-destructive, so no soft-delete sync
+ping-pong between devices.
+
+**Two crashes traced via .ips files, neither was where it looked:**
+
+(1) `FRONTBOARD 0x8BADF00D` scene-update watchdog kill — looked like
+a Settings crash, was actually the foreground dedupe pipeline calling
+`context.save()` on the main `stack.context` which synchronously
+triggered a SQLite WAL checkpoint on the shared store's SQLQueue
+while CloudKit was also working it. Blocked >10s. Fixed: entire
+dedupe pipeline now runs on a private-queue background context via
+`runDedupePipeline()` (`container.newBackgroundContext()` +
+`.perform`). Lifted from Apple's documented pattern.
+
+(2) `EXC_BAD_ACCESS` stack-guard overflow on iOS 26 in
+`SettingsView.developerShareTools.getter` — Swift metadata demangler
+ran out of call-stack space walking the generic `TupleView` produced
+by inlining ~35 children (5 toggles + 13 actionButtons + dividers +
+conditionals) into one VStack body. Fixed: extracted
+`DeveloperSettingsSection` into its own file with 7 separate sub-View
+structs (`DevStatsBlock`, `DevSchemaBlock`, `DevShareInspectBlock`,
+`DevShareResetBlock`, `DevNukeBlock`, `DevOwnerBlock`, `DevWipeBlock`
++ tiny `DevDivider`/`DevInfoRow`/`DevActionRow` primitives). Each
+nominal View type bounds its own body's TupleView so the demangler
+never recurses deep enough to overflow.
+
+**ChatGPT P1/P2 caught in the same session:**
+- CloudBackup was using `stack.context` (main-thread-bound) from
+  `DispatchQueue.global` — random crash risk. Fixed: backup runs on
+  `container.newBackgroundContext()` via `.perform`.
+- `attemptAutoRejoinSavedShare()` was wiping the saved share URL on
+  ANY CloudKit fetch error. A single bad-wifi launch could
+  permanently brick rejoin. Fixed: only clear on permanent codes
+  (`.unknownItem`, `.permissionFailure`, `.participantMayNeedVerification`,
+  `.invalidArguments`, `.badContainer`). Transient errors preserve
+  the URL — see `shouldClearSavedShareURL(after:)`.
+
+**Test matrix that passes 100% on two physical accounts**
+(iPhone Air / geezy + iPhone 15 / dakoda):
+1. Fresh nuke → welcome → AirDrop → accept → mirror state, no dupes
+2. Joiner reinstall → auto-rejoin via saved URL → same CKUserID
+   stamped, no dupes
+3. Owner deletes joiner → joiner reopens → restores cleanly, NO
+   infinite cycle (the previous version sync-looped delete-restore)
+4. Owner nukes + re-invites → identity reconverges via stable
+   CKUserID, fresh CKShare, no dupes either side
+
+**Shipping mechanics:**
+- Production CloudKit schema deploy (CD_cloudKitUserID + 3 indexes
+  on CD_FamilyMember) via Dashboard's "Deploy Schema Changes…"
+  driven through Chrome MCP — first time we've done that step
+  programmatically rather than by hand.
+- 1.5 archive + altool upload via the standard `scripts/...`
+  workflow. Build state VALID, en-US "What to Test" notes posted.
+- home group auto-distribute is ON, so geoff/Donovan/Dakoda/Lorena
+  pick it up automatically once Apple finishes processing.
+
+**Quality of life carried in this build:**
+- Daily morning briefing scheduler + Settings toggle (scheduler
+  runs, UI is built but unwired pending design pass)
+- Quiet hours (suppress non-critical pushes during user-defined
+  window — affects `detectAndNotifyAssignments`,
+  `detectAndNotifyPendingRequests`, `detectAndNotifyRedemptions`)
+- Recurring `FamilyEvent` notification scheduling (model field
+  existed, hook was missing — now `scheduleEvent(for:)` wires daily
+  / weekly / monthly / yearly via repeating
+  `UNCalendarNotificationTrigger`)
+- New dev buttons: Dump state to share log, Nuke ALL local data,
+  Merge duplicate households, Move me into shared store, Demote me
+  to standard, Reset share (owner)
+- Share-log rotation at 100KB so the sync-log reader doesn't freeze
+- Default palette is now `vivid` on first launch
+
+**Going-in-next-time notes**: there's a real "kick member" flow
+still missing — currently owner-side delete is reversed by the
+joiner's self-heal because we don't remove the CKShare participant.
+Need `share.removeParticipant` + soft-delete + confirm dialog.
+Parked.
+
 ### 2026-05-15 — TestFlight 1.4: family sharing actually works across Apple IDs
 The headline bug, found after hours of "Item Unavailable" recipient
 errors, turned out to be one line in `InviteFamilyView.swift`:

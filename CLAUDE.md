@@ -29,6 +29,75 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > "testflight it" section below for the full rule. **Do not bump
 > `MARKETING_VERSION` without Geezy asking.**
 
+### 2026-05-19 — TF 3.0 (3) + (4) shipped: weekly-recurrence fix, search, chore expiration, redeem catalog, Profar moves out
+
+Long day. Two TFs shipped, several feature surfaces opened up, and
+Profar moved to its own GitHub repo so Casalist is fully clean.
+
+**Headline ships**:
+- **TF 3.0 (3)** (commit `0d78eff`) — Apple Calendar weekly-recurrence
+  fix (CalendarLinkService translates `repeatKind` into a real
+  `EKRecurrenceRule`; previously every weekly event mirrored as a
+  one-shot). EKAuthorizationStatus deprecation cleaned up. New
+  Leaderboard Inbox with 3 selectable shapes (Activity / Standings /
+  Goals) replacing the universal InboxView on Dashboard / My To-Do /
+  Family List. Admin-only CHORE STATS block in Standings showing
+  per-member done/assigned + percentage.
+- **TF 3.0 (4)** (commit `23b0d80`) — Universal search (magnifying
+  glass on Dashboard top bar; grouped results across tasks /
+  reminders / events / family / goals; tap a family member to filter
+  to their stuff). Chore expiration end-to-end: Settings → Game
+  Rules → "Expires after" (Off / 1 / 3 / 7 / 14 days), with the
+  EXPIRED pill + struck-through points across rings / digest / calm /
+  kanban rows. Recurring chores never expire. Schedule day-strip
+  expands recurring events per-day (M/W/F event now visible on all
+  three). Event card date badge reflects the tapped day.
+
+**Curated redeem catalog landed post-(4)** (commits `d2d4e82` +
+`bc0b63a`, on main, NOT in TF yet) — Rewards tab gets a new REDEEM
+section with three shapes (Grid / List / Sheet), pending state on
+already-requested items, "Need X more pts" affordability hint, and
+Settings → Game Rules → REDEEMABLE ITEMS editor for admins. 10
+defaults seeded (screen time, gaming, pick movie / dinner, stay up
+late, skip chore, ice cream, store trip, arcade, small toy). Rides
+in the existing `Household.routinesJSON` envelope so no schema
+change.
+
+**Profar exodus** — the `health-routing-refactor` branch (renamed
+`profar`) was pushed to a brand-new `geezy14/profar` repo, then
+deleted from casalist origin. The PROFAR_MIGRATION.md handoff doc
+went up to geezy14/profar's `main`, and the full source snapshot
+sits on `casalist-source` branch for Codex to extract files from.
+Casalist main is `git grep -i "profar"` clean. Memory note
+`casalist_profar_codex.md` codifies "don't touch the profar repo,
+Codex owns it."
+
+**Gotchas worth keeping**:
+- App Store Connect's `/v1/builds` `version` field is **CFBundleVersion
+  (the build number)**, NOT marketing version. To filter by marketing
+  version reliably, request `?include=preReleaseVersion` and match
+  the included `preReleaseVersions[].attributes.version` instead. I
+  PATCH'd notes onto the wrong (older) build twice before figuring
+  this out.
+- `cktool import-schema` will push schema changes to Dev CloudKit
+  **without** needing the app to actually write a record first. Edit
+  the exported `.ckdb`, re-import, and the new fields show up
+  immediately. Useful when you want to test the deploy gate workflow
+  end-to-end without driving the device UI.
+- Catalog "pending" lookup matches on the full label string
+  (`"emoji name"`) — keep label formatting consistent between
+  `proposeRedeem` and the membership check in
+  `myPendingRedeemLabels` or the disabled state silently misses.
+- Rebase conflicts when both sides touched the same doc (Geezy wrote
+  his version of PROFAR_MIGRATION.md while I wrote mine): preserve
+  HEAD verbatim, append my additions at the end. Python one-liner to
+  slice out the conflict markers + reattach handled it cleanly.
+
+**Sync baseline rule**: untouched. `runDedupePipeline` still has the
+`newBackgroundContext() + automaticallyMergesChangesFromParent` form.
+Chore expiration plumbing rides in `Household.routinesJSON` so no
+new schema field, no Production CloudKit deploy needed.
+
 ### 2026-05-18 (PM) — TF 3.0 (2): 4-layout picker + announceHousehold + new sync baseline
 
 Long evening session that turned the per-tab layout exploration into
@@ -516,101 +585,7 @@ Already in Dev (auto-registered via Debug writes); needs Dashboard
 "Deploy Schema Changes…" promote to Production. Script:
 `scripts/cloudkit-schema-diff.sh` confirms the delta.
 
-### 2026-05-15 — TestFlight 1.5: identity rebuild on CKUserID + crash trio fixed
-Long debug session. Started chasing a duplicate "Dakoda" record on the
-joiner side that wouldn't dedupe; ended up rebuilding the identity
-foundation and fixing two unrelated crashes that had been masquerading
-as Settings bugs.
-
-**Headline architectural change**: `FamilyMember` now carries a
-`cloudKitUserID` field (the iCloud user record ID via
-`CKContainer.userRecordID()` / `CKShare.Metadata.share.currentUserParticipant.userIdentity.userRecordID`).
-That ID is stable per-Apple-ID-per-container across app reinstall,
-device change, and name changes — confirmed in Apple Forums thread
-114322 and verified end-to-end on two physical iCloud accounts.
-Dedupe is keyed on it via `FamilyDedupe.mergeByCloudKitUserID`.
-Legacy records (synced down from pre-1.5 CloudKit data) get their ID
-copied from any stamped same-name same-household sibling via
-`mergeLegacyNameDupes` — non-destructive, so no soft-delete sync
-ping-pong between devices.
-
-**Two crashes traced via .ips files, neither was where it looked:**
-
-(1) `FRONTBOARD 0x8BADF00D` scene-update watchdog kill — looked like
-a Settings crash, was actually the foreground dedupe pipeline calling
-`context.save()` on the main `stack.context` which synchronously
-triggered a SQLite WAL checkpoint on the shared store's SQLQueue
-while CloudKit was also working it. Blocked >10s. Fixed: entire
-dedupe pipeline now runs on a private-queue background context via
-`runDedupePipeline()` (`container.newBackgroundContext()` +
-`.perform`). Lifted from Apple's documented pattern.
-
-(2) `EXC_BAD_ACCESS` stack-guard overflow on iOS 26 in
-`SettingsView.developerShareTools.getter` — Swift metadata demangler
-ran out of call-stack space walking the generic `TupleView` produced
-by inlining ~35 children (5 toggles + 13 actionButtons + dividers +
-conditionals) into one VStack body. Fixed: extracted
-`DeveloperSettingsSection` into its own file with 7 separate sub-View
-structs (`DevStatsBlock`, `DevSchemaBlock`, `DevShareInspectBlock`,
-`DevShareResetBlock`, `DevNukeBlock`, `DevOwnerBlock`, `DevWipeBlock`
-+ tiny `DevDivider`/`DevInfoRow`/`DevActionRow` primitives). Each
-nominal View type bounds its own body's TupleView so the demangler
-never recurses deep enough to overflow.
-
-**ChatGPT P1/P2 caught in the same session:**
-- CloudBackup was using `stack.context` (main-thread-bound) from
-  `DispatchQueue.global` — random crash risk. Fixed: backup runs on
-  `container.newBackgroundContext()` via `.perform`.
-- `attemptAutoRejoinSavedShare()` was wiping the saved share URL on
-  ANY CloudKit fetch error. A single bad-wifi launch could
-  permanently brick rejoin. Fixed: only clear on permanent codes
-  (`.unknownItem`, `.permissionFailure`, `.participantMayNeedVerification`,
-  `.invalidArguments`, `.badContainer`). Transient errors preserve
-  the URL — see `shouldClearSavedShareURL(after:)`.
-
-**Test matrix that passes 100% on two physical accounts**
-(iPhone Air / geezy + iPhone 15 / dakoda):
-1. Fresh nuke → welcome → AirDrop → accept → mirror state, no dupes
-2. Joiner reinstall → auto-rejoin via saved URL → same CKUserID
-   stamped, no dupes
-3. Owner deletes joiner → joiner reopens → restores cleanly, NO
-   infinite cycle (the previous version sync-looped delete-restore)
-4. Owner nukes + re-invites → identity reconverges via stable
-   CKUserID, fresh CKShare, no dupes either side
-
-**Shipping mechanics:**
-- Production CloudKit schema deploy (CD_cloudKitUserID + 3 indexes
-  on CD_FamilyMember) via Dashboard's "Deploy Schema Changes…"
-  driven through Chrome MCP — first time we've done that step
-  programmatically rather than by hand.
-- 1.5 archive + altool upload via the standard `scripts/...`
-  workflow. Build state VALID, en-US "What to Test" notes posted.
-- home group auto-distribute is ON, so geoff/Donovan/Dakoda/Lorena
-  pick it up automatically once Apple finishes processing.
-
-**Quality of life carried in this build:**
-- Daily morning briefing scheduler + Settings toggle (scheduler
-  runs, UI is built but unwired pending design pass)
-- Quiet hours (suppress non-critical pushes during user-defined
-  window — affects `detectAndNotifyAssignments`,
-  `detectAndNotifyPendingRequests`, `detectAndNotifyRedemptions`)
-- Recurring `FamilyEvent` notification scheduling (model field
-  existed, hook was missing — now `scheduleEvent(for:)` wires daily
-  / weekly / monthly / yearly via repeating
-  `UNCalendarNotificationTrigger`)
-- New dev buttons: Dump state to share log, Nuke ALL local data,
-  Merge duplicate households, Move me into shared store, Demote me
-  to standard, Reset share (owner)
-- Share-log rotation at 100KB so the sync-log reader doesn't freeze
-- Default palette is now `vivid` on first launch
-
-**Going-in-next-time notes**: there's a real "kick member" flow
-still missing — currently owner-side delete is reversed by the
-joiner's self-heal because we don't remove the CKShare participant.
-Need `share.removeParticipant` + soft-delete + confirm dialog.
-Parked.
-
-_(2026-05-15 TestFlight 1.4, 2026-05-15 TestFlight 4.0, and 2026-05-14 Option A entries rotated to `docs/progress-log-archive.md`)_
+_(2026-05-15 TestFlight 1.5, 2026-05-15 TestFlight 1.4, 2026-05-15 TestFlight 4.0, and 2026-05-14 Option A entries rotated to `docs/progress-log-archive.md`)_
 
 ## Overview
 Casalist is a private family household management app for iOS.
