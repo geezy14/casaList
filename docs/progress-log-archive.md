@@ -8,6 +8,39 @@ When `CLAUDE.md`'s Progress Log hits 6 entries, move the oldest paragraph from t
 
 ---
 
+### 2026-05-15 — TestFlight 1.4: family sharing actually works across Apple IDs
+The headline bug, found after hours of "Item Unavailable" recipient
+errors, turned out to be one line in `InviteFamilyView.swift`:
+`share.publicPermission = .none` combined with `share(_:to: nil)` meant
+every CKShare ever sent was locked to participants we never added —
+link-based join was impossible by definition. Fix: set `.readWrite` and
+explicitly persist the share back via `CKModifyRecordsOperation`
+(NSPersistentCloudKitContainer's `share()` saves the initial CKShare
+but not subsequent mutations to publicPermission or title). Ancillary
+fixes layered on:
+(1) joiners always land as `.standard` role — owner stays reserved for
+the share creator. Scene delegate auto-create demotes any pre-existing
+same-name local FamilyMember so a pre-share owner role can't bleed in;
+(2) foreground self-heal `ensureMeInSharedHousehold` — if the device is
+joined to a shared household but no live `FamilyMember` matching
+`userName` exists in it, restore a soft-deleted one or create a fresh
+one in the shared store. Fixes "owner deleted me and now I'm gone";
+(3) `addJoinerAsFamilyMember` restores soft-deleted same-name records
+instead of bailing — without this, an owner-delete-then-joiner-reinstall
+left the joiner invisible everywhere;
+(4) `FamilyDedupe.mergeSameNameDupesInHousehold` collapses any same-name
+pair within a household, prioritizing the SHARED-store record as
+survivor so the surviving "me" actually syncs across devices;
+(5) new dev buttons in Settings → DEVELOPER: "Merge duplicate
+households", "Move me into shared store", "Demote me to standard",
+"Reset share (owner) — delete existing CKShare" — collectively let us
+repair edge cases in the field without a code change;
+(6) InviteFamilyView button copy is now just "AirDrop" with the
+`iphone.radiowaves.left.and.right` SF Symbol. Two-account test on
+iPhone Air (geezy) + iPhone 15 (dakoda) passed end-to-end: fresh
+AirDrop accepted cleanly, both names visible on both devices, roles
+set correctly. Build uploaded via standard "testflight it" flow.
+
 ### 2026-05-15 — TestFlight 4.0 shipped: Kid mode + themes + push quartet
 Big session. TestFlight build `4.0` (MARKETING_VERSION + CURRENT_PROJECT_VERSION
 both bumped from `1`/`3.9` to `4.0`) uploaded with eight major shipping

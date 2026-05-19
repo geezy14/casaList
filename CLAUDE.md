@@ -29,6 +29,83 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > "testflight it" section below for the full rule. **Do not bump
 > `MARKETING_VERSION` without Geezy asking.**
 
+### 2026-05-18 (PM) — TF 3.0 (2): 4-layout picker + announceHousehold + new sync baseline
+
+Long evening session that turned the per-tab layout exploration into
+a real user-facing setting and shipped two TFs (one expired, one
+verified).
+
+**Headline ship**: TF 3.0 (build 2), commit `a39a4fc`. Verified on
+Air + iPhone 15 — sync instant across both devices. Added to the
+known-good baseline list alongside TF 2.2 (5) and TF 2.5. See
+`casalist_sync_baseline_rule.md` for the proof rule.
+
+**Layout picker** in Settings → Appearance with four options:
+- **Classic** — restored 2.2 hero/list shapes for Dashboard,
+  Reminders (coral pinned tile), Family List (lavender tray),
+  Maintenance/Home, Grocery, Schedule
+- **Rings** — Apple Fitness rings hero on Dashboard, Reminders,
+  Family List, Home, Grocery, Schedule (all 140/104/68)
+- **Calm** — roomy text-only headers on every tab (My To-Do
+  already had a full calm content variant; other tabs get the
+  hero treatment and fall back to their existing lists)
+- **Kanban** — full 3-column board for My To-Do (Today / Soon /
+  Done), Reminders (Pinned / Today / Hourly), Home (Overdue /
+  This week / Done). Other tabs get a kanban-style header only.
+  Column width settled at 124pt with 10pt heavy headers + line
+  limit so OVERDUE / THIS WEEK fit in one line.
+
+**Schema change & deploy**: added `FamilyEvent.announceHousehold`
+(Bool) so admins can broadcast a calendar event to the household
+while still color-coding the card for a specific kid. Deployed
+Dev → Prod via Chrome MCP. The schema-gate Run Script build phase
+is now properly battle-tested — it would have refused the archive
+if the deploy was skipped. Workflow proven end-to-end.
+
+**Reminder routing tightened**: `isTargetedAtMe` now returns false
+for `notifyMode == "everyone"` and empty-notifyMode-with-no-
+assignee. Loose reminders live in the Reminders tab only; My To-Do
+gets only assignee-specific or admin-targeted ones.
+
+**Other ships**:
+- Pulsing profile chip on Dashboard (rings + calm + kanban
+  variants). Taps into Personal Card (chore card). Sonar-ring
+  pulse pattern — photo stays still + crisp, no wash.
+- Weekday-only (Mon-Fri) repeat option for Schedule events.
+  Wires through NotificationsManager via 5 per-weekday triggers,
+  reusing the multi-weekday id-suffix scheme.
+- Event card now shows attendee avatar (CLAvatar or house glyph
+  for household-wide).
+- Dashboard simplified everywhere: removed `quickAdd` +
+  `stickyAgenda` + `quickAddChips`. Hero → star → tiles →
+  What's New only.
+
+**Gotchas I burned time on, future-me read these**:
+- App Store Connect API's `version` field on /v1/builds is the
+  CFBundleVersion (build number), NOT the marketing version. Use
+  `?include=preReleaseVersion` + the included `preReleaseVersions`
+  payload to filter by marketing version reliably. I PATCH'd notes
+  onto the wrong build twice before figuring this out.
+- `cktool import-schema` lets you push schema changes to Dev
+  WITHOUT needing the app to write a record first. Useful when
+  the user wants the deploy workflow tested without driving the
+  UI on Air. Just edit the exported `.ckdb`, add the field,
+  re-import.
+- Kanban columns: SwiftUI's HStack with `.frame(maxWidth:.infinity)`
+  on a child means even the rings stack with `.frame(width:140)`
+  can get visually clipped by the screen edge if the parent
+  doesn't have enough horizontal padding. The fix on this session
+  was `.padding(.leading, 18) + .fixedSize()` on the rings stack
+  to give the stroke breathing room. Look at `greetingCardRings`
+  if it bites again.
+
+**The sync baseline doc is the new defense**:
+`casalist_sync_baseline_rule.md` lists `runDedupePipeline`,
+remote-change debounce, Core Data background-context behavior,
+CloudKit store setup, and the schema gate as protected surface.
+Any change to those needs TF Release proof on Air + iPhone 15.
+Debug/simulator don't count. Linked from MEMORY.md.
+
 ### 2026-05-18 — TF 2.3 → 2.5 saga: schema gate + DON'T touch runDedupePipeline
 Half-day debugging session. Started by shipping idea-A/C/D as
 hidden options under a DEBUG design picker; pivoted hard when
@@ -533,40 +610,7 @@ joiner's self-heal because we don't remove the CKShare participant.
 Need `share.removeParticipant` + soft-delete + confirm dialog.
 Parked.
 
-### 2026-05-15 — TestFlight 1.4: family sharing actually works across Apple IDs
-The headline bug, found after hours of "Item Unavailable" recipient
-errors, turned out to be one line in `InviteFamilyView.swift`:
-`share.publicPermission = .none` combined with `share(_:to: nil)` meant
-every CKShare ever sent was locked to participants we never added —
-link-based join was impossible by definition. Fix: set `.readWrite` and
-explicitly persist the share back via `CKModifyRecordsOperation`
-(NSPersistentCloudKitContainer's `share()` saves the initial CKShare
-but not subsequent mutations to publicPermission or title). Ancillary
-fixes layered on:
-(1) joiners always land as `.standard` role — owner stays reserved for
-the share creator. Scene delegate auto-create demotes any pre-existing
-same-name local FamilyMember so a pre-share owner role can't bleed in;
-(2) foreground self-heal `ensureMeInSharedHousehold` — if the device is
-joined to a shared household but no live `FamilyMember` matching
-`userName` exists in it, restore a soft-deleted one or create a fresh
-one in the shared store. Fixes "owner deleted me and now I'm gone";
-(3) `addJoinerAsFamilyMember` restores soft-deleted same-name records
-instead of bailing — without this, an owner-delete-then-joiner-reinstall
-left the joiner invisible everywhere;
-(4) `FamilyDedupe.mergeSameNameDupesInHousehold` collapses any same-name
-pair within a household, prioritizing the SHARED-store record as
-survivor so the surviving "me" actually syncs across devices;
-(5) new dev buttons in Settings → DEVELOPER: "Merge duplicate
-households", "Move me into shared store", "Demote me to standard",
-"Reset share (owner) — delete existing CKShare" — collectively let us
-repair edge cases in the field without a code change;
-(6) InviteFamilyView button copy is now just "AirDrop" with the
-`iphone.radiowaves.left.and.right` SF Symbol. Two-account test on
-iPhone Air (geezy) + iPhone 15 (dakoda) passed end-to-end: fresh
-AirDrop accepted cleanly, both names visible on both devices, roles
-set correctly. Build uploaded via standard "testflight it" flow.
-
-_(2026-05-15 TestFlight 4.0 entry and 2026-05-14 Option A entry rotated to `docs/progress-log-archive.md`)_
+_(2026-05-15 TestFlight 1.4, 2026-05-15 TestFlight 4.0, and 2026-05-14 Option A entries rotated to `docs/progress-log-archive.md`)_
 
 ## Overview
 Casalist is a private family household management app for iOS.
