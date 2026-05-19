@@ -241,6 +241,23 @@ final class CalendarLinkService: NSObject, ObservableObject {
         return store.events(matching: predicate)
     }
 
+    /// True when this device has an Apple Calendar linked AND there is a
+    /// live EKEvent mirroring this FamilyEvent. Callers use this to skip
+    /// scheduling a Casalist local push for events that Apple Calendar
+    /// is already alerting on — otherwise the user gets two pushes for
+    /// one event (one from iOS Calendar's default alert, one from
+    /// `NotificationsManager.scheduleEvent`).
+    ///
+    /// Returns false when no calendar is linked, when the mapping is
+    /// missing, or when the mapped EKEvent has been deleted in iOS
+    /// Calendar (mapping stale).
+    func isMirrored(uid: UUID) -> Bool {
+        guard linkedCalendar != nil else { return false }
+        let mapping = mappingDict()
+        guard let ekID = mapping[uid.uuidString] else { return false }
+        return store.event(withIdentifier: ekID) != nil
+    }
+
     // MARK: – Local mapping helpers
 
     private func mappingDict() -> [String: String] {

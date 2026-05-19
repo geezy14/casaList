@@ -794,6 +794,17 @@ enum NotificationsManager {
         center.removePendingNotificationRequests(withIdentifiers: stale)
 
         guard event.deletedAt == nil else { return }
+
+        // If this device has the event mirrored to its linked Apple
+        // Calendar, iOS Calendar will fire its own default alert at
+        // event time. Scheduling Casalist's push too gives the user
+        // TWO notifications for ONE event. Skip — the mirror handles
+        // it. Resyncs naturally: unlinking the Apple Calendar makes
+        // isMirrored false on next launch's syncEventsFromContext,
+        // and the Casalist push resumes.
+        if CalendarLinkService.shared.isMirrored(uid: event.uid) {
+            return
+        }
         // Don't schedule events in the past unless they're recurring.
         if event.startDate < Date() && event.repeatKind.isEmpty { return }
 
