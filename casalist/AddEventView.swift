@@ -25,6 +25,10 @@ struct AddEventView: View {
     @State private var notes: String
     @State private var repeatKind: String
     @State private var confirmDelete: Bool = false
+    /// Re-entry guard. A fast double-tap on the Save button used to
+    /// insert two FamilyEvent rows with two distinct uids — the user
+    /// got two identical pushes when the event fired. Block re-entry.
+    @State private var isSaving: Bool = false
     @State private var showLocationPicker: Bool = false
     @State private var showCustomRepeat: Bool = false
 
@@ -217,6 +221,8 @@ struct AddEventView: View {
     }
 
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         if let editing {
             editing.title = trimmedTitle

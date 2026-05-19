@@ -794,17 +794,6 @@ enum NotificationsManager {
         center.removePendingNotificationRequests(withIdentifiers: stale)
 
         guard event.deletedAt == nil else { return }
-
-        // If this device has the event mirrored to its linked Apple
-        // Calendar, iOS Calendar will fire its own default alert at
-        // event time. Scheduling Casalist's push too gives the user
-        // TWO notifications for ONE event. Skip — the mirror handles
-        // it. Resyncs naturally: unlinking the Apple Calendar makes
-        // isMirrored false on next launch's syncEventsFromContext,
-        // and the Casalist push resumes.
-        if CalendarLinkService.shared.isMirrored(uid: event.uid) {
-            return
-        }
         // Don't schedule events in the past unless they're recurring.
         if event.startDate < Date() && event.repeatKind.isEmpty { return }
 
@@ -964,7 +953,43 @@ enum NotificationsManager {
         let req: NSFetchRequest<FamilyEvent> = FamilyEvent.fetchRequest()
         req.predicate = NSPredicate(format: "deletedAt == nil")
         let events = (try? context.fetch(req)) ?? []
-        for event in events {
+        // Defensive dedupe BEFORE scheduling. If two FamilyEvent rows
+        // exist for the same logical event (CKShare replay, household
+        // migration, double-tap on Save) each row has its own uid →
+        // its own `event-<uid>` notification id → both fire,
+        // producing two identical pushes for one event. Group by
+        // (title|startDate|household) and schedule only one. The
+        // surviving row is the oldest (lowest uid string) so the same
+        // device picks the same survivor every launch.
+        var bestByKey: [String: FamilyEvent] = [:]
+        for e in events {
+            let householdId = e.household?.objectID.uriRepresentation().absoluteString ?? ""
+            let key = "\(e.title)|\(e.startDate.timeIntervalSinceReferenceDate)|\(householdId)"
+            if let prior = bestByKey[key] {
+                // Keep the lexicographically lower uid string — stable,
+                // device-independent, no clock dependency.
+                if e.uid.uuidString < prior.uid.uuidString {
+                    bestByKey[key] = e
+                }
+            } else {
+                bestByKey[key] = e
+            }
+        }
+        // Cancel pushes for the LOSER rows so they stop firing
+        // independently if they were scheduled in a prior session.
+        let survivorUids = Set(bestByKey.values.map { $0.uid.uuidString })
+        let loserIds = events.compactMap { e -> String? in
+            survivorUids.contains(e.uid.uuidString) ? nil : eventIdPrefix + e.uid.uuidString
+        }
+        if !loserIds.isEmpty {
+            var allLoserIds = loserIds
+            for base in loserIds {
+                for wd in 1...7 { allLoserIds.append("\(base)-wd\(wd)") }
+            }
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(withIdentifiers: allLoserIds)
+        }
+        for event in bestByKey.values {
             await scheduleEvent(for: event)
         }
     }
