@@ -1,0 +1,39 @@
+Casalist 3.0 (build 6)
+
+Bug fix build.
+
+What's fixed
+- Two pushes for one calendar event. If you ever got the same
+  family event pinged twice at the same minute, this is the fix.
+  Duplicate event rows now collapse to one notification.
+- Add-event Save button no longer accepts a fast double-tap as
+  two saves (that was one of the ways the duplicate rows got
+  created).
+- Save failures get a coral warning banner at the top of the
+  screen instead of failing silently. Tap to dismiss.
+- iCloud-unavailable warning banner. If sync is offline at
+  launch (no iCloud, airplane mode), you'll see a clear
+  "Sync is unavailable" banner so you know changes aren't
+  reaching family members.
+- Crash-on-launch safety net: clearer error if a Core Data
+  entity ever goes missing (e.g. a corrupt install) instead
+  of a silent unexpected-nil crash.
+
+Internals
+- Notification ids migrated from timestamp-based to UID-based
+  so re-scheduling a recurring chore is cleaner.
+- Background log mirrored to share-log.txt so device-pull
+  diagnostics show CK events, save failures, and fallback
+  activation in one place.
+
+What to test
+- Create a new family event a few minutes out. You should get
+  one push, not two.
+- Mark a recurring chore done from the lock screen. Next
+  occurrence should roll forward as before.
+- Assignee-only reminders should fire on the assignee's
+  device only.
+- Confirm two-account family sync still works: create a task
+  on one device, see it on the other within 30 seconds.
+
+Thanks!
