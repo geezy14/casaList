@@ -45,12 +45,16 @@ struct GameRulesView: View {
         case editCat(CategoryPointRule)
         case addTier
         case addCat
+        case editRedeem(RedeemableItem)
+        case addRedeem
         var id: String {
             switch self {
             case .editTier(let t): return "editTier-\(t.id)"
             case .editCat(let c): return "editCat-\(c.id)"
             case .addTier: return "addTier"
             case .addCat: return "addCat"
+            case .editRedeem(let r): return "editRedeem-\(r.id)"
+            case .addRedeem: return "addRedeem"
             }
         }
     }
@@ -96,6 +100,16 @@ struct GameRulesView: View {
             CatEditSheet(rule: CategoryPointRule(category: "", emoji: "✅", defaultPoints: 10, description: "")) { newRule in
                 store.rules.categoryRules.append(newRule)
             }
+        case .editRedeem(let item):
+            RedeemEditSheet(item: item) { updated in
+                if let i = store.rules.redeemableItems.firstIndex(where: { $0.id == updated.id }) {
+                    store.rules.redeemableItems[i] = updated
+                }
+            }
+        case .addRedeem:
+            RedeemEditSheet(item: RedeemableItem(emoji: "🎁", name: "", points: 50, category: "Treats")) { newItem in
+                store.rules.redeemableItems.append(newItem)
+            }
         }
     }
 
@@ -118,6 +132,14 @@ struct GameRulesView: View {
                                  ? "Default points suggested when creating tasks in each category. Individual tasks can still be adjusted."
                                  : "How many points each type of task is typically worth.")) {
                 catRows()
+            }
+
+            // Redeemable item catalog
+            Section(header: Label("REDEEMABLE ITEMS", systemImage: "gift.fill"),
+                    footer: Text(isAdmin
+                                 ? "Pre-built items kids tap to propose a reward at a known price. Tapping always still requires admin approval."
+                                 : "Tap any of these on the Rewards tab to send your family a quick request.")) {
+                redeemRows()
             }
 
             // Chore expiration window
@@ -388,6 +410,55 @@ struct GameRulesView: View {
     private func deleteCat(at offsets: IndexSet) {
         store.rules.categoryRules.remove(atOffsets: offsets)
     }
+    private func deleteRedeem(at offsets: IndexSet) {
+        store.rules.redeemableItems.remove(atOffsets: offsets)
+    }
+
+    // MARK: - Redeem rows
+
+    @ViewBuilder
+    private func redeemRows() -> some View {
+        if store.rules.redeemableItems.isEmpty {
+            Text("No items yet. Add one below.")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(store.rules.redeemableItems) { item in
+                redeemRow(item)
+            }
+            .onDelete { offsets in if isAdmin { deleteRedeem(at: offsets) } }
+        }
+        if isAdmin {
+            Button { activeSheet = .addRedeem } label: {
+                Label("Add redeemable item", systemImage: "plus.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(rgb: 0x7B5EA7))
+            }
+        }
+    }
+
+    private func redeemRow(_ item: RedeemableItem) -> some View {
+        HStack(spacing: 12) {
+            Text(item.emoji).font(.system(size: 22))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name).font(.system(size: 14, weight: .heavy))
+                Text(item.category)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("\(item.points) pts")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(.secondary)
+            if isAdmin {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if isAdmin { activeSheet = .editRedeem(item) } }
+    }
 }
 
 // MARK: - Tier Edit Sheet
@@ -495,6 +566,47 @@ private struct CatEditSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { onSave(draft); dismiss() }
                         .disabled(draft.category.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Redeem Edit Sheet
+
+private struct RedeemEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var draft: RedeemableItem
+    let onSave: (RedeemableItem) -> Void
+
+    init(item: RedeemableItem, onSave: @escaping (RedeemableItem) -> Void) {
+        _draft = State(initialValue: item)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Emoji") {
+                    TextField("🎁", text: $draft.emoji)
+                }
+                Section("Item name") {
+                    TextField("e.g. 30 min screen time", text: $draft.name)
+                }
+                Section("Points") {
+                    Stepper("\(draft.points) pts", value: $draft.points, in: 5...10_000, step: 5)
+                }
+                Section("Category") {
+                    TextField("e.g. Treats, Privileges, Outings", text: $draft.category)
+                }
+            }
+            .navigationTitle(draft.name.isEmpty ? "New Item" : draft.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(draft); dismiss() }
+                        .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty || draft.emoji.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }

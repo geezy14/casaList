@@ -23,6 +23,20 @@ struct CategoryPointRule: Codable, Identifiable, Equatable {
     var isLocked: Bool = false // if true, point value cannot be changed per-task
 }
 
+/// A pre-built, redeemable item kids tap to propose a goal at a
+/// known point cost. Tapping creates a FamilyGoal that lands in the
+/// admin inbox for approval (vs. a free-form goal where the kid
+/// types their own label + the admin sets the price).
+struct RedeemableItem: Codable, Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var emoji: String
+    var name: String
+    var points: Int
+    /// Grouping label so the catalog can be organized (e.g. "Screen
+    /// time", "Privileges", "Treats", "Outings", "Family"). Free-form.
+    var category: String
+}
+
 struct GameRules: Codable {
     var rewardTiers: [RewardTier]
     var categoryRules: [CategoryPointRule]
@@ -32,20 +46,27 @@ struct GameRules: Codable {
     /// still be completed but award 0 points instead of their configured
     /// value.
     var expirationWindowDays: Int = 0
+    /// Pre-built catalog of redeemable items kids can tap to propose a
+    /// goal at a known cost. Empty array = no curated catalog (kids
+    /// fall back to free-form goals only).
+    var redeemableItems: [RedeemableItem] = []
 
-    // Custom decoder so legacy installs that don't have expirationWindowDays
-    // in their saved JSON decode cleanly with the default value.
+    // Custom decoder so legacy installs that don't have new fields
+    // decode cleanly with default values.
     private enum CodingKeys: String, CodingKey {
-        case rewardTiers, categoryRules, pointsPerDollar, expirationWindowDays
+        case rewardTiers, categoryRules, pointsPerDollar
+        case expirationWindowDays, redeemableItems
     }
     init(rewardTiers: [RewardTier],
          categoryRules: [CategoryPointRule],
          pointsPerDollar: Int,
-         expirationWindowDays: Int = 0) {
+         expirationWindowDays: Int = 0,
+         redeemableItems: [RedeemableItem] = []) {
         self.rewardTiers = rewardTiers
         self.categoryRules = categoryRules
         self.pointsPerDollar = pointsPerDollar
         self.expirationWindowDays = expirationWindowDays
+        self.redeemableItems = redeemableItems
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,6 +74,7 @@ struct GameRules: Codable {
         self.categoryRules = try c.decode([CategoryPointRule].self, forKey: .categoryRules)
         self.pointsPerDollar = try c.decode(Int.self, forKey: .pointsPerDollar)
         self.expirationWindowDays = (try? c.decode(Int.self, forKey: .expirationWindowDays)) ?? 0
+        self.redeemableItems = (try? c.decode([RedeemableItem].self, forKey: .redeemableItems)) ?? []
     }
 
     static let `default` = GameRules(
@@ -69,7 +91,19 @@ struct GameRules: Codable {
             CategoryPointRule(category: "Family",      emoji: "👨‍👩‍👧", defaultPoints: 5,  description: "Family activities and errands"),
         ],
         pointsPerDollar: 10,
-        expirationWindowDays: 0
+        expirationWindowDays: 0,
+        redeemableItems: [
+            RedeemableItem(emoji: "🎮", name: "30 min screen time",  points: 50,  category: "Screen time"),
+            RedeemableItem(emoji: "🎮", name: "1 hour gaming",       points: 100, category: "Screen time"),
+            RedeemableItem(emoji: "🍿", name: "Pick the movie",      points: 75,  category: "Family"),
+            RedeemableItem(emoji: "🍕", name: "Pick dinner",         points: 100, category: "Family"),
+            RedeemableItem(emoji: "🌅", name: "Stay up 30 min late", points: 50,  category: "Privileges"),
+            RedeemableItem(emoji: "🛌", name: "Skip a chore",        points: 150, category: "Privileges"),
+            RedeemableItem(emoji: "🍦", name: "Ice cream trip",      points: 200, category: "Treats"),
+            RedeemableItem(emoji: "🛒", name: "Trip to the store",   points: 200, category: "Outings"),
+            RedeemableItem(emoji: "🎢", name: "Arcade day",          points: 500, category: "Outings"),
+            RedeemableItem(emoji: "🎁", name: "Pick a small toy",    points: 250, category: "Treats"),
+        ]
     )
 }
 

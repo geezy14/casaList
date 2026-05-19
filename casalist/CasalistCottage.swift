@@ -1668,6 +1668,8 @@ public enum CasalistCottage {
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var members: FetchedResults<FamilyMember>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var goalsQuery: FetchedResults<FamilyGoal>
         @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var allTodos: FetchedResults<TaskItem>
+        @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \Household.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var households: FetchedResults<Household>
+        @StateObject private var gameRules = GameRulesStore.shared
         public var onHome: (() -> Void)?
         private var dark: Bool { darkOverride ?? (sys == .dark) }
         @AppStorage("paletteName") private var paletteName: String = "vivid"
@@ -1900,10 +1902,237 @@ public enum CasalistCottage {
                 if appLayout == "calm" { calmHero } else { heroCard }
                 podium
                 standings
+                redeemCatalog
                 goals
                 redeemed
                 available
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        // MARK: - Redeem catalog (curated)
+
+        /// Pre-built items kids can tap to propose a goal at a known cost.
+        /// Three UI shapes (driven by `redeemShape` AppStorage):
+        ///   "grid"   — staples-style 2-column emoji tiles (default)
+        ///   "inline" — single-column rows, denser
+        ///   "sheet"  — a "Redeem something" pill that opens a full sheet
+        @AppStorage("redeemShape") private var redeemShape: String = "grid"
+        @State private var showRedeemSheet: Bool = false
+        @State private var pendingRedeemConfirmation: RedeemableItem? = nil
+
+        private var redeemItems: [RedeemableItem] { gameRules.rules.redeemableItems }
+
+        @ViewBuilder
+        private var redeemCatalog: some View {
+            if redeemItems.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("REDEEM 🎁")
+                            .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                            .foregroundStyle(P.textDim)
+                        Spacer()
+                        Picker("", selection: $redeemShape) {
+                            Text("Grid").tag("grid")
+                            Text("List").tag("inline")
+                            Text("Sheet").tag("sheet")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 180)
+                    }
+                    switch redeemShape {
+                    case "inline": redeemInline
+                    case "sheet":  redeemSheetTrigger
+                    default:       redeemGrid
+                    }
+                }
+                .sheet(isPresented: $showRedeemSheet) { redeemFullSheet }
+                .alert(item: $pendingRedeemConfirmation) { item in
+                    Alert(
+                        title: Text("Request \(item.emoji) \(item.name)?"),
+                        message: Text("Sends a request to an admin for \(item.points) pts."),
+                        primaryButton: .default(Text("Request")) {
+                            proposeRedeem(item)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
+            }
+        }
+
+        // Shape 1: Staples-style 2-column emoji grid
+        private var redeemGrid: some View {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ], spacing: 10) {
+                ForEach(redeemItems) { item in
+                    Button { pendingRedeemConfirmation = item } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.emoji).font(.system(size: 32))
+                            Text(item.name)
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .foregroundStyle(P.text)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                            HStack(spacing: 4) {
+                                Text("\(item.points) pts")
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .foregroundStyle(P.lavender)
+                                Spacer(minLength: 0)
+                                Text(item.category)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(P.textMuted)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .frame(minHeight: 110)
+                        .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+                    }.buttonStyle(.row)
+                }
+            }
+        }
+
+        // Shape 2: Dense single-column rows
+        private var redeemInline: some View {
+            VStack(spacing: 6) {
+                ForEach(redeemItems) { item in
+                    Button { pendingRedeemConfirmation = item } label: {
+                        HStack(spacing: 10) {
+                            Text(item.emoji).font(.system(size: 22))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name)
+                                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(P.text)
+                                Text(item.category)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(P.textMuted)
+                            }
+                            Spacer(minLength: 6)
+                            Text("\(item.points) pts")
+                                .font(.system(size: 12, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Capsule().fill(P.lavender))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(P.border, lineWidth: 1))
+                    }.buttonStyle(.row)
+                }
+            }
+        }
+
+        // Shape 3: A pill that opens a full sheet
+        private var redeemSheetTrigger: some View {
+            Button { showRedeemSheet = true } label: {
+                HStack(spacing: 10) {
+                    Text("🎁").font(.system(size: 22))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Redeem something")
+                            .font(.system(size: 14, weight: .heavy, design: .rounded))
+                            .foregroundStyle(P.text)
+                        Text("\(redeemItems.count) items in the catalog")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(P.textMuted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(P.textMuted)
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+            }.buttonStyle(.row)
+        }
+
+        private var redeemFullSheet: some View {
+            NavigationStack {
+                ZStack {
+                    P.bg.ignoresSafeArea()
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Group items by category in the sheet so longer
+                            // catalogs stay scannable.
+                            let groups = Dictionary(grouping: redeemItems) { $0.category }
+                                .sorted { $0.key < $1.key }
+                            ForEach(groups, id: \.key) { (cat, items) in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(cat.uppercased())
+                                        .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                                        .foregroundStyle(P.textDim)
+                                        .padding(.leading, 4)
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible(), spacing: 10),
+                                        GridItem(.flexible(), spacing: 10)
+                                    ], spacing: 10) {
+                                        ForEach(items) { item in
+                                            Button {
+                                                showRedeemSheet = false
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                    pendingRedeemConfirmation = item
+                                                }
+                                            } label: {
+                                                VStack(alignment: .leading, spacing: 6) {
+                                                    Text(item.emoji).font(.system(size: 30))
+                                                    Text(item.name)
+                                                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                                        .foregroundStyle(P.text)
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
+                                                    Text("\(item.points) pts")
+                                                        .font(.system(size: 11, weight: .heavy))
+                                                        .foregroundStyle(P.lavender)
+                                                }
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(14)
+                                                .frame(minHeight: 110)
+                                                .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
+                                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(P.border, lineWidth: 1.5))
+                                            }.buttonStyle(.row)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(20)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .foregroundStyle(P.text)
+                .navigationTitle("Redeem")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showRedeemSheet = false }
+                    }
+                }
+            }
+        }
+
+        /// Creates a pending FamilyGoal proposal for the tapped item. Admin
+        /// inbox surfaces it. Approval flow + points deduction stays in
+        /// the existing GoalApproval machinery — this just generates the
+        /// request with a known label + price.
+        private func proposeRedeem(_ item: RedeemableItem) {
+            let myName = (FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.name ?? userName)
+                .trimmingCharacters(in: .whitespaces)
+            let g = FamilyGoal(
+                context: modelContext,
+                ownerName: GoalApproval.makePendingOwnerName(myName.isEmpty ? userName : myName),
+                label: "\(item.emoji) \(item.name)",
+                targetPoints: item.points
+            )
+            if let h = households.preferredTarget {
+                modelContext.assign(g, toStoreOf: h)
+                g.household = h
+            }
+            try? modelContext.save()
         }
 
         /// Calm layout: roomy text header, no big stat card.
