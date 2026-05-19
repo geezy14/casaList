@@ -1,0 +1,33 @@
+Casalist 3.0 (build 4)
+
+What's new
+- Universal search. Tap the magnifying-glass on the Dashboard
+  top bar to search across tasks, reminders, schedule events,
+  family members, and goals. Tap a family member's row to filter
+  everything to their stuff.
+- Chore expiration. Settings -> Game Rules -> "Expires after"
+  sets a household-wide window (Off / 1 / 3 / 7 / 14 days). Late
+  chores can still be checked off, but award 0 points with a red
+  EXPIRED badge. Recurring chores never expire.
+- Recurring schedule events fixed. A "weekly Mon/Wed/Fri" event
+  now shows on every M/W/F in the day strip and event list. The
+  date badge on each card reflects the day you tapped, not the
+  series start.
+- Edit screen clarity. Editing a recurring event now labels
+  fields "Series starts" / "First end" and notes that edits
+  affect every occurrence.
+- Admin chore stats. New CHORE STATS block in the Standings
+  inbox shape shows per-member done/assigned counts + completion
+  percentage.
+
+What to test
+- Search for a kid's name and confirm all their stuff appears.
+- In Settings -> Game Rules, set "Expires after" to 1 day. Make
+  a chore due yesterday, confirm it shows an EXPIRED badge and
+  awards 0 pts on completion.
+- Create a weekly recurring event for Mon/Wed/Fri. Confirm it
+  shows on all three days in the day strip + on Apple Calendar.
+- Standings inbox should show CHORE STATS with each member's
+  completion bar.
+
+Thanks!
