@@ -22,6 +22,11 @@ extension Notification.Name {
     /// diagnostics views, future banners) surface that the change didn't
     /// actually persist instead of failing silently.
     static let casaCoreDataSaveDidFail = Notification.Name("CasaCoreDataSaveDidFail")
+
+    /// Posted once when CloudKit-backed stores fail to load at app launch
+    /// and the stack reloads against `Casalist-Local.sqlite`. Sync is
+    /// effectively off for this session; UI should warn the user.
+    static let casaCoreDataLocalFallbackActivated = Notification.Name("CasaCoreDataLocalFallbackActivated")
 }
 
 final class CasaCoreDataStack: ObservableObject {
@@ -92,6 +97,26 @@ final class CasaCoreDataStack: ObservableObject {
             container.loadPersistentStores { desc, error in
                 if let error { NSLog("Casa Core Data local fallback also failed: \(error)") }
                 else { NSLog("Casa Core Data local fallback loaded") }
+            }
+            // Surface to the UI so we don't silently pretend sync still works.
+            DispatchQueue.main.async { [weak self] in
+                self?.isLocalFallback = true
+                NotificationCenter.default.post(name: .casaCoreDataLocalFallbackActivated, object: self)
+            }
+            // Mirror to share-log.txt so the field log shows the fallback path.
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            let line = "[\(stamp)] Casa: LOCAL-ONLY FALLBACK active (CloudKit stores failed to load)\n"
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+               let data = line.data(using: .utf8) {
+                let url = docs.appendingPathComponent("share-log.txt")
+                if FileManager.default.fileExists(atPath: url.path),
+                   let handle = try? FileHandle(forWritingTo: url) {
+                    handle.seekToEndOfFile()
+                    handle.write(data)
+                    try? handle.close()
+                } else {
+                    try? data.write(to: url)
+                }
             }
         }
 
@@ -211,6 +236,11 @@ final class CasaCoreDataStack: ObservableObject {
     /// (and any future sync-failure banner) so a silent rollback no
     /// longer hides real issues. Published on the main queue.
     @Published var lastSaveError: Error? = nil
+
+    /// True when CloudKit-backed stores failed to load and the app is
+    /// running against the local-only fallback store. Surface this in UI
+    /// so users know changes won't sync to family members.
+    @Published var isLocalFallback: Bool = false
 
     // MARK: Model
 
