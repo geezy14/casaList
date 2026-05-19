@@ -19,19 +19,7 @@ enum CasaEntity {
         }
         let msg = "Casa: missing Core Data entity \"\(name)\" — model out of sync"
         NSLog(msg)
-        // Mirror to share-log.txt so the field-side log captures it.
-        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-           let data = "[\(ISO8601DateFormatter().string(from: Date()))] \(msg)\n".data(using: .utf8) {
-            let url = docs.appendingPathComponent("share-log.txt")
-            if FileManager.default.fileExists(atPath: url.path),
-               let handle = try? FileHandle(forWritingTo: url) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                try? handle.close()
-            } else {
-                try? data.write(to: url)
-            }
-        }
+        CasaShareLog.append(msg)
         preconditionFailure(msg)
     }
 }

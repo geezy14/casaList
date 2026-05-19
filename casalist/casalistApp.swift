@@ -684,6 +684,7 @@ struct CasalistApp: App {
                 .environment(\.managedObjectContext, stack.context)
                 .environmentObject(stack)
                 .modifier(LocalFallbackBannerOverlay())
+                .modifier(SaveErrorBannerOverlay())
                 // Week starts on Saturday in every DatePicker / calendar
                 // grid descendant. See SaturdayFirstCalendar.swift.
                 .environment(\.calendar, .casalist)

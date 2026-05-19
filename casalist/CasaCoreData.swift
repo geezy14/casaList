@@ -103,21 +103,7 @@ final class CasaCoreDataStack: ObservableObject {
                 self?.isLocalFallback = true
                 NotificationCenter.default.post(name: .casaCoreDataLocalFallbackActivated, object: self)
             }
-            // Mirror to share-log.txt so the field log shows the fallback path.
-            let stamp = ISO8601DateFormatter().string(from: Date())
-            let line = "[\(stamp)] Casa: LOCAL-ONLY FALLBACK active (CloudKit stores failed to load)\n"
-            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-               let data = line.data(using: .utf8) {
-                let url = docs.appendingPathComponent("share-log.txt")
-                if FileManager.default.fileExists(atPath: url.path),
-                   let handle = try? FileHandle(forWritingTo: url) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    try? handle.close()
-                } else {
-                    try? data.write(to: url)
-                }
-            }
+            CasaShareLog.append("LOCAL-ONLY FALLBACK active (CloudKit stores failed to load)")
         }
 
         container.viewContext.automaticallyMergesChangesFromParent = true
@@ -172,22 +158,8 @@ final class CasaCoreDataStack: ObservableObject {
                 msg += "\n" + walk(err, depth: 1)
             }
             NSLog("Casa CK: \(msg)")
-            // Mirror to share-log.txt so we can pull it via devicectl.
-            let stamp = ISO8601DateFormatter().string(from: Date())
-            let line = "[\(stamp)] \(msg)\n"
-            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                let url = docs.appendingPathComponent("share-log.txt")
-                if let data = line.data(using: .utf8) {
-                    if FileManager.default.fileExists(atPath: url.path),
-                       let handle = try? FileHandle(forWritingTo: url) {
-                        handle.seekToEndOfFile()
-                        handle.write(data)
-                        try? handle.close()
-                    } else {
-                        try? data.write(to: url)
-                    }
-                }
-            }
+            // Mirror to share-log.txt for devicectl pulls.
+            CasaShareLog.append("CK: \(msg)")
         }
     }
 
@@ -216,6 +188,7 @@ final class CasaCoreDataStack: ObservableObject {
             }
         } catch {
             NSLog("Casa Core Data save error: \(error)")
+            CasaShareLog.append("SAVE FAILED: \(error)")
             ctx.rollback()
             // Surface the failure to anyone observing — settings can show
             // a diagnostic banner, dev tools can list recent errors, etc.
