@@ -665,6 +665,19 @@ struct CasalistApp: App {
     /// during the quiet window and remote devices see the change promptly.
     private let remoteChangePipeline = PassthroughSubject<Void, Never>()
 
+    /// Wire the shared GameRulesStore to the active Household so settings
+    /// (reward tiers, category points, expiration window) sync across
+    /// every device. Safe to call repeatedly — `attach` short-circuits
+    /// when state hasn't changed. Called on first launch and after every
+    /// remote-change debounce.
+    private func attachGameRulesStore() {
+        let req = Household.fetchRequest()
+        guard let households = try? stack.context.fetch(req) else { return }
+        let active = households.first { $0.deletedAtValue == nil }
+        guard active != nil else { return }
+        GameRulesStore.shared.attach(to: active, context: stack.context)
+    }
+
     var body: some Scene {
         WindowGroup {
             CasalistCottage.Root()
@@ -674,6 +687,7 @@ struct CasalistApp: App {
                 .environment(\.calendar, .casalist)
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    attachGameRulesStore()
                     LocationSharingService.shared.resumeIfPreviouslySharing()
                     // Re-register geofences for any active
                     // location-based reminders so monitoring picks up
@@ -721,6 +735,8 @@ struct CasalistApp: App {
                 }
                 .onReceive(remoteChangePipeline.debounce(for: .seconds(2), scheduler: DispatchQueue.main)) { _ in
                     HouseholdProvisioner.reconcile(in: stack.context)
+                    attachGameRulesStore()
+                    GameRulesStore.shared.refreshFromHousehold()
                     CasalistAppDelegate.runDedupePipeline(userName: userName)
                     if notificationsEnabled {
                         Task { @MainActor in

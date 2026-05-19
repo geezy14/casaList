@@ -55,6 +55,15 @@ enum FamilyPoints {
     static func award<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
+        // Expired chores still get checked off but don't pay points.
+        // The completion + completionCount + completedAt update upstream
+        // still runs so What's New / streaks reflect the action.
+        guard !isExpired(t) else {
+            if let ctx = member.managedObjectContext {
+                FamilyProgress.recordCompletion(member: member, context: ctx)
+            }
+            return
+        }
         member.points += t.points
         member.lifetimePoints += t.points
         if let ctx = member.managedObjectContext {
@@ -65,7 +74,31 @@ enum FamilyPoints {
     static func revoke<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
         guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
+        // Mirror award: don't claw back points we never granted.
+        guard !isExpired(t) else { return }
         member.points = max(0, member.points - t.points)
+    }
+
+    /// True if `t` is past the household's expiration window. Recurring
+    /// tasks never expire (each occurrence resets the clock via
+    /// `nextOccurrence`). Configurable household-wide via
+    /// `GameRulesStore.shared.rules.expirationWindowDays`. Set to 0 to
+    /// disable.
+    static func isExpired(_ t: TaskItem) -> Bool {
+        let window = GameRulesStore.shared.rules.expirationWindowDays
+        guard window > 0 else { return false }
+        guard t.effectiveRepeatKind.isEmpty else { return false }
+        let anchor = t.dueDate ?? t.createdAt
+        guard let expiry = Calendar.current.date(byAdding: .day, value: window, to: anchor) else {
+            return false
+        }
+        return Date() > expiry
+    }
+
+    /// Points this task will award if completed right now. Returns 0 for
+    /// expired chores so the UI can show a struck-through value.
+    static func effectivePoints(_ t: TaskItem) -> Int {
+        isExpired(t) ? 0 : Int(t.points)
     }
 
     static func match<S: Sequence>(name: String, in members: S) -> FamilyMember? where S.Element == FamilyMember {

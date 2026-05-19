@@ -150,3 +150,18 @@ public extension Color {
                   opacity: alpha)
     }
 }
+
+/// Tiny red pill rendered next to a chore's points value when the
+/// chore is past its expiration window (see `FamilyPoints.isExpired`).
+/// Signals to the user that completing it won't pay points.
+public struct ExpiredBadge: View {
+    public init() {}
+    public var body: some View {
+        Text("EXPIRED")
+            .font(.system(size: 9, weight: .heavy, design: .rounded))
+            .tracking(0.6)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Capsule().fill(Color.red.opacity(0.7)))
+    }
+}

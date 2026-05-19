@@ -3171,11 +3171,15 @@ extension CasalistCottage {
                         }
                         Spacer(minLength: 4)
                         if t.points > 0 {
+                            let expired = FamilyPoints.isExpired(t)
                             Text("+\(t.points)")
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(Capsule().fill(color))
+                                .strikethrough(expired)
+                                .opacity(expired ? 0.55 : 1)
+                            if expired { ExpiredBadge() }
                         }
                         avatarBlock(for: t)
                     }
@@ -3390,9 +3394,13 @@ extension CasalistCottage {
                     }
                     Spacer(minLength: 6)
                     if t.points > 0 {
+                        let expired = FamilyPoints.isExpired(t)
                         Text("+\(t.points)")
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(color)
+                            .strikethrough(expired)
+                            .opacity(expired ? 0.55 : 1)
+                        if expired { ExpiredBadge() }
                     }
                     avatarBlock(for: t)
                 }
@@ -3720,11 +3728,17 @@ extension CasalistCottage {
                         VStack(alignment: .trailing, spacing: 6) {
                             avatarBlock(for: t)
                             if t.points > 0 {
-                                Text("+\(t.points)")
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Capsule().fill(color))
+                                let expired = FamilyPoints.isExpired(t)
+                                HStack(spacing: 4) {
+                                    Text("+\(t.points)")
+                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Capsule().fill(color))
+                                        .strikethrough(expired)
+                                        .opacity(expired ? 0.55 : 1)
+                                    if expired { ExpiredBadge() }
+                                }
                             }
                         }
                     }
@@ -4282,11 +4296,17 @@ extension CasalistCottage {
                     VStack(alignment: .trailing, spacing: 6) {
                         avatarBlock(for: t)
                         if t.points > 0 {
-                            Text("+\(t.points)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(color)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Capsule().fill(color.opacity(0.15)))
+                            let expired = FamilyPoints.isExpired(t)
+                            HStack(spacing: 4) {
+                                Text("+\(t.points)")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundStyle(color)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Capsule().fill(color.opacity(0.15)))
+                                    .strikethrough(expired)
+                                    .opacity(expired ? 0.55 : 1)
+                                if expired { ExpiredBadge() }
+                            }
                         }
                     }
                 }

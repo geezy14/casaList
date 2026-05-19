@@ -120,6 +120,14 @@ struct GameRulesView: View {
                 catRows()
             }
 
+            // Chore expiration window
+            Section(header: Label("CHORE EXPIRATION", systemImage: "hourglass"),
+                    footer: Text(isAdmin
+                                 ? "Chores not finished within this window can still be checked off, but won't award points. Recurring chores never expire — each occurrence has its own clock."
+                                 : "How long you have to finish a chore before it stops paying points.")) {
+                expirationRow
+            }
+
             if isAdmin {
                 Section {
                     Button(role: .destructive) { store.reset() } label: {
@@ -127,6 +135,42 @@ struct GameRulesView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Expiration Row
+
+    /// Admin-editable picker that controls how many days after the
+    /// due date (or createdAt, when there's no due date) a chore stops
+    /// awarding points. Stored on the household via `GameRulesStore`
+    /// so it syncs across devices.
+    @ViewBuilder
+    private var expirationRow: some View {
+        if isAdmin {
+            Picker(selection: $store.rules.expirationWindowDays) {
+                Text("Off").tag(0)
+                Text("1 day").tag(1)
+                Text("3 days").tag(3)
+                Text("7 days").tag(7)
+                Text("14 days").tag(14)
+            } label: {
+                Label("Expires after", systemImage: "hourglass")
+            }
+        } else {
+            HStack {
+                Label("Expires after", systemImage: "hourglass")
+                Spacer()
+                Text(expirationLabel(store.rules.expirationWindowDays))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func expirationLabel(_ days: Int) -> String {
+        switch days {
+        case 0:    return "Off"
+        case 1:    return "1 day"
+        default:   return "\(days) days"
         }
     }
 
