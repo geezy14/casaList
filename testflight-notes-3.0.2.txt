@@ -1,0 +1,21 @@
+Casalist 3.0 (build 2)
+
+What's new
+- Pick your layout. Settings -> Appearance -> Layout now has four:
+  Classic, Rings, Calm, Kanban. Switch any time.
+- Pulsing profile chip on the Dashboard taps into your chore card.
+- "Announce to household" toggle on calendar events. Pick a kid
+  as the attendee, still ping the whole family.
+- "Weekdays only" repeat option for Schedule events.
+- Loose reminders (no specific person, no admin group) live in
+  the Reminders tab only -- they no longer crowd anyone's To-Do.
+
+What to test
+- Settings -> Appearance -> Layout. Cycle through all four.
+- Create a Schedule event, pick a kid, toggle "Announce to
+  household" -- confirm everyone gets the push.
+- Schedule a recurring event with "Weekdays only" -- shouldn't
+  fire Saturday or Sunday.
+- Cross-device sync should still be instant on every layout.
+
+Thanks!
