@@ -148,10 +148,34 @@ struct GameRules: Codable {
 struct HouseholdRulesEnvelope: Codable {
     var routines: [ChoreRoutineTemplate]
     var rules: GameRules
+    /// Economy version stamped into the synced envelope. Bumped whenever
+    /// the built-in reward economy changes so `GameRulesStore.attach`
+    /// can run a one-time rescale on existing households. Legacy
+    /// envelopes (no field) decode as 0 and get migrated up.
+    var rulesVersion: Int = 0
+
+    /// Current economy version. v1 = the 15-pt-chore / 5-pts-per-$
+    /// rescale (Legend at 1,300).
+    static let economyVersion = 1
+
+    init(routines: [ChoreRoutineTemplate], rules: GameRules, rulesVersion: Int = 0) {
+        self.routines = routines
+        self.rules = rules
+        self.rulesVersion = rulesVersion
+    }
+
+    private enum CodingKeys: String, CodingKey { case routines, rules, rulesVersion }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.routines = (try? c.decode([ChoreRoutineTemplate].self, forKey: .routines)) ?? []
+        self.rules = (try? c.decode(GameRules.self, forKey: .rules)) ?? .default
+        self.rulesVersion = (try? c.decode(Int.self, forKey: .rulesVersion)) ?? 0
+    }
 
     static let `default` = HouseholdRulesEnvelope(
         routines: [],
-        rules: .default
+        rules: .default,
+        rulesVersion: economyVersion
     )
 
     /// Decode either the new wrapper object OR the legacy bare array.
@@ -175,6 +199,37 @@ struct HouseholdRulesEnvelope: Codable {
         guard let data = try? JSONEncoder().encode(self),
               let s = String(data: data, encoding: .utf8) else { return "" }
         return s
+    }
+
+    /// One-time rescale of an existing household's rules to the current
+    /// economy: 5 pts per $1, reward tiers priced from their dollar value
+    /// (or halved if none), redeem catalog halved, category points capped
+    /// at 15. Preserves custom items/tiers — just rebalances the numbers.
+    /// Deterministic, so two devices migrating the same v0 data land on
+    /// the same result.
+    static func rescaledToCurrentEconomy(_ rules: GameRules) -> GameRules {
+        var r = rules
+        r.pointsPerDollar = 5
+        r.rewardTiers = r.rewardTiers.map { tier in
+            var t = tier
+            if let dollars = t.dollarValue, dollars > 0 {
+                t.minPoints = Int((dollars * 5).rounded())
+            } else {
+                t.minPoints = max(5, Int((Double(t.minPoints) / 2).rounded()))
+            }
+            return t
+        }
+        r.redeemableItems = r.redeemableItems.map { item in
+            var i = item
+            i.points = max(5, Int((Double(i.points) / 2).rounded()))
+            return i
+        }
+        r.categoryRules = r.categoryRules.map { rule in
+            var c = rule
+            if c.defaultPoints > 15 { c.defaultPoints = 15 }
+            return c
+        }
+        return r
     }
 }
 
@@ -230,16 +285,30 @@ final class GameRulesStore: ObservableObject {
         self.household = household
         self.context = context
         guard let h = household else { return }
-        let env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        var env = HouseholdRulesEnvelope.decode(h.routinesJSON)
         // If the household has no rules saved yet AND we still have a
         // UserDefaults legacy blob, push the legacy blob up to the
         // household so it syncs to the rest of the family.
         let isLegacyDefault = h.routinesJSON.isEmpty
         if isLegacyDefault {
-            let migrated = HouseholdRulesEnvelope(routines: env.routines, rules: rules)
+            let migrated = HouseholdRulesEnvelope(
+                routines: env.routines, rules: rules,
+                rulesVersion: HouseholdRulesEnvelope.economyVersion)
             h.routinesJSON = migrated.encodedJSON()
             try? context?.save()
+            suppressSave = true
+            rules = migrated.rules
+            suppressSave = false
         } else {
+            // One-time economy migration: rescale existing households to the
+            // current reward economy, then stamp the version so it never
+            // runs again (and other devices skip once it syncs).
+            if env.rulesVersion < HouseholdRulesEnvelope.economyVersion {
+                env.rules = HouseholdRulesEnvelope.rescaledToCurrentEconomy(env.rules)
+                env.rulesVersion = HouseholdRulesEnvelope.economyVersion
+                h.routinesJSON = env.encodedJSON()
+                try? context?.save()
+            }
             suppressSave = true
             rules = env.rules
             suppressSave = false
