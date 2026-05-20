@@ -5,17 +5,21 @@ import SwiftUI
 /// Aligned with the app's point economy:
 ///   quick task = 5 pts, normal = 10 pts, hard = 15 pts
 ///   small reward ≈ 150-300 pts, medium ≈ 500-800 pts, large ≈ 1000-2000 pts
+// Gentle early, steep late: levels fly by at the start (Lvl 2 after one
+// 25-pt chore) so kids get instant momentum, then the gaps widen so
+// Legend stays earned. Capped at 1,300 so the top number doesn't feel
+// out of reach to a young kid.
 private let levelThresholds: [Int] = [
     0,     // Lvl 1 — Rookie
-    100,   // Lvl 2 — Learner
-    250,   // Lvl 3 — Helper
-    450,   // Lvl 4 — Doer
-    700,   // Lvl 5 — Go-Getter
-    1000,  // Lvl 6 — Achiever
-    1350,  // Lvl 7 — Pro
-    1750,  // Lvl 8 — Expert
-    2200,  // Lvl 9 — Master
-    2700,  // Lvl 10 — Legend
+    25,    // Lvl 2 — Broom Pilot
+    60,    // Lvl 3 — Mop Jockey
+    110,   // Lvl 4 — Chore Warrior
+    180,   // Lvl 5 — Task Slayer
+    280,   // Lvl 6 — Achiever
+    420,   // Lvl 7 — Pro
+    620,   // Lvl 8 — Expert
+    940,   // Lvl 9 — Master
+    1300,  // Lvl 10 — Legend
 ]
 
 private let levelLabels: [String] = [
