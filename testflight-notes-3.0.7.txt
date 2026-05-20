@@ -1,0 +1,29 @@
+Casalist 3.0 (build 7)
+
+Bug fixes + a small feature.
+
+What's fixed
+- Recurring quests now clear. When a repeating chore is checked
+  off, it drops out of ACTIVE QUESTS until its next occurrence is
+  due, instead of lingering forever. Works no matter who marks it.
+- Repeats reads cleanly. A custom cadence now shows "Every
+  weekday" (etc.) in a task's detail instead of a raw code blob.
+
+What's new
+- Add a link to a reward request. When you ask for a reward, you
+  can paste a web link to the item so a parent sees exactly what
+  it is. Admins can also attach a link to any item in the
+  Redeemable Items catalog, and it rides along when a kid requests
+  it. Reviewers get a tappable "View item" button.
+
+What to test
+- Mark a recurring chore done. Confirm it leaves ACTIVE QUESTS and
+  comes back when it's next due (next day for a daily, etc.).
+- Open a task with a custom repeat and check the Repeats row reads
+  in plain English.
+- Ask for a reward with a pasted link, then approve it as an admin
+  and tap "View item".
+- Settings -> Game Rules -> Redeemable Items: add a link to an
+  item, request it, confirm the link shows for the approver.
+
+Thanks!
