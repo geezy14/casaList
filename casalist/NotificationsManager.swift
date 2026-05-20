@@ -992,6 +992,27 @@ enum NotificationsManager {
         for event in bestByKey.values {
             await scheduleEvent(for: event)
         }
+
+        // Orphan cleanup — cancel any pending event-* notification whose
+        // event no longer exists (deleted, renamed into a new row, or a
+        // stale repeating trigger left from a past schedule). Without this
+        // a recurring push keeps firing forever even after its event is
+        // gone — e.g. a "school out" notification still arriving when only
+        // an "early out" event remains.
+        let liveUids = Set(events.map { $0.uid.uuidString })
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let orphanIds = pending.map(\.identifier).filter { id in
+            guard id.hasPrefix(eventIdPrefix) else { return false }
+            // id is "event-<uuid>" or "event-<uuid>-wd<N>"; UUIDs never
+            // contain "-wd", so splitting on it isolates the uuid.
+            let rest = String(id.dropFirst(eventIdPrefix.count))
+            let uid = rest.components(separatedBy: "-wd").first ?? rest
+            return !liveUids.contains(uid)
+        }
+        if !orphanIds.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: orphanIds)
+        }
     }
 
     // MARK: – Quiet hours
