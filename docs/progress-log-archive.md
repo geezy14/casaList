@@ -8,6 +8,47 @@ When `CLAUDE.md`'s Progress Log hits 6 entries, move the oldest paragraph from t
 
 ---
 
+### 2026-05-16 — 1.6 + 1.7 + 1.8 all shipped to TF in one day
+Marathon all-day session: three TestFlight builds in one day plus the
+Production CloudKit schema deploy that unblocked them, the dual-bundle
+(Casalist + Casalist Dev) workflow, and the Today's Reminders widget +
+Status Ping Live Activities. Highlights: **1.8** (UUID
+`608db227-…`) — Today's Reminders widget, Status Ping Live Activities,
+native UIColorPicker, Saturday week start; fixed wrong App Group in
+entitlements + missing Debug `CODE_SIGN_ENTITLEMENTS` on the widget
+extension. **1.7** (UUID `fadda394-…`) — Apple Reminders link, unified
+Repeat picker (`.year` added), lock-screen snooze/mark-done
+(`REMINDER_FIRE` category + `ReminderActionHandler`), per-member
+reminders, location-based reminders (`CLCircularRegion`), saved
+locations, icon-strip add-reminder sheet, photo attachments, history
+feed, templates, color tags, drag-reorder, streak heatmap, daily recap,
+per-reminder sound. **1.6** — location quartet on FamilyMember.
+Production schema deploy promoted 1.6's FamilyMember location quartet +
+1.7's TaskItem location quintet in one Dashboard pass. Gotchas logged:
+Apple `whatsNew` rejects emojis (409 INVALID_TEXT) and caps ~4000 chars
+(409 TOO_LONG) — keep notes ASCII + short. (Full detail in git history
+of CLAUDE.md.)
+
+### 2026-05-16 — Post-1.5 feature stack staged for next TF (no schema deploy needed)
+Long all-night session after 1.5 shipped. Everything below is in
+local commits on `main` ready to ship; no TF push yet, per Geezy's
+"I'll tell you when" rule. **No schema changes in this batch** so
+the next TF can go out without another CloudKit deploy. Highlights:
+notifications suite A–D (daily briefing, quiet hours, grocery
+activity push, recurring event push, status pings), custom repeat
+picker (`RepeatRule` JSON in `repeatKind`), task-detail polish
+(claim pill + confetti overlay rebuild), live location sharing
+(Option A, `kCLLocationAccuracyBest` + 10m filter, new FamilyMember
+location quartet schema), manual location ping (Option C, built then
+hidden), Apple Calendar link (`CalendarLinkService` mirror + display,
+one-way by design), Family tab overhaul (inline quick-add, agenda
+tiles, outings via parentUid, claim/canDelete rules), announcements
+banner with expiry, and side-quest crash fixes (`CloudBackup.snapshot`
+on a background context, auto-rejoin URL only cleared on permanent
+CloudKit errors, Nuke-all also clears userName/householdName).
+Schema deploy needed before that TF: the FamilyMember location
+fields. (Full detail preserved in git history of CLAUDE.md.)
+
 ### 2026-05-15 — TestFlight 1.5: identity rebuild on CKUserID + crash trio fixed
 Long debug session. Started chasing a duplicate "Dakoda" record on the
 joiner side that wouldn't dedupe; ended up rebuilding the identity

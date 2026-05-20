@@ -29,6 +29,159 @@ Full protocol: `~/.claude/projects/-Users-geezy/memory/claude_replicants.md`.
 > "testflight it" section below for the full rule. **Do not bump
 > `MARKETING_VERSION` without Geezy asking.**
 
+### 2026-05-20 — TF 3.0 (7) (8) (9): tier rework, level/economy rebalance, recurring + notification fixes
+
+Long bug-fix + game-design day. Three TFs shipped, all on `main`,
+**all local/display/logic — zero schema change, no CloudKit deploy**.
+Devices kept in sync via direct `devicectl` dev-build pushes to Air +
+iPhone 15 throughout (dev bundle `com.gbrown10.casalist.dev`).
+
+**TF 3.0 (7)** (UUID `593a6f1d`) — recurring quests clear from ACTIVE
+QUESTS after completion; Repeats row humanized (was raw
+`Custom:{...}` JSON → now "Every weekday" via `RepeatRule.label`);
+item URLs on reward requests (both free-form `AddGoalView` + curated
+catalog), packed into the existing `FamilyGoal.note` via `GoalLink`
+(no schema) + `RedeemableItem.url` in the routinesJSON envelope.
+
+**TF 3.0 (8)** (UUID `e2a803b8`) — no-due-date recurring quests now
+clear (completedAt + cadence fallback); repeat-picker instant-close
+fixed (sheet was on a Section inside a conditionally-rendered form /
+3 stacked `.sheet` mods → moved to top-level + separate `Color.clear`
+hosts); custom/weekday recurrence now advances on completion
+(`FamilyPoints.nextOccurrence` routed through new
+`RepeatRule.nextDate(after:)` — legacy switch only knew daily/weekly,
+custom:{} + "weekdays" fell through to default and never rolled);
+haptics one-per-completion (was 3 per check-off → tripped iOS's
+system haptic throttle, which survives force-quit; collapsed to the
+single celebration-overlay haptic).
+
+**TF 3.0 (9)** (UUID `c7b685a2`) — the big game-design rework:
+- **Tiers: 5 medal tiers → 3 non-medal tiers** 🌱 Sprout (Lv 1-3) ·
+  🔥 Ember (Lv 4-7) · 💎 Diamond (Lv 8-10). Medals (🥉🥈🥇) collided
+  with leaderboard placement; now reserved for rank only.
+- **Avatar tier matches level**: leaderboard avatars pass an explicit
+  `overrideLevel` computed beside the rank label so the ring/emblem
+  can't diverge (was showing Bronze for a Level-6 "Achiever").
+- **Level curve rebalanced** gentle-early/steep-late, **Legend
+  2,700 → 1,300** (`[0,25,60,110,180,280,420,620,940,1300]`) so the
+  top number feels reachable to a kid.
+- **Reward economy rescaled** to 15-pt base chore: `pointsPerDollar`
+  10 → **5** ($70 = 350 pts ≈ 24 chores @15), tiers 50/150/375,
+  redeem catalog ~halved, category points capped at 15.
+- **One-time household migration**: `HouseholdRulesEnvelope` gained
+  `rulesVersion` (JSON in existing routinesJSON, **not a CD attr**);
+  on attach, if version < current it rescales rules in place
+  (preserves custom items) and stamps the version — runs once per
+  household, deterministic so concurrent devices converge. **This is
+  how prod households pick up the new economy: automatic on first
+  launch of (9).**
+- **Orphan event-notification cleanup**: `syncEventsFromContext` now
+  cancels pending `event-*` pushes whose uid is no longer a live
+  event — fixes a deleted/renamed event ("school out") still firing
+  when only "early out" remains. Earlier `cc85d20` dedupe only
+  caught dupes with identical title+time; diverged ones slipped.
+- Personal Card **share sheet** fixed (2 stacked `.sheet` mods → own
+  host); `docs/HOW-CASALIST-WORKS.md` added (points/levels/tiers/
+  streaks/badges/economy overview).
+
+**Earlier this session**: shipped TF 3.0 (5)+(6), 6/10 refactor-review
+areas, and pointed **geezyg.com apex → Vercel** (disabled Cloudflare
+Parking Page, `A @ 76.76.21.21` DNS-only via Chrome MCP; OG card meta
+repointed subdomain→apex). See the prior entry.
+
+**Dos/donts going in**:
+- **DO** post TF notes immediately after upload — poll the build every
+  ~30s until visible, don't pre-schedule a 15-min wakeup (Geezy's call).
+- **DO** keep `MARKETING_VERSION = 3`, integer build bumps only.
+- **DON'T** assume avatar tier == placement. Tier = level (lifetime
+  pts); placement = leaderboard rank. They use different visuals now.
+- **DON'T** reach for a Core Data schema change when JSON-in-an-
+  existing-field works (GoalLink in `note`, rules+rulesVersion in
+  `routinesJSON`) — keeps TFs deploy-free.
+- Recurring chore "didn't clear" is almost always one of: never sets
+  `isCompleted` (by design — filter on dueDate/cadence), or
+  `nextOccurrence` didn't know the cadence. Stale push = orphan, swept
+  on launch now.
+
+### 2026-05-19 (PM) — TF 3.0 (5) + (6) shipped, refactor cluster, calendar-event dupe fix, geezyg.com apex live
+
+Continuation day. Shipped two more TFs, landed 6 of 10 refactor-review
+areas, fixed a real Production bug, and pointed the marketing site's
+apex domain at Vercel.
+
+**TFs shipped**:
+- **TF 3.0 (5)** (commit `c4a2f74`) — notification id migration
+  (timestamp → uid-based, with legacy-id cleanup sweep), `sync(tasks:)`
+  now honors `shouldDeviceScheduleReminder` (was only in `scheduleNow`),
+  `CasaCoreDataStack.lastSaveError` published. **Added to the sync
+  baseline list** in `casalist_sync_baseline_rule.md`.
+- **TF 3.0 (6)** (commit `755d654`) — bug-fix build. Build 5 → 6,
+  marketing stays 3 (Geezy chose "version 3 build 6" after I flagged
+  that dotted build numbers like `5.0.1` get parsed weirdly by ASC).
+  Delivery UUID `ade877ac-d351-4a62-accf-50f0a56a1a92`, notes posted.
+
+**Refactor-review work** (from `docs/CLAUDE_REFACTOR_REVIEW.md`, all
+on main, NO sync-surface changes):
+- Areas 4/5/9/10 (`e51e8b3`), Area 3 local-fallback banner (`7cc503f`),
+  Area 1 `CasaEntity.resolve` entity-lookup safety (`35f76d4`),
+  stability round = `CasaShareLog` helper + `SaveErrorBanner` + docs
+  (`bb759bc`). **Areas 2, 6, 7, 8 are PAUSED per Geezy** — see
+  dos/donts below. `docs/refactor-status-2026-05-19.md` has the full
+  ledger + a TF verification checklist.
+
+**Calendar-event dupe fix** (`cc85d20`) — Geezy got TWO pushes for one
+event. First theory (Apple Calendar mirror + Casalist both firing) was
+WRONG — his screenshot showed both pushes had Casalist's 📣 prefix,
+zero from Apple Calendar. Real cause: two distinct `FamilyEvent` rows
+(different uids → different `event-<uid>` ids → both fire). Fix:
+`syncEventsFromContext` dedupes by `(title|startDate|household)` and
+schedules only the survivor (lowest uid string), cancelling loser
+pushes; `AddEventView.save()` got an `isSaving` re-entry guard.
+Reverted the wrong Apple-Cal suppression from `6726122`. NOTE:
+`FamilyEvent` is still NOT in `FamilyDedupe`'s scope — proper row-level
+dedupe is a future job needing TF Release proof.
+
+**geezyg.com apex → Vercel** (marketing site, repo
+`/Users/geezy/Documents/casalist-web`, Vercel project `casalist-web`,
+`prj_s2t4Eyy7MOkFKBy90XNGGc5rXuti`). Repointed OG-card meta tags from
+`casalist.geezyg.com` → `https://geezyg.com`, redeployed via `vercel
+deploy --prod`, attached apex to the project via `vercel domains add`.
+DNS done in Cloudflare via Chrome MCP: **disabled the Cloudflare
+Parking Page** (Registrations → geezyg.com → Settings) because the
+apex CNAME was auto-managed and couldn't be edited in place, then
+added `A @ 76.76.21.21` DNS-only (gray cloud). Gotcha: editing a
+parking-page-managed record in the DNS table fails with "generated by
+Cloudflare… modify in Registrar configuration" — you MUST disable the
+parking page first. All other records (MX, SPF, apple-domain,
+_atproto, _vercel, casalist, casabills) left untouched.
+
+**Current rules / dos & donts going in next time**:
+- **DO** keep `MARKETING_VERSION = 3`; only bump `CURRENT_PROJECT_VERSION`.
+  Use clean integer build numbers (6, 7, 8…) — dotted (`5.0.1`) gets
+  mis-parsed by App Store Connect.
+- **DO** run `bash scripts/cloudkit-schema-diff.sh` before every TF;
+  it's also enforced as a Release build-phase gate.
+- **DO** get explicit per-action authorization before live production
+  changes (TF upload, DNS edits, prod deploy) — the auto classifier
+  blocks them otherwise, and rightly so.
+- **DON'T** ship TF without Geezy saying "ship it" / "push to TF" /
+  equivalent. A version number choice is NOT a ship order.
+- **DON'T** touch the four paused refactor areas without Geezy
+  unblocking + TF Release proof: **Area 2** (startup `.task`
+  ordering), **Area 6** (`NotificationsManager.swift` split),
+  **Area 7** (`CasaCoreData.swift` split), **Area 8**
+  (`CasalistCottage.swift` split, 9.3k lines).
+- **DON'T** touch the sync baseline surface (`runDedupePipeline`,
+  remote-change debounce, Core Data bg-context behavior, CloudKit
+  store setup, schema gate) without TF Release proof on Air +
+  iPhone 15. Debug/sim sync don't count. TF 2.2(5)/2.5/3.0(2)/3.0(5)
+  are the known-good baselines.
+- **DON'T** touch the `profar` branch / `geezy14/profar` repo — Codex
+  owns it; only acknowledge Profar if Geezy raises it first.
+- **DON'T** add `@NSManaged`/`attr(...)` (a schema change) and ship
+  without deploying Dev → Prod via the CloudKit Dashboard, or sync
+  silently breaks + poisons CKMirroredData (needs delete+reinstall).
+
 ### 2026-05-19 — TF 3.0 (3) + (4) shipped: weekly-recurrence fix, search, chore expiration, redeem catalog, Profar moves out
 
 Long day. Two TFs shipped, several feature surfaces opened up, and
@@ -246,346 +399,7 @@ bg-context "fix") and `18db2c4` (the revert that fixed Prod).
 The schema-gate commit `c06731e` is the load-bearing safety
 net going forward.
 
-### 2026-05-16 — 1.6 + 1.7 + 1.8 all shipped to TF in one day
-Marathon all-day session. Shipped THREE TestFlight builds in one day
-(1.6 mid-session, 1.7 mid-session, 1.8 end-of-session) plus the
-Production CloudKit schema deploy that unblocks them, set up the
-dual-bundle (Casalist + Casalist Dev) dev workflow, and shipped the
-Today's Reminders home-screen widget + Status Ping Live Activities.
-
-**1.8 shipped to TestFlight** at end of session. Delivery UUID
-`608db227-f25d-48cc-900a-f1e39eb8bdc4`, 5.4 MB transferred. Build
-state VALID, en-US notes posted cleanly (localization id
-`c026a761-32fc-4357-b262-30942da282a2`). Headline features:
-Today's Reminders widget (small/medium/large) with coral hero
-gradient + faded SF Symbol + rounded count, Status Ping Live
-Activities on Lock Screen + Dynamic Island, native
-UIColorPickerViewController (Grid/Spectrum/Sliders+Hex) wrapped
-for ReminderColorTag, When/Location/Stop-time chips auto-show
-controls (no more "schedule an alert" toggle), week starts on
-Saturday. Two diagnostic root-causes resolved during widget build:
-(1) `casalist.entitlements` had wrong App Group
-(`group.com.gbrown10.casabills2` from Xcode autocomplete) — fixed
-to `group.com.gbrown10.casalist`; (2) widget extension's Debug
-config had no `CODE_SIGN_ENTITLEMENTS` line, only Release — added
-to pbxproj. Notes kept short per new convention (2309 chars, pure
-ASCII, headline features only).
-
-**1.7 shipped to TestFlight** at end of session. Bumped
-CURRENT_PROJECT_VERSION 1.6 → 1.7 → 1.8 (1.8 already set for the
-next iteration). Archive + export + altool upload all clean
-(Delivery UUID `fadda394-07ba-4774-ab32-2c4dc6428080`). Notes PATCH
-hit a 409 — second time today — but this time
-`ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG` (Apple caps `whatsNew`
-at ~4000 chars; my draft was 4673). Trimmed to 3114 chars and the
-PATCH cleared. Both gotchas now documented in CLAUDE.md (emojis and
-length cap). `staged-1.7` branch refreshed to current main as a
-safety net.
-
-**1.6 shipped to TestFlight** at the end of the session. Bumped
-CURRENT_PROJECT_VERSION 1.5 → 1.6 on a temporary rollback of `main`
-to commit `72ab91e` (the pre-1.7 cutoff), archived Release config,
-exported the IPA with the App Store Connect API key auth flags, and
-uploaded via altool (Delivery UUID
-`3a6de1ac-7fc3-4aa7-beea-a9200f148e2b`, 4.7 MB transferred). The
-build was still processing on App Store Connect at the end of the
-session — `set_testflight_notes.py 1.6` returned 409 on the first
-attempt. A ScheduleWakeup is set for ~15 min after upload to retry
-the notes upload once processing settles. **After the upload, main
-was restored to `acbabda` (the 1.7 commit) and pbxproj bumped to
-`CURRENT_PROJECT_VERSION=1.7` in commit `80422ce`.** Branch
-`staged-1.7` was created at `acbabda` as a backup safety net before
-the rollback.
-
-**Production CloudKit schema deploy** done via Chrome MCP →
-icloud.developer.apple.com Dashboard. Both 1.6's FamilyMember
-location quartet (latitude / longitude / locationUpdatedAt /
-isSharingLocation) AND 1.7's TaskItem location quintet (locationLat
-/ locationLng / locationRadius / locationOnArrive / locationName)
-promoted in one deploy — confirmed by `Confirm Deployment` dialog
-("Modify 4 fields on CD_FamilyMember type" + "Modify 5 fields on
-CD_TaskItem type" + 8 new indexes on FamilyMember + 11 on TaskItem)
-and post-deploy `scripts/cloudkit-schema-diff.sh` reports identical
-Production and Development. **1.7 needs no additional schema deploy
-when it ships.**
-
-**1.7 stack on `main` (commit `acbabda`)**, ready for the next TF
-when Geezy gives the word:
-
-**Apple Reminders link** — mirror of the Apple Calendar feature from
-1.6. `ReminderLinkService.swift` (EKEventStore for `.reminder` entity),
-`ReminderSettingsSection.swift` (picker with inline list of available
-Reminders lists — original Menu-style Picker was hidden behind a tap
-so we switched to inline rows). Settings → REMINDERS now picks an
-Apple Reminders list. Saves a `taskUid → calendarItemIdentifier`
-mapping in UserDefaults. Casalist reminders push as EKReminders into
-the chosen list; that list's non-Casalist items show up in a "FROM
-YOUR APPLE REMINDERS 🔔" section in the Reminders view (notes prefix
-"Casalist:" filters our own mirrors back out). Info.plist:
-NSRemindersFullAccessUsageDescription + NSRemindersUsageDescription.
-
-**Unified Repeat picker** — old "How often" Menu + separate "Custom…"
-button combo collapsed into one entry point. `CustomRepeatPicker` now
-opens a sheet with: Don't repeat toggle, quick-pick chips
-(Hourly / Every 2h-12h / Daily / Weekly / Monthly / Yearly), and the
-full interval × unit × weekday builder under that. Save form maps
-back to the legacy preset string when shape matches (preserves all
-the `repeatKind == "hourly"` filters), otherwise stores
-`custom:{...}` JSON. `.year` added as a new `RepeatRule.Unit` with
-NotificationsManager scheduler cases for both reminders and events.
-
-**Snooze + Mark done from the lock screen** — new
-`UNNotificationCategory("REMINDER_FIRE")` registered at app launch
-with four actions: Mark done, Snooze 15 min, Snooze 1 hour, Snooze
-until tomorrow (8 AM). Reminder pushes stamp the category +
-`userInfo["taskUid"]`. `ReminderActionHandler.swift` routes the
-action: mark-done reuses `FamilyPoints.toggle` for recurring-advance,
-snooze schedules a single `UNTimeIntervalNotificationTrigger`
-(identifier stable per-task so successive snoozes replace not stack).
-
-**Per-family-member reminders** — AddReminderView "Notify" panel
-picks an assignee. NotificationsManager.scheduleNow now bails out
-(and proactively cancels stale pending notifications) when the
-reminder has an assignee that isn't the device's `userName`.
-
-**Location-based reminders** — `LocationReminderService.swift`
-registers a `CLCircularRegion` per reminder with `locationRadius > 0`,
-capped at iOS's 20-region-per-app limit. Region-enter / region-exit
-delegate fires a local notification respecting the user's "Arriving"
-vs "Leaving" choice. Resyncs on app launch + after every save.
-Schema delta (5 new `TaskItem` attrs: locationLat, locationLng,
-locationRadius, locationOnArrive, locationName) — bundle with the
-1.6 schema deploy when the time comes.
-
-**Saved locations (Home / Work / School)** —
-`SavedLocationsStore.swift` + Settings → SAVED LOCATIONS section.
-Define labeled places once, then chips appear above "Pick a place"
-in the location panel.
-
-**Add-reminder sheet rebuilt around Apple Reminders' icon-strip
-pattern** — title field, horizontal row of chip buttons (when /
-repeats / notify / location / photo / tag / sound + optional stop
-time), and each chip's panel expands inline below. Multi-expand via
-`Set<Chip>` so multiple panels can be open at once. **Edit mode
-auto-expands every populated panel** so the user sees everything at
-a glance without hunting. Mini-map renders inside the Location panel
-when a place is picked, with a translucent radius circle (sized in
-US units — slider goes 100 ft → 1 mi, stored as meters internally
-because `CLCircularRegion` needs meters).
-
-**Photo attachments** — camera chip + panel.
-`ReminderPhotoStore.swift` writes JPGs (max 1600×1600 px, 0.85
-quality) to `<Documents>/reminder-photos/{uid}.jpg`. Device-local
-only — photos do NOT sync via CloudKit. Pinned reminder cards in the
-cottage now show a 70 pt thumbnail under the title.
-
-**Reminder history feed** — `ReminderHistory.swift` (JSON log capped
-at 500 entries, on disk at `<Documents>/reminder-history.json`).
-Records foreground-fire (via `willPresent`), mark-done, and snooze
-events. `ReminderHistoryView.swift` renders sectioned Today /
-Yesterday / This Week / Older feed accessible via the new clock-
-arrow icon in the Reminders top bar. Clear all behind an ellipsis
-menu.
-
-**Templates** — `ReminderTemplate.swift` + `ReminderTemplateStore`
-(JSON in UserDefaults). "Save as template" capsule button at the
-bottom of AddReminderView prompts for a name. New stacked-squares
-icon in the Reminders top bar opens `ReminderTemplatePicker.swift`,
-which lists saved templates with cadence/assignee/location summary
-inline. Tap a row → opens AddReminderView seeded via a new
-`init(editing:template:)` initializer that pre-fills state and
-auto-expands every chip the template seeded.
-
-**Color tags** — `ReminderColorTag.swift` (8 tags + None) stored
-device-local per uid. Tag chip on the strip opens a color row;
-pinned card gets a colored stripe on the left edge.
-
-**Drag-to-reorder pinned reminders** — long-press a card →
-context menu with "Pin to top" / "Send to bottom".
-`ReminderOrderStore.swift` keeps a per-device sparse-numbered map;
-unsorted entries fall back to createdAt-desc.
-
-**Streak heatmap** — `ReminderStreak` already tracked current+best.
-Extended to log per-day completions (ISO yyyy-MM-dd, last 90 days
-capped). `ReminderStreakHeatmap.swift` renders a 30-day grid
-(10 cols × 3 rows) inside AddReminderView's edit mode for
-daily/weekly/monthly/yearly reminders that have at least one
-completion logged.
-
-**Daily reminder recap** — Settings → Notifications → "Daily reminder
-recap" toggle + hour picker (default 21:00).
-`NotificationsManager.scheduleReminderRecap` reads today's
-`ReminderHistory` and bakes a one-shot calendar notification ("✅ N
-done · 🔔 M fired · 🌙 K snoozed"). Re-schedules on every app launch
-and whenever the Settings toggle/hour changes.
-
-**Per-reminder sound toggle** — speaker chip on the strip flips
-between sound-on (default) and silent. `ReminderSoundStore`
-(UserDefaults set of silenced uids). NotificationsManager applies
-`.default` or nil sound based on the per-uid preference. Full sound
-picker with bundled .caf files punted to a later build.
-
-**Buttons rounded to capsules** — Save-as-template + Delete-reminder
-buttons + the photo-panel Choose/Replace button switched from
-RoundedRectangle(14) → Capsule, matching the existing Arriving/
-Leaving segmented control's pill shape. Trash button next to a
-photo went rounded-square → full Circle.
-
-**1.8 parked**: Live Activities (status pings on Lock Screen /
-Dynamic Island) + Widgets (home screen). They share a WidgetKit
-extension target so they ship together.
-**1.9 parked**: 7-day calendar grid (Schedule tab), Global search,
-Apple Watch complication.
-
-**Schema deltas pending Production deploy** (both bundle into one
-Dashboard "Deploy Schema Changes…" when 1.6 ships): 1.6's
-FamilyMember location quartet (latitude / longitude /
-locationUpdatedAt / isSharingLocation) + 1.7's TaskItem location
-quintet (locationLat / locationLng / locationRadius /
-locationOnArrive / locationName).
-
-### 2026-05-16 — Post-1.5 feature stack staged for next TF (no schema deploy needed)
-Long all-night session after 1.5 shipped. Everything below is in
-local commits on `main` ready to ship; no TF push yet, per Geezy's
-"I'll tell you when" rule. **No schema changes in this batch** so
-the next TF can go out without another CloudKit deploy. Highlights:
-
-**Notifications suite (A–D from Geezy's pick list).**
-- Daily morning briefing (`NotificationsManager.scheduleDailyBriefing`)
-  — once-a-day roll-up of today's chores + events + pending reward
-  requests at user-configurable hour
-- Quiet hours — non-critical pushes (assignments, reward requests,
-  redemptions, grocery activity, status pings) suppressed during a
-  user-defined window. Per-task due-date reminders + daily briefing
-  bypass the suppression
-- Grocery activity push — when another device adds a grocery item,
-  this device pushes "🛒 [name] added to the grocery list — [item]"
-  via `detectAndNotifyGroceryActivity`. Fix included: dashboard's
-  `addInlineItem` was using `allTasks.first?.household` which
-  returned nil for empty households and orphaned items — switched
-  to `households.preferredTarget`
-- Recurring event push — `scheduleEvent(for:)` was a model field
-  without a hook. Now wired so daily/weekly/monthly/yearly events
-  fire via repeating `UNCalendarNotificationTrigger`
-- Reward request push — already shipping pre-session, just confirmed
-- Status pings — "Ping family" megaphone button on Family tab top
-  bar opens `StatusPingSheet` with 6 quick-send presets (🚗 On my way,
-  🛒 At the store, etc.) + custom message. Storage: a TaskItem with
-  `category = "statusping"` syncs via CloudKit; receivers fire
-  "📣 [sender] — [msg]" pushes via `detectAndNotifyStatusPings`
-- All notification toggles re-wired in Settings via
-  `NotificationsSettingsSection` (isolated View struct so the iOS 26
-  metadata demangler stays happy)
-
-**Custom repeat picker.**
-`RepeatRule` struct encodes JSON inside the existing `repeatKind`
-string (`custom:{"i":2,"u":"w","d":6}` → every other Friday).
-`CustomRepeatPicker` sheet binds interval (1–12) + unit (minutes /
-hours / days / weeks / months) + optional weekday. Both
-`AddReminderView` and `AddEventView` get a "Custom…" entry that
-opens it. Notification scheduler handles all combinations: hours/
-minutes use `UNTimeIntervalNotificationTrigger`, days/weeks at
-interval 1 use repeating calendar triggers, intervals ≥ 2 are
-one-shot calendar triggers that reschedule themselves after firing
-(iOS calendar triggers can't do "every N days" repeating natively).
-
-**Task detail polish.**
-- 🙋 Claim pill on unassigned chores (next to the 10pt pill in the
-  header). Tap → assigns to you, pill vanishes.
-- Confetti celebration wired to Mark done in TaskDetailView. The
-  static-star ⭐ overlay was rebuilt — `CelebrationOverlay` now
-  spawns 20 rotating stars bursting outward via `.onAppear` (the
-  original `.onChange(of: visible)` hook never fired because the
-  overlay only exists DURING `visible == true`). Pill removed since
-  points are already shown in the task header.
-
-**Live location sharing (Option A).**
-- Settings → Privacy → "Share my location with family" toggle.
-  Uses `CLLocationManager.startUpdatingLocation()` with
-  `kCLLocationAccuracyBest` + 10m distanceFilter. Apple's "significant
-  changes" mode was too coarse (~500m, two phones in the same house
-  showed hundreds of feet apart).
-- Writes throttled (≥10m moved OR ≥30s elapsed) to keep battery +
-  CloudKit overhead reasonable. Drops bad fixes (negative accuracy,
-  stale >10s, accuracy >100m).
-- New `FamilyMember` schema fields (`latitude`, `longitude`,
-  `locationUpdatedAt`, `isSharingLocation`) — Production CloudKit
-  deploy required before TF.
-- Family tab → 📍 pin button opens `FamilyMapView` showing every
-  sharing member as a pin with avatar + "now / 3m / 2h" age label.
-- Info.plist: NSLocationWhenInUseUsageDescription +
-  NSLocationAlwaysAndWhenInUseUsageDescription + UIBackgroundModes
-  location.
-
-**Manual location ping (Option C) — built then hidden.**
-One-shot GPS fix attached to a ping. Push tap → opens Apple Maps
-centered on sender's coord. Worked but tap-to-Maps was unreliable
-in testing; gated behind `shareLocationEnabled = false` flag in
-`StatusPingSheet`. Live-share covers the same use case.
-
-**Apple Calendar link (Option 1+2 — `CalendarLinkService.swift`).**
-- Settings → SCHEDULE picks an Apple Calendar via EventKit. Mirror
-  push: every FamilyEvent created/edited in Casalist is written as
-  an EKEvent in that calendar with the prefix "Casalist:" in notes.
-- Read-only display: that calendar's events appear at the bottom of
-  Casalist's Schedule view in a "FROM YOUR APPLE CALENDAR 🍎"
-  section, color-tinted by the calendar's color. Filtered to drop
-  our own mirrors (notes prefix check) so events don't double-up.
-- Per-device — each device decides what to mirror via its own
-  `calendarLinkID` AppStorage. Mapping (FamilyEvent.uid → EKEvent
-  identifier) lives in UserDefaults so CloudKit doesn't have to
-  know about EventKit identifiers.
-- One-way only by design — deleting from Apple Calendar leaves the
-  Casalist event intact. Geezy's explicit call. Reverse-delete
-  detector is in the bullpen if we change our mind.
-- Info.plist: NSCalendarsFullAccessUsageDescription. iOS 17+ uses
-  `requestFullAccessToEvents`; pre-17 falls back to legacy.
-
-**Family tab overhaul.**
-- Inline quick-add bar at top (mirrors Grocery)
-- AGENDA section — horizontal scrolling tiles, dashboard style
-- OUTINGS section — `AddFamilyTripView` creates a parent TaskItem
-  (category=family, dueDate set) that nests child items via
-  `parentUid`. Per-card inline "Add a task to this outing…" field
-- + button now opens the outing creator instead of single-item add
-- Everything tap-to-edit via `TaskDetailView`
-- Hero badge + dashboard tile share the same "loose unclaimed
-  non-trip" filter via `isFamilyUpForGrabs(_:)` — was previously
-  off by the outing itself
-- Claim semantics: outings + nested items never claimable.
-  `canDelete` rule tightened to `iAmAdmin || iAddedIt`
-
-**Announcements (banner on Family tab).**
-- Custom announcements get an Expires picker
-  (`AnnouncementExpiry` enum: Push-only / 15 min / 1 hr / 4 hr /
-  8 hr / until tomorrow). When set, the message shows as a big
-  peach→coral gradient banner at the top of every household
-  member's Family tab. Auto-disappears at expiry via
-  `dueDate > now` filter.
-- Sender taps banner (pencil icon affordance) → StatusPingSheet
-  opens in edit mode (`init editing:`). Save commits text + new
-  expiry; Delete soft-deletes. Receivers can't edit — only the
-  original sender.
-
-**Side-quest crash fixes still in scope.**
-- `CloudBackup.snapshot` switched from `stack.context` on a global
-  queue → `container.newBackgroundContext()` + `.perform`. Apple's
-  documented thread-affine context rule.
-- Auto-rejoin URL only cleared on permanent CloudKit errors
-  (`.unknownItem`, `.permissionFailure`, `.invalidArguments`,
-  `.badContainer`, `.participantMayNeedVerification`). Network +
-  account-temporarily-unavailable errors preserve it via
-  `shouldClearSavedShareURL(after:)`.
-- `Nuke ALL local data` dev button now also clears userName +
-  householdName so the welcome screen actually shows on reopen.
-
-**Schema deploy needed before TF:** the `FamilyMember` location
-fields (latitude / longitude / locationUpdatedAt / isSharingLocation).
-Already in Dev (auto-registered via Debug writes); needs Dashboard
-"Deploy Schema Changes…" promote to Production. Script:
-`scripts/cloudkit-schema-diff.sh` confirms the delta.
-
-_(2026-05-15 TestFlight 1.5, 2026-05-15 TestFlight 1.4, 2026-05-15 TestFlight 4.0, and 2026-05-14 Option A entries rotated to `docs/progress-log-archive.md`)_
+_(2026-05-16 1.6+1.7+1.8, 2026-05-16 Post-1.5 feature stack, 2026-05-15 TestFlight 1.5, 2026-05-15 TestFlight 1.4, 2026-05-15 TestFlight 4.0, and 2026-05-14 Option A entries rotated to `docs/progress-log-archive.md`)_
 
 ## Overview
 Casalist is a private family household management app for iOS.
