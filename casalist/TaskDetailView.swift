@@ -170,7 +170,7 @@ struct TaskDetailView: View {
             row(label: "Due", value: dueText, tint: dueOverdue ? .red : P.text)
             if !task.effectiveRepeatKind.isEmpty {
                 divider
-                row(label: "Repeats", value: task.effectiveRepeatKind.capitalized, tint: P.lavender)
+                row(label: "Repeats", value: repeatDisplay, tint: P.lavender)
             }
             if !task.createdBy.isEmpty {
                 divider
@@ -193,6 +193,19 @@ struct TaskDetailView: View {
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
     private var divider: some View { Rectangle().fill(P.border).frame(height: 1) }
+
+    /// Human-readable recurrence text. Custom rules (`custom:{…}` JSON)
+    /// and legacy preset strings ("daily", "every2h", …) both resolve to
+    /// RepeatRule.label ("Every weekday", "Every other Friday"). Anything
+    /// else falls back to a plain capitalization. Fixes the raw-JSON
+    /// blob ("Custom:{"U":"W",...}") that .capitalized used to show.
+    private var repeatDisplay: String {
+        let raw = task.effectiveRepeatKind
+        if let rule = RepeatRule.decode(raw) ?? RepeatRule.fromLegacy(raw) {
+            return rule.label
+        }
+        return raw.capitalized
+    }
 
     private var dueText: String {
         guard let d = task.dueDate else { return "No due date" }
