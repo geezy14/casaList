@@ -109,30 +109,30 @@ struct GameRules: Codable {
 
     static let `default` = GameRules(
         rewardTiers: [
-            RewardTier(name: "Small Reward",  minPoints: 150,  emoji: "🎁", description: "A small treat, snack, or privilege",  dollarValue: 10),
-            RewardTier(name: "Medium Reward", minPoints: 500,  emoji: "🎀", description: "A bigger outing or activity",          dollarValue: 30),
-            RewardTier(name: "Large Reward",  minPoints: 1000, emoji: "🏆", description: "A major experience or gift",           dollarValue: 75),
+            RewardTier(name: "Small Reward",  minPoints: 50,  emoji: "🎁", description: "A small treat, snack, or privilege",  dollarValue: 10),
+            RewardTier(name: "Medium Reward", minPoints: 150, emoji: "🎀", description: "A bigger outing or activity",          dollarValue: 30),
+            RewardTier(name: "Large Reward",  minPoints: 375, emoji: "🏆", description: "A major experience or gift",           dollarValue: 75),
         ],
         categoryRules: [
             CategoryPointRule(category: "Chores",      emoji: "🧹", defaultPoints: 10, description: "Daily household chores"),
             CategoryPointRule(category: "Homework",    emoji: "📚", defaultPoints: 10, description: "School assignments and study time"),
             CategoryPointRule(category: "Home",        emoji: "🏠", defaultPoints: 15, description: "Home upkeep and repairs"),
-            CategoryPointRule(category: "Maintenance", emoji: "🔧", defaultPoints: 20, description: "Larger maintenance tasks"),
+            CategoryPointRule(category: "Maintenance", emoji: "🔧", defaultPoints: 15, description: "Larger maintenance tasks"),
             CategoryPointRule(category: "Family",      emoji: "👨‍👩‍👧", defaultPoints: 5,  description: "Family activities and errands"),
         ],
-        pointsPerDollar: 10,
+        pointsPerDollar: 5,
         expirationWindowDays: 0,
         redeemableItems: [
-            RedeemableItem(emoji: "🎮", name: "30 min screen time",  points: 50,  category: "Screen time"),
-            RedeemableItem(emoji: "🎮", name: "1 hour gaming",       points: 100, category: "Screen time"),
-            RedeemableItem(emoji: "🍿", name: "Pick the movie",      points: 75,  category: "Family"),
-            RedeemableItem(emoji: "🍕", name: "Pick dinner",         points: 100, category: "Family"),
-            RedeemableItem(emoji: "🌅", name: "Stay up 30 min late", points: 50,  category: "Privileges"),
-            RedeemableItem(emoji: "🛌", name: "Skip a chore",        points: 150, category: "Privileges"),
-            RedeemableItem(emoji: "🍦", name: "Ice cream trip",      points: 200, category: "Treats"),
-            RedeemableItem(emoji: "🛒", name: "Trip to the store",   points: 200, category: "Outings"),
-            RedeemableItem(emoji: "🎢", name: "Arcade day",          points: 500, category: "Outings"),
-            RedeemableItem(emoji: "🎁", name: "Pick a small toy",    points: 250, category: "Treats"),
+            RedeemableItem(emoji: "🎮", name: "30 min screen time",  points: 25,  category: "Screen time"),
+            RedeemableItem(emoji: "🎮", name: "1 hour gaming",       points: 50,  category: "Screen time"),
+            RedeemableItem(emoji: "🍿", name: "Pick the movie",      points: 40,  category: "Family"),
+            RedeemableItem(emoji: "🍕", name: "Pick dinner",         points: 50,  category: "Family"),
+            RedeemableItem(emoji: "🌅", name: "Stay up 30 min late", points: 25,  category: "Privileges"),
+            RedeemableItem(emoji: "🛌", name: "Skip a chore",        points: 75,  category: "Privileges"),
+            RedeemableItem(emoji: "🍦", name: "Ice cream trip",      points: 100, category: "Treats"),
+            RedeemableItem(emoji: "🛒", name: "Trip to the store",   points: 100, category: "Outings"),
+            RedeemableItem(emoji: "🎢", name: "Arcade day",          points: 250, category: "Outings"),
+            RedeemableItem(emoji: "🎁", name: "Pick a small toy",    points: 125, category: "Treats"),
         ]
     )
 }
