@@ -207,16 +207,22 @@ struct AddEventView: View {
                 Button("Delete", role: .destructive) { delete() }
                 Button("Cancel", role: .cancel) {}
             }
-            .sheet(isPresented: $showLocationPicker) {
-                LocationPickerSheet { picked in
-                    location = picked.displayName
-                    latitude = picked.latitude
-                    longitude = picked.longitude
+            // Each sheet on its own view host so stacked .sheet modifiers
+            // don't make one flash open then dismiss instantly.
+            .background(
+                Color.clear.sheet(isPresented: $showLocationPicker) {
+                    LocationPickerSheet { picked in
+                        location = picked.displayName
+                        latitude = picked.latitude
+                        longitude = picked.longitude
+                    }
                 }
-            }
-            .sheet(isPresented: $showCustomRepeat) {
-                CustomRepeatPicker(encoded: $repeatKind)
-            }
+            )
+            .background(
+                Color.clear.sheet(isPresented: $showCustomRepeat) {
+                    CustomRepeatPicker(encoded: $repeatKind)
+                }
+            )
         }
     }
 

@@ -90,6 +90,13 @@ struct AddTaskView: View {
                     }
                 }
             }
+            // Attach at the top level (not on a Section inside the
+            // conditionally-rendered taskForm) — a Section anchor gets
+            // re-identified when the Form re-renders, which dismissed the
+            // sheet the instant it opened.
+            .sheet(isPresented: $showCustomRepeat) {
+                CustomRepeatPicker(encoded: $repeatKind)
+            }
         }
     }
 
@@ -196,9 +203,6 @@ struct AddTaskView: View {
                         .foregroundStyle(.red)
                 }
             }
-        }
-        .sheet(isPresented: $showCustomRepeat) {
-            CustomRepeatPicker(encoded: $repeatKind)
         }
     }
 

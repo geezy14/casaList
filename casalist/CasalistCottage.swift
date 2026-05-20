@@ -2386,17 +2386,32 @@ public enum CasalistCottage {
         private func recurringActiveNow(_ t: TaskItem) -> Bool {
             let kind = t.effectiveRepeatKind
             guard !kind.isEmpty else { return true }       // one-shot — not our concern
-            guard let due = t.dueDate else { return true } // no schedule to roll — leave visible
-            let rule = RepeatRule.decode(kind) ?? RepeatRule.fromLegacy(kind)
-            let subDaily = (rule?.unit == .hour || rule?.unit == .minute)
-            if subDaily {
-                // Hourly/minute cadences roll within a day — compare by exact time.
-                return due <= Date()
-            }
-            // Daily and longer — compare by calendar day so a chore due later
-            // TODAY still shows today, but one rolled to a future day hides.
             let cal = Calendar.current
-            return cal.startOfDay(for: due) <= cal.startOfDay(for: Date())
+            let rule = RepeatRule.decode(kind) ?? RepeatRule.fromLegacy(kind)
+            let unit = rule?.unit ?? .day
+            let subDaily = (unit == .hour || unit == .minute)
+
+            // Preferred signal: a dueDate. Completing a recurring chore rolls
+            // dueDate to the next occurrence, so a future dueDate means this
+            // cycle is done.
+            if let due = t.dueDate {
+                if subDaily { return due <= Date() }
+                // Daily+ compare by calendar day so a chore due later TODAY
+                // still shows today, but one rolled to a future day hides.
+                return cal.startOfDay(for: due) <= cal.startOfDay(for: Date())
+            }
+
+            // No dueDate (chore created without one): fall back to completedAt
+            // within the current cadence window. Never completed → active;
+            // completed inside the current cycle → hidden until it rolls over.
+            guard let done = t.completedAt else { return true }
+            switch unit {
+            case .minute, .hour: return done <= Date().addingTimeInterval(-3600)
+            case .day:           return !cal.isDateInToday(done)
+            case .week:          return !cal.isDate(done, equalTo: Date(), toGranularity: .weekOfYear)
+            case .month:         return !cal.isDate(done, equalTo: Date(), toGranularity: .month)
+            case .year:          return !cal.isDate(done, equalTo: Date(), toGranularity: .year)
+            }
         }
 
         private var podium: some View {

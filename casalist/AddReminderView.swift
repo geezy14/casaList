@@ -226,20 +226,29 @@ struct AddReminderView: View {
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(editing == nil ? "New Reminder" : "Edit Reminder")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showCustomRepeat) {
-                CustomRepeatPicker(encoded: $repeatKind)
-            }
-            .sheet(isPresented: $showLocationPicker) {
-                LocationPickerSheet { picked in
-                    locationLat = picked.latitude
-                    locationLng = picked.longitude
-                    locationName = picked.displayName
-                    if locationRadius == 0 { locationRadius = 500 * metersPerFoot }
+            // Each sheet on its own view host (via .background) so the three
+            // don't stack on the same view — stacked .sheet modifiers make
+            // the first one (repeat) flash open then dismiss instantly.
+            .background(
+                Color.clear.sheet(isPresented: $showCustomRepeat) {
+                    CustomRepeatPicker(encoded: $repeatKind)
                 }
-            }
-            .sheet(isPresented: $showColorWheel) {
-                ColorWheelSheet(tag: $colorTag).presentationDetents([.large])
-            }
+            )
+            .background(
+                Color.clear.sheet(isPresented: $showLocationPicker) {
+                    LocationPickerSheet { picked in
+                        locationLat = picked.latitude
+                        locationLng = picked.longitude
+                        locationName = picked.displayName
+                        if locationRadius == 0 { locationRadius = 500 * metersPerFoot }
+                    }
+                }
+            )
+            .background(
+                Color.clear.sheet(isPresented: $showColorWheel) {
+                    ColorWheelSheet(tag: $colorTag).presentationDetents([.large])
+                }
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
