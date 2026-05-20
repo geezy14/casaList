@@ -1,0 +1,31 @@
+Casalist 3.0 (build 9)
+
+Levels, tiers, and rewards got a big rebalance.
+
+What's new
+- Simpler tiers. Three clear tiers replace the old medal tiers:
+  Sprout, Ember, and Diamond. Your avatar badge now always
+  matches your actual level (no more "1st place but a bronze
+  medal" mix-ups).
+- Reachable levels. The climb to Legend was rebalanced - levels
+  come fast early and ramp up later, and Legend is now 1,300
+  points instead of 2,700 so it doesn't feel impossible.
+- Rebalanced rewards. Point costs were rescaled to match
+  (5 points per $1), and the redeemable catalog was repriced.
+  Existing households update automatically - you can still tweak
+  any value in Settings -> Game Rules.
+
+What's fixed
+- No more ghost event notifications. A reminder for an event you
+  deleted or renamed will no longer keep firing.
+- Sharing your profile card works again.
+
+What to test
+- Check your rank: avatar badge tier should match your level
+  name (e.g. Chore Warrior = Ember).
+- Confirm reward and redeem point costs look rescaled.
+- Delete or rename an event, then confirm its old notification
+  doesn't fire later.
+- Open your profile card and tap Share.
+
+Thanks!
