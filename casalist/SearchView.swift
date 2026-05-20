@@ -88,7 +88,7 @@ struct SearchView: View {
         return goals.filter { g in
             g.label.lowercased().contains(n)
                 || g.ownerName.lowercased().contains(n)
-                || g.note.lowercased().contains(n)
+                || GoalLink.note(from: g.note).lowercased().contains(n)
         }
     }
 

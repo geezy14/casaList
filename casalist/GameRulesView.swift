@@ -599,6 +599,16 @@ private struct RedeemEditSheet: View {
                 Section("Category") {
                     TextField("e.g. Treats, Privileges, Outings", text: $draft.category)
                 }
+                Section {
+                    TextField("https://… (optional)", text: $draft.url)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+                } header: {
+                    Text("Link")
+                } footer: {
+                    Text("Optional web link to this item. It rides along whenever someone requests it.")
+                }
             }
             .navigationTitle(draft.name.isEmpty ? "New Item" : draft.name)
             .navigationBarTitleDisplayMode(.inline)

@@ -153,13 +153,27 @@ struct InboxView: View {
                     }
                     Spacer()
                 }
-                if !goal.note.isEmpty {
-                    Text("\u{201C}\(goal.note)\u{201D}")
+                if !GoalLink.note(from: goal.note).isEmpty {
+                    Text("\u{201C}\(GoalLink.note(from: goal.note))\u{201D}")
                         .font(.system(size: 12, weight: .semibold).italic())
                         .foregroundStyle(P.textDim)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.4)))
+                }
+                if let link = GoalLink.resolvedURL(from: goal.note) {
+                    Link(destination: link) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "link").font(.system(size: 11, weight: .bold))
+                            Text("View item").font(.system(size: 12, weight: .heavy))
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(P.sky)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(P.sky.opacity(0.12)))
+                    }
                 }
                 if needsPrice {
                     let sortedTiers = tiers.sorted { $0.minPoints < $1.minPoints }

@@ -1234,7 +1234,9 @@ enum NotificationsManager {
             let content = UNMutableNotificationContent()
             content.title = "💬 \(requester) asked for a reward"
             var bodyParts: [String] = [g.label]
-            if !g.note.isEmpty { bodyParts.append("\u{201C}\(g.note)\u{201D}") }
+            let noteText = GoalLink.note(from: g.note)
+            if !noteText.isEmpty { bodyParts.append("\u{201C}\(noteText)\u{201D}") }
+            if GoalLink.url(from: g.note) != nil { bodyParts.append("🔗 link attached") }
             content.body = bodyParts.joined(separator: " — ")
             content.sound = .default
 

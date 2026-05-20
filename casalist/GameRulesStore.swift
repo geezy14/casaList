@@ -35,6 +35,36 @@ struct RedeemableItem: Codable, Identifiable, Equatable {
     /// Grouping label so the catalog can be organized (e.g. "Screen
     /// time", "Privileges", "Treats", "Outings", "Family"). Free-form.
     var category: String
+    /// Optional web link to the item (e.g. an Amazon product page) so an
+    /// admin reviewing a request can see exactly what's being asked for.
+    /// Empty = no link.
+    var url: String = ""
+
+    init(id: String = UUID().uuidString, emoji: String, name: String,
+         points: Int, category: String, url: String = "") {
+        self.id = id
+        self.emoji = emoji
+        self.name = name
+        self.points = points
+        self.category = category
+        self.url = url
+    }
+
+    // Custom decoder so catalogs encoded before `url` existed still load
+    // cleanly (missing key → ""), instead of failing the whole array
+    // decode and silently emptying the catalog.
+    private enum CodingKeys: String, CodingKey {
+        case id, emoji, name, points, category, url
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        self.emoji = (try? c.decode(String.self, forKey: .emoji)) ?? "🎁"
+        self.name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        self.points = (try? c.decode(Int.self, forKey: .points)) ?? 0
+        self.category = (try? c.decode(String.self, forKey: .category)) ?? ""
+        self.url = (try? c.decode(String.self, forKey: .url)) ?? ""
+    }
 }
 
 struct GameRules: Codable {

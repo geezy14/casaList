@@ -1826,13 +1826,27 @@ public enum CasalistCottage {
                     }
                     Spacer()
                 }
-                if !goal.note.isEmpty {
-                    Text("\u{201C}\(goal.note)\u{201D}")
+                if !GoalLink.note(from: goal.note).isEmpty {
+                    Text("\u{201C}\(GoalLink.note(from: goal.note))\u{201D}")
                         .font(.system(size: 13, weight: .semibold).italic())
                         .foregroundStyle(P.textDim)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.4)))
+                }
+                if let link = GoalLink.resolvedURL(from: goal.note) {
+                    Link(destination: link) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "link").font(.system(size: 12, weight: .bold))
+                            Text("View item").font(.system(size: 13, weight: .heavy))
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(P.sky)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(P.sky.opacity(0.12)))
+                    }
                 }
                 HStack {
                     Text("Set price").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
@@ -2229,6 +2243,12 @@ public enum CasalistCottage {
                 label: "\(item.emoji) \(item.name)",
                 targetPoints: item.points
             )
+            // Carry the catalog item's link (if any) onto the request so the
+            // admin reviewing it can open the product page. Packed into the
+            // note via GoalLink — no schema change.
+            if !item.url.isEmpty {
+                g.note = GoalLink.encode(note: "", url: item.url)
+            }
             if let h = households.preferredTarget {
                 modelContext.assign(g, toStoreOf: h)
                 g.household = h

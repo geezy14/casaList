@@ -17,6 +17,10 @@ struct AddGoalView: View {
     @State private var label: String = ""
     @State private var target: Int = 200
     @State private var note: String = ""
+    /// Optional web link to the item (e.g. an Amazon product page) packed
+    /// into the goal's note via GoalLink so a parent can see exactly what
+    /// is being requested. No schema change.
+    @State private var link: String = ""
 
     private var me: FamilyMember? {
         FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
@@ -101,6 +105,17 @@ struct AddGoalView: View {
                         Text("Make your case (optional)")
                     }
                 }
+                Section {
+                    TextField("https://… (paste a link)", text: $link)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+                        .submitLabel(.done)
+                } header: {
+                    Text("Link to the item (optional)")
+                } footer: {
+                    Text("Paste a web link to the item you want so a parent can see it.")
+                }
             }
             .navigationTitle(iAmAdmin ? "New goal" : "Ask for a reward")
             .navigationBarTitleDisplayMode(.inline)
@@ -136,8 +151,12 @@ struct AddGoalView: View {
             label: label.trimmingCharacters(in: .whitespaces),
             targetPoints: storedTarget
         )
-        if !iAmAdmin {
-            g.note = note.trimmingCharacters(in: .whitespaces)
+        // Reason text only applies to non-admin requests; the link applies
+        // to either. Both ride in the note via GoalLink (no schema change).
+        let reason = iAmAdmin ? "" : note.trimmingCharacters(in: .whitespaces)
+        let combined = GoalLink.encode(note: reason, url: link)
+        if !combined.isEmpty {
+            g.note = combined
         }
         if let h = households.preferredTarget {
             moc.assign(g, toStoreOf: h)
