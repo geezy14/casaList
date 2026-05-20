@@ -1,0 +1,24 @@
+Casalist 3.0 (build 8)
+
+Bug fixes.
+
+What's fixed
+- Recurring quests clear correctly. Checking off a repeating chore
+  now drops it from ACTIVE QUESTS until its next scheduled day,
+  including chores with no due date and weekly / weekday / "every
+  N" cadences (not just the simple daily/weekly presets).
+- Repeat picker opens reliably. Tapping the Repeat field no longer
+  flashes open and closes instantly on the first tap (chores,
+  reminders, and events).
+- Haptics hold up. Checking off several chores in a row no longer
+  silences the buzz after a few taps.
+
+What to test
+- Mark a weekday (Mon-Fri) chore done. Confirm it leaves ACTIVE
+  QUESTS and comes back on the next scheduled day.
+- Tap the Repeat field on a new chore / reminder / event and
+  confirm the picker stays open on the first tap.
+- Check off several chores quickly and confirm the haptic keeps
+  firing.
+
+Thanks!
