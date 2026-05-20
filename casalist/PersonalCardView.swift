@@ -159,9 +159,14 @@ struct PersonalCardView: View {
             }
         }
         .sheet(isPresented: $showEditPhoto) { ProfilePhotoSheet() }
-        .sheet(isPresented: $showShareSheet) {
-            if let img = shareImage { ShareSheet(items: [img]) }
-        }
+        // Share sheet on its own view host — stacked .sheet modifiers on
+        // the same view conflict, which kept the share sheet from
+        // presenting (same bug class as the repeat picker).
+        .background(
+            Color.clear.sheet(isPresented: $showShareSheet) {
+                if let img = shareImage { ShareSheet(items: [img]) }
+            }
+        )
         .swipeToDismiss()
     }
 
