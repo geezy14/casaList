@@ -109,6 +109,35 @@ struct RepeatRule: Codable, Equatable {
         return s
     }
 
+    /// The next occurrence strictly after `date`, honoring interval, unit,
+    /// and (for weekly) any selected weekday set. Used when a recurring
+    /// chore is checked off to roll its dueDate forward. Handles the cases
+    /// the legacy string switch can't (custom intervals, multi-weekday).
+    func nextDate(after date: Date) -> Date {
+        let cal = Calendar.current
+        let step = max(1, interval)
+        switch unit {
+        case .minute: return cal.date(byAdding: .minute,    value: step, to: date) ?? date
+        case .hour:   return cal.date(byAdding: .hour,      value: step, to: date) ?? date
+        case .day:    return cal.date(byAdding: .day,       value: step, to: date) ?? date
+        case .month:  return cal.date(byAdding: .month,     value: step, to: date) ?? date
+        case .year:   return cal.date(byAdding: .year,      value: step, to: date) ?? date
+        case .week:
+            let wds = effectiveWeekdays
+            if wds.count > 1 {
+                // Multi-weekday (e.g. Mon–Fri): the next selected weekday
+                // strictly after `date`. Scan up to two weeks to be safe.
+                for add in 1...14 {
+                    if let cand = cal.date(byAdding: .day, value: add, to: date),
+                       wds.contains(cal.component(.weekday, from: cand)) {
+                        return cand
+                    }
+                }
+            }
+            return cal.date(byAdding: .weekOfYear, value: step, to: date) ?? date
+        }
+    }
+
     /// JSON-encoded with `custom:` prefix. Safe to store in repeatKind.
     var encoded: String {
         let enc = JSONEncoder()

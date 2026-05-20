@@ -38,6 +38,13 @@ enum FamilyPoints {
 
     private static func nextOccurrence(after date: Date, kind: String) -> Date {
         let cal = Calendar.current
+        // Custom rules (custom:{…} JSON — every N units, specific weekday(s),
+        // multi-weekday) advance via RepeatRule so the dueDate actually rolls
+        // forward. Without this they'd hit the default and never move, leaving
+        // the chore stuck "active" and its schedule frozen.
+        if let rule = RepeatRule.decode(kind) {
+            return rule.nextDate(after: date)
+        }
         switch kind {
         case "hourly":   return cal.date(byAdding: .hour, value: 1, to: date) ?? date
         case "every2h":  return cal.date(byAdding: .hour, value: 2, to: date) ?? date
@@ -48,6 +55,16 @@ enum FamilyPoints {
         case "weekly":   return cal.date(byAdding: .day, value: 7, to: date) ?? date
         case "monthly":  return cal.date(byAdding: .month, value: 1, to: date) ?? date
         case "yearly":   return cal.date(byAdding: .year, value: 1, to: date) ?? date
+        case "weekdays":
+            // Mon–Fri: next weekday strictly after date.
+            let wds: Set<Int> = [2, 3, 4, 5, 6]
+            for add in 1...7 {
+                if let cand = cal.date(byAdding: .day, value: add, to: date),
+                   wds.contains(cal.component(.weekday, from: cand)) {
+                    return cand
+                }
+            }
+            return cal.date(byAdding: .day, value: 1, to: date) ?? date
         default:         return date
         }
     }
