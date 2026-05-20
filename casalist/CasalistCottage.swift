@@ -8292,7 +8292,10 @@ extension CasalistCottage {
         private func completeChore(_ t: TaskItem) {
             let pts = Int(t.points)
             completingUids.insert(t.uid)
-            Haptics.success()
+            // Haptic is fired once by the celebration overlay (see
+            // .celebration onAppear) so a single check-off buzzes exactly
+            // once. Firing here too stacked 3 haptics per tap and tripped
+            // iOS's haptic throttle, killing feedback after a few taps.
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 FamilyPoints.toggle(t, in: members)
@@ -8309,7 +8312,8 @@ extension CasalistCottage {
             celebrateLabel = label
             confettiFlying = false
             celebrate = true
-            Haptics.success()
+            // Single haptic comes from the celebration overlay's onAppear;
+            // don't double it here.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 withAnimation(.easeOut(duration: 1.2)) {
                     confettiFlying = true
