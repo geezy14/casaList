@@ -77,7 +77,7 @@ struct Celebration {
     mutating func cheer(_ label: String, emoji: String = "⭐", duration: TimeInterval = 1.4) {
         self.label = label
         self.emoji = emoji
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.success()
         withAnimation { visible = true }
         let visibility = visible
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
@@ -99,7 +99,7 @@ extension View {
             if visible.wrappedValue {
                 CelebrationOverlay(label: label, emoji: emoji, visible: visible)
                     .onAppear {
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        Haptics.success()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                             withAnimation { visible.wrappedValue = false }
                         }

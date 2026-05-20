@@ -8292,7 +8292,7 @@ extension CasalistCottage {
         private func completeChore(_ t: TaskItem) {
             let pts = Int(t.points)
             completingUids.insert(t.uid)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            Haptics.success()
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 FamilyPoints.toggle(t, in: members)
@@ -8309,7 +8309,7 @@ extension CasalistCottage {
             celebrateLabel = label
             confettiFlying = false
             celebrate = true
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            Haptics.success()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 withAnimation(.easeOut(duration: 1.2)) {
                     confettiFlying = true
