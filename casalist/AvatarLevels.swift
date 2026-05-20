@@ -56,7 +56,7 @@ func levelLabel(for lifetimePoints: Int) -> String {
 /// Visual tier based on level bracket — drives ring color/emblem.
 /// Three tiers across the 10 levels, with non-medal icons so they never
 /// read as leaderboard placement (🥇🥈🥉 stay reserved for actual rank).
-///   Sprout 🌱  Lvl 1-3   ·   Blaze 🔥  Lvl 4-7   ·   Diamond 💎  Lvl 8-10
+///   Sprout 🌱  Lvl 1-3   ·   Ember 🔥  Lvl 4-7   ·   Diamond 💎  Lvl 8-10
 enum AvatarLevel: Int, CaseIterable {
     case sprout = 0   // Lvl 1-3
     case blaze = 1    // Lvl 4-7
@@ -102,7 +102,7 @@ enum AvatarLevel: Int, CaseIterable {
     var label: String {
         switch self {
         case .sprout: return "Sprout"
-        case .blaze:  return "Blaze"
+        case .blaze:  return "Ember"
         case .gem:    return "Diamond"
         }
     }
