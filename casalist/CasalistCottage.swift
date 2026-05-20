@@ -2366,12 +2366,37 @@ public enum CasalistCottage {
                 && $0.points > 0
                 && $0.parentUid.isEmpty          // no bundle children
                 && $0.repeatKind != "bundle-draft" // no unfinished drafts
+                && recurringActiveNow($0)        // recurring: hide once this cycle's done
             }
             if let me = myMember, !me.canManageFamily {
                 let lc = me.name.lowercased()
                 return pointTasks.filter { ($0.assignee ?? "").lowercased() == lc }
             }
             return pointTasks
+        }
+
+        /// Recurring chores never set `isCompleted` (they roll their dueDate
+        /// forward each time they're checked off), so without this they'd
+        /// linger in ACTIVE QUESTS forever no matter who completes them.
+        ///
+        /// A recurring quest is "active" only while its current occurrence is
+        /// due. Completing it pushes `dueDate` to the next occurrence, which
+        /// drops it off here until that occurrence arrives. Non-recurring
+        /// tasks are handled by the `!isCompleted` filter and always pass.
+        private func recurringActiveNow(_ t: TaskItem) -> Bool {
+            let kind = t.effectiveRepeatKind
+            guard !kind.isEmpty else { return true }       // one-shot — not our concern
+            guard let due = t.dueDate else { return true } // no schedule to roll — leave visible
+            let rule = RepeatRule.decode(kind) ?? RepeatRule.fromLegacy(kind)
+            let subDaily = (rule?.unit == .hour || rule?.unit == .minute)
+            if subDaily {
+                // Hourly/minute cadences roll within a day — compare by exact time.
+                return due <= Date()
+            }
+            // Daily and longer — compare by calendar day so a chore due later
+            // TODAY still shows today, but one rolled to a future day hides.
+            let cal = Calendar.current
+            return cal.startOfDay(for: due) <= cal.startOfDay(for: Date())
         }
 
         private var podium: some View {
