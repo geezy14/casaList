@@ -1323,7 +1323,12 @@ public enum CasalistCottage {
                             // No pulse here; the rings hero avatar above is
                             // the single attention-getter.
                             Button { showPersonalCard = true } label: {
-                                LeveledAvatar(member: top, size: 56)
+                                // Compute the level here (same source as the
+                                // standings label below) and pass it in, so the
+                                // avatar's tier ring/emblem can't diverge from
+                                // the displayed rank.
+                                LeveledAvatar(member: top, size: 56,
+                                              overrideLevel: levelNumber(for: Int(max(top.lifetimePoints, top.points))))
                             }
                             .buttonStyle(.row)
                             VStack(alignment: .leading, spacing: 4) {
@@ -2424,7 +2429,8 @@ public enum CasalistCottage {
                             let podH: CGFloat = place == 1 ? 68 : (place == 2 ? 48 : 36)
                             let podColor = place == 1 ? P.peach : (place == 2 ? P.coral : P.mint)
                             VStack(spacing: 6) {
-                                LeveledAvatar(member: m, size: sz)
+                                LeveledAvatar(member: m, size: sz,
+                                              overrideLevel: levelNumber(for: Int(max(m.lifetimePoints, m.points))))
                                 Text(m.name).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(rgb: 0x3B2A22))
                                 Text("\(m.points) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
                                 Text(["🥇","🥈","🥉"][place - 1]).font(.system(size: place == 1 ? 32 : 26, weight: .heavy))
@@ -2464,7 +2470,8 @@ public enum CasalistCottage {
                                 if canApprove { pendingForKid = m }
                             } label: {
                                 ZStack(alignment: .topTrailing) {
-                                    LeveledAvatar(member: m, size: 36, showEmblem: false)
+                                    LeveledAvatar(member: m, size: 36, showEmblem: false,
+                                                  overrideLevel: levelNumber(for: Int(max(m.lifetimePoints, m.points))))
                                     if canApprove {
                                         Text("\(pendingCount)")
                                             .font(.system(size: 9, weight: .heavy))

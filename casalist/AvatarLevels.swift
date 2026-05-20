@@ -90,14 +90,11 @@ enum AvatarLevel: Int, CaseIterable {
     }
 
     var emblem: String? {
-        // Sparkle ladder — deliberately NOT 🥉🥈🥇 (place medals), which
-        // collided with leaderboard placement (a 1st-place member showing a
-        // bronze tier medal read as "3rd place"). These read as progression.
         switch self {
         case .rookie:   return nil
-        case .bronze:   return "⭐"
-        case .silver:   return "🌟"
-        case .gold:     return "✨"
+        case .bronze:   return "🥉"
+        case .silver:   return "🥈"
+        case .gold:     return "🥇"
         case .platinum: return "👑"
         }
     }
