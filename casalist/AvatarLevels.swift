@@ -54,58 +54,56 @@ func levelLabel(for lifetimePoints: Int) -> String {
 }
 
 /// Visual tier based on level bracket — drives ring color/emblem.
+/// Three tiers across the 10 levels, with non-medal icons so they never
+/// read as leaderboard placement (🥇🥈🥉 stay reserved for actual rank).
+///   Sprout 🌱  Lvl 1-3   ·   Blaze 🔥  Lvl 4-7   ·   Gem 💎  Lvl 8-10
 enum AvatarLevel: Int, CaseIterable {
-    case rookie = 0    // Lvl 1
-    case bronze = 1    // Lvl 2-3
-    case silver = 2    // Lvl 4-5
-    case gold = 3      // Lvl 6-7
-    case platinum = 4  // Lvl 8-10
+    case sprout = 0   // Lvl 1-3
+    case blaze = 1    // Lvl 4-7
+    case gem = 2      // Lvl 8-10
 
     init(lifetimePoints: Int) {
-        let lvl = levelNumber(for: lifetimePoints)
+        self = AvatarLevel(level: levelNumber(for: lifetimePoints))
+    }
+
+    /// Map a 1-based level number (1-10) to its tier.
+    init(level lvl: Int) {
         switch lvl {
-        case 1:     self = .rookie
-        case 2...3: self = .bronze
-        case 4...5: self = .silver
-        case 6...7: self = .gold
-        default:    self = .platinum
+        case 1...3: self = .sprout
+        case 4...7: self = .blaze
+        default:    self = .gem
         }
     }
 
     var ringColor: Color {
         switch self {
-        case .rookie:   return .clear
-        case .bronze:   return Color(rgb: 0xC2823A)
-        case .silver:   return Color(rgb: 0xB0B0B8)
-        case .gold:     return Color(rgb: 0xE8B040)
-        case .platinum: return Color(rgb: 0x9B7BD8)
+        case .sprout: return Color(rgb: 0x5BBF77)   // green
+        case .blaze:  return Color(rgb: 0xE8733A)   // fire orange
+        case .gem:    return Color(rgb: 0x49C7E0)   // diamond cyan
         }
     }
 
     var ringHighlight: Color {
         switch self {
-        case .platinum: return Color(rgb: 0x6FA8D0)
-        default:        return ringColor
+        case .sprout: return Color(rgb: 0x8FE0A0)
+        case .blaze:  return Color(rgb: 0xF5A85A)
+        case .gem:    return Color(rgb: 0x8FE6F2)
         }
     }
 
     var emblem: String? {
         switch self {
-        case .rookie:   return nil
-        case .bronze:   return "🥉"
-        case .silver:   return "🥈"
-        case .gold:     return "🥇"
-        case .platinum: return "👑"
+        case .sprout: return "🌱"
+        case .blaze:  return "🔥"
+        case .gem:    return "💎"
         }
     }
 
     var label: String {
         switch self {
-        case .rookie:   return "Rookie"
-        case .bronze:   return "Bronze"
-        case .silver:   return "Silver"
-        case .gold:     return "Gold"
-        case .platinum: return "Platinum"
+        case .sprout: return "Sprout"
+        case .blaze:  return "Blaze"
+        case .gem:    return "Gem"
         }
     }
 }
@@ -130,14 +128,7 @@ struct LeveledAvatar: View {
         return lp > p ? lp : p
     }
     private var level: AvatarLevel {
-        let lvl = overrideLevel ?? levelNumber(for: effectiveLifetime)
-        switch lvl {
-        case 1:     return .rookie
-        case 2...3: return .bronze
-        case 4...5: return .silver
-        case 6...7: return .gold
-        default:    return .platinum
-        }
+        AvatarLevel(level: overrideLevel ?? levelNumber(for: effectiveLifetime))
     }
 
     var body: some View {
@@ -145,24 +136,24 @@ struct LeveledAvatar: View {
         let emblemSize: CGFloat = max(10, size * 0.32)
         ZStack {
             CLAvatar(member.asCLMember, size: size)
-            if level != .rookie {
-                Circle()
-                    .strokeBorder(
-                        AngularGradient(
-                            colors: [level.ringColor, level.ringHighlight, level.ringColor],
-                            center: .center
-                        ),
-                        lineWidth: ringWidth
-                    )
-                    .frame(width: size + ringWidth, height: size + ringWidth)
-                if showEmblem, let e = level.emblem {
-                    Text(e)
-                        .font(.system(size: emblemSize))
-                        .padding(2)
-                        .background(Circle().fill(Color.white))
-                        .overlay(Circle().stroke(level.ringColor, lineWidth: 1))
-                        .offset(x: size * 0.32, y: -size * 0.32)
-                }
+            // Every member now has a tier (Sprout from Lvl 1), so the ring
+            // and emblem always show.
+            Circle()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: [level.ringColor, level.ringHighlight, level.ringColor],
+                        center: .center
+                    ),
+                    lineWidth: ringWidth
+                )
+                .frame(width: size + ringWidth, height: size + ringWidth)
+            if showEmblem, let e = level.emblem {
+                Text(e)
+                    .font(.system(size: emblemSize))
+                    .padding(2)
+                    .background(Circle().fill(Color.white))
+                    .overlay(Circle().stroke(level.ringColor, lineWidth: 1))
+                    .offset(x: size * 0.32, y: -size * 0.32)
             }
         }
         .frame(width: size + ringWidth, height: size + ringWidth)

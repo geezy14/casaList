@@ -233,9 +233,7 @@ struct PersonalCardView: View {
                     Text(myRankLabel.uppercased())
                         .font(.system(size: 10, weight: .heavy))
                         .tracking(1.2)
-                        .foregroundStyle(myRankLevel == .rookie
-                            ? .white.opacity(0.5)
-                            : myRankLevel.ringColor)
+                        .foregroundStyle(myRankLevel.ringColor)
                 }
                 Text("MEMBER SINCE")
                     .font(.system(size: 8, weight: .heavy))
