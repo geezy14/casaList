@@ -292,10 +292,11 @@ final class GameRulesStore: ObservableObject {
     private var seasonBaselines: [String: Int] = [:]
 
     /// Bump to force a one-time household-wide season reset on the next
-    /// launch (every score back to 0; admins re-grant from there). Stored
-    /// per-household via `HouseholdRulesEnvelope.seasonEpoch`, so the reset
-    /// runs once and never flip-flops.
-    static let seasonEpoch = 1
+    /// launch (a clean Season 1, every score back to 0; admins re-grant
+    /// from there). Stored per-household via
+    /// `HouseholdRulesEnvelope.seasonEpoch`, so the reset runs once and
+    /// never flip-flops.
+    static let seasonEpoch = 3
 
     /// Toggle so the `didSet` doesn't loop when we reload from the
     /// household after a remote sync.
@@ -427,23 +428,18 @@ final class GameRulesStore: ObservableObject {
             env.seasonNumber = env.seasonNumber + 1
             env.seasonEpoch = Self.seasonEpoch
             changed = true
-        } else if env.seasonEpoch < Self.seasonEpoch && env.seasonNumber < 2 {
-            // Forced one-time reset shipped in code: snapshot lifetime so
-            // every score returns to 0, then admins re-grant from there.
-            // Two guards make this safe in a mixed-build prod household:
-            //   • seasonEpoch < target  — only fires for households that
-            //     predate this reset (a fresh build-13 household sets the
-            //     epoch at init, so it's excluded).
-            //   • seasonNumber < 2      — old builds (11/12) DROP the epoch
-            //     field when they re-save the envelope, which could re-fire
-            //     the reset and wipe admin re-grants. They DO preserve
-            //     seasonNumber, so bumping it past Season 1 permanently
-            //     latches the reset off even if the epoch is lost.
-            // Bumping to >= 2 also moves the household out of build-11/12's
-            // "rewrite baselines" zone so they converge instead of fighting.
+        } else if env.seasonEpoch < Self.seasonEpoch {
+            // Forced one-time reset shipped in code: a clean Season 1 with
+            // every score back to 0 (snapshot lifetime as the baseline);
+            // admins re-grant from there. Internal counter AND display are
+            // both 1 — no offset, nothing mismatched. Latched by the epoch
+            // so it runs once. NOTE: this is only safe once the older
+            // builds (11/12) are off every family device — build 12 will
+            // otherwise re-zero the baselines and re-inflate. See the ship
+            // notes; all devices must update to this build.
             env.seasonBaselines = snapshot()
             env.seasonStart = now
-            env.seasonNumber = max(env.seasonNumber + 1, 2)
+            env.seasonNumber = 1
             env.seasonEpoch = Self.seasonEpoch
             changed = true
         } else {
