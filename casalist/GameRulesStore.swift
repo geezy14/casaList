@@ -391,21 +391,34 @@ final class GameRulesStore: ObservableObject {
         let now = Date()
         let needsInit = env.seasonStart == nil
         let elapsed = env.seasonStart.map { now.timeIntervalSince($0) >= HouseholdRulesEnvelope.seasonLength } ?? false
-        guard needsInit || elapsed else {
-            loadSeasonState(from: env)
-            return
+        if needsInit || elapsed {
+            // Full roll: snapshot every live member's lifetime total as the
+            // new baseline, so season score = 0 for everyone right now.
+            var baselines: [String: Int] = [:]
+            for m in members where m.deletedAt == nil {
+                baselines[m.uid.uuidString] = Int(m.lifetimePoints)
+            }
+            env.seasonBaselines = baselines
+            env.seasonStart = now
+            env.seasonNumber = (needsInit ? 1 : env.seasonNumber + 1)
+            h.routinesJSON = env.encodedJSON()
+            try? context?.save()
+        } else {
+            // Season already running: backfill a baseline for any member
+            // that doesn't have one (joined or got a new uid via the
+            // dedupe/reconcile pipeline after init). Without this their
+            // season score falls back to full lifetime — e.g. a Legend
+            // showing 1,425 instead of 0 in a fresh season.
+            var changed = false
+            for m in members where m.deletedAt == nil && env.seasonBaselines[m.uid.uuidString] == nil {
+                env.seasonBaselines[m.uid.uuidString] = Int(m.lifetimePoints)
+                changed = true
+            }
+            if changed {
+                h.routinesJSON = env.encodedJSON()
+                try? context?.save()
+            }
         }
-        // Snapshot every live member's lifetime total as the new baseline,
-        // so season score = 0 for everyone right now.
-        var baselines: [String: Int] = [:]
-        for m in members where m.deletedAt == nil {
-            baselines[m.uid.uuidString] = Int(m.lifetimePoints)
-        }
-        env.seasonBaselines = baselines
-        env.seasonStart = now
-        env.seasonNumber = (needsInit ? 1 : env.seasonNumber + 1)
-        h.routinesJSON = env.encodedJSON()
-        try? context?.save()
         loadSeasonState(from: env)
     }
 
