@@ -1,0 +1,18 @@
+What's New in 3 (11)
+
+SEASONAL LADDER
+- Points and current levels now roll every 60 days, so each season is a fresh race for everyone.
+- Your lifetime levels are permanent -- tap into your profile to see your all-time best level and tier.
+- Your points wallet is untouched by the roll; you keep what you've earned to spend on rewards.
+
+LEADERBOARD CLEANUP
+- The give-points list on the Rewards tab is now a stable PARTICIPANTS section in fixed order, so rows don't jump around while you're handing out points (no more crediting the wrong kid).
+- The LEADERBOARD label now sits with the podium up top, which stays the live ranking.
+- The leaderboard inbox (tray icon) is now on the Rewards tab too, with Activity / Standings / Goals views.
+- Admins get a new LIFETIME LEVELS card in Standings to see how far each family member has climbed all-time.
+
+What to Test
+- Check the Rewards tab: give points and confirm the Participants rows stay put.
+- Open the tray inbox from Rewards and try the Activity / Standings / Goals tabs.
+- Admins: look for the LIFETIME LEVELS card under the Standings view.
+- Open your profile and confirm your lifetime level and current-season points both look right.
