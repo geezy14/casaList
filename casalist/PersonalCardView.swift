@@ -159,12 +159,12 @@ struct PersonalCardView: View {
             }
         }
         .sheet(isPresented: $showEditPhoto) { ProfilePhotoSheet() }
-        // Share sheet on its own view host — stacked .sheet modifiers on
-        // the same view conflict, which kept the share sheet from
-        // presenting (same bug class as the repeat picker).
+        // Preview-before-share: show the rendered card so the user sees
+        // exactly what they're sending, then share from there. On its own
+        // view host since stacked .sheet modifiers conflict.
         .background(
             Color.clear.sheet(isPresented: $showShareSheet) {
-                if let img = shareImage { ShareSheet(items: [img]) }
+                CardSharePreview(image: shareImage)
             }
         )
         .swipeToDismiss()
@@ -760,4 +760,71 @@ struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ uvc: UIActivityViewController, context: Context) {}
+}
+
+/// Preview of the rendered Personal Card before sharing — shows the exact
+/// image that will be sent, with a Share button (system share sheet) and
+/// Save to Photos. Lets the user confirm what they're sharing first.
+private struct CardSharePreview: View {
+    let image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSystemShare = false
+    @State private var savedConfirm = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(.systemBackground).ignoresSafeArea()
+                if let image {
+                    ScrollView {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+                            .padding()
+                    }
+                } else {
+                    ProgressView()
+                }
+            }
+            .navigationTitle("Share Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSystemShare = true
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(image == nil)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let image {
+                    Button {
+                        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                        savedConfirm = true
+                    } label: {
+                        Label(savedConfirm ? "Saved to Photos" : "Save to Photos",
+                              systemImage: savedConfirm ? "checkmark.circle.fill" : "square.and.arrow.down")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Capsule().fill(Color(.secondarySystemBackground)))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .disabled(savedConfirm)
+                }
+            }
+            .sheet(isPresented: $showSystemShare) {
+                if let image { ShareSheet(items: [image]) }
+            }
+        }
+    }
 }
