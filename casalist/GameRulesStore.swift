@@ -391,33 +391,59 @@ final class GameRulesStore: ObservableObject {
         let now = Date()
         let needsInit = env.seasonStart == nil
         let elapsed = env.seasonStart.map { now.timeIntervalSince($0) >= HouseholdRulesEnvelope.seasonLength } ?? false
-        if needsInit || elapsed {
-            // Full roll: snapshot every live member's lifetime total as the
-            // new baseline, so season score = 0 for everyone right now.
+        var changed = false
+        if needsInit {
+            // Season 1 starts NOW but counts everyone's EXISTING lifetime
+            // points. Baseline every live member EXPLICITLY at 0 (not an
+            // empty dict) so build-11 devices — whose old logic backfills
+            // only MISSING baselines with lifetime — leave these alone and
+            // converge instead of re-zeroing the score. Future seasons reset.
+            var baselines: [String: Int] = [:]
+            for m in members where m.deletedAt == nil {
+                baselines[m.uid.uuidString] = 0
+            }
+            env.seasonBaselines = baselines
+            env.seasonStart = now
+            env.seasonNumber = 1
+            changed = true
+        } else if elapsed {
+            // Roll to the NEXT season: snapshot every live member's lifetime
+            // total as the new baseline, so season score = 0 for everyone
+            // and a fresh race begins.
             var baselines: [String: Int] = [:]
             for m in members where m.deletedAt == nil {
                 baselines[m.uid.uuidString] = Int(m.lifetimePoints)
             }
             env.seasonBaselines = baselines
             env.seasonStart = now
-            env.seasonNumber = (needsInit ? 1 : env.seasonNumber + 1)
-            h.routinesJSON = env.encodedJSON()
-            try? context?.save()
-        } else {
-            // Season already running: backfill a baseline for any member
-            // that doesn't have one (joined or got a new uid via the
-            // dedupe/reconcile pipeline after init). Without this their
-            // season score falls back to full lifetime — e.g. a Legend
-            // showing 1,425 instead of 0 in a fresh season.
-            var changed = false
+            env.seasonNumber = env.seasonNumber + 1
+            changed = true
+        } else if env.seasonNumber <= 1 && env.seasonBaselines.values.contains(where: { $0 != 0 }) {
+            // One-time correction for the build-11 rollout: Season 1 shipped
+            // with lifetime baselines that zeroed everyone's score. Reset
+            // every baseline to EXPLICIT 0 (not empty) so existing points
+            // show again AND build-11 devices don't re-fill them with
+            // lifetime (their old backfill only touches MISSING baselines).
+            // Deterministic + idempotent, so mixed 11/12 devices converge.
+            for key in env.seasonBaselines.keys {
+                env.seasonBaselines[key] = 0
+            }
+            for m in members where m.deletedAt == nil {
+                env.seasonBaselines[m.uid.uuidString] = 0
+            }
+            changed = true
+        } else if env.seasonNumber >= 2 {
+            // Mid-season (Season 2+): backfill a baseline for any member
+            // missing one (joined or got a new uid via the dedupe/reconcile
+            // pipeline) so they start at 0 this season, not full lifetime.
             for m in members where m.deletedAt == nil && env.seasonBaselines[m.uid.uuidString] == nil {
                 env.seasonBaselines[m.uid.uuidString] = Int(m.lifetimePoints)
                 changed = true
             }
-            if changed {
-                h.routinesJSON = env.encodedJSON()
-                try? context?.save()
-            }
+        }
+        if changed {
+            h.routinesJSON = env.encodedJSON()
+            try? context?.save()
         }
         loadSeasonState(from: env)
     }
