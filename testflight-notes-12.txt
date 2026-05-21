@@ -1,0 +1,16 @@
+What's Fixed in 3 (12)
+
+POINTS ARE BACK
+- Build 11's new seasons feature accidentally showed everyone's leaderboard score as 0. Your points were never lost -- this was a display bug in how the season score was calculated.
+- This build restores everyone's points on the leaderboard, levels, and profile.
+- You only need ONE person in the family to update and open the app -- it repairs the whole household automatically, so everyone's points reappear even before they update.
+
+HOW SEASONS WORK NOW
+- Season 1 counts all the points you've already earned, so nothing resets on rollout.
+- Future seasons start a fresh race every 60 days.
+- Your lifetime levels are permanent (see them in your profile), and your spendable points wallet is never affected by a season.
+
+What to Test
+- Open the app and confirm the leaderboard shows real points again, not 0.
+- Check that the people who had earned points show their correct level (not Rookie).
+- Open your profile and confirm SEASON points and LIFETIME BEST both look right.
