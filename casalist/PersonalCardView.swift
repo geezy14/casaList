@@ -27,8 +27,10 @@ struct PersonalCardView: View {
     @StateObject private var gameRules = GameRulesStore.shared
 
     @State private var showEditPhoto = false
-    @State private var showShareSheet = false
-    @State private var shareImage: UIImage? = nil
+    /// Item-driven so the preview sheet can't present without the rendered
+    /// image (the old isPresented + separate-state combo presented blank
+    /// because the image wasn't captured at presentation time).
+    @State private var cardToShare: ShareableCard? = nil
 
     private var P: CasalistCottage.Palette {
         CasalistCottage.Palette.resolveForPreview(paletteName, dark: sys == .dark)
@@ -163,8 +165,8 @@ struct PersonalCardView: View {
         // exactly what they're sending, then share from there. On its own
         // view host since stacked .sheet modifiers conflict.
         .background(
-            Color.clear.sheet(isPresented: $showShareSheet) {
-                CardSharePreview(image: shareImage)
+            Color.clear.sheet(item: $cardToShare) { card in
+                CardSharePreview(image: card.image)
             }
         )
         .swipeToDismiss()
@@ -520,10 +522,15 @@ struct PersonalCardView: View {
         renderer.scale = UIScreen.main.scale
         renderer.proposedSize = ProposedViewSize(width: 390, height: 780)
         if let img = renderer.uiImage {
-            shareImage = img
-            showShareSheet = true
+            cardToShare = ShareableCard(image: img)
         }
     }
+}
+
+/// Identifiable wrapper so the share preview is driven by `.sheet(item:)`.
+struct ShareableCard: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 // ── Snapshot view (pure data — no Core Data, safe for ImageRenderer) ──────────
@@ -766,7 +773,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 /// image that will be sent, with a Share button (system share sheet) and
 /// Save to Photos. Lets the user confirm what they're sharing first.
 private struct CardSharePreview: View {
-    let image: UIImage?
+    let image: UIImage
     @Environment(\.dismiss) private var dismiss
     @State private var showSystemShare = false
     @State private var savedConfirm = false
@@ -775,17 +782,13 @@ private struct CardSharePreview: View {
         NavigationStack {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
-                if let image {
-                    ScrollView {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
-                            .padding()
-                    }
-                } else {
-                    ProgressView()
+                ScrollView {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+                        .padding()
                 }
             }
             .navigationTitle("Share Card")
@@ -800,30 +803,27 @@ private struct CardSharePreview: View {
                     } label: {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(image == nil)
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                if let image {
-                    Button {
-                        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                        savedConfirm = true
-                    } label: {
-                        Label(savedConfirm ? "Saved to Photos" : "Save to Photos",
-                              systemImage: savedConfirm ? "checkmark.circle.fill" : "square.and.arrow.down")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Capsule().fill(Color(.secondarySystemBackground)))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                    .disabled(savedConfirm)
+                Button {
+                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                    savedConfirm = true
+                } label: {
+                    Label(savedConfirm ? "Saved to Photos" : "Save to Photos",
+                          systemImage: savedConfirm ? "checkmark.circle.fill" : "square.and.arrow.down")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Capsule().fill(Color(.secondarySystemBackground)))
                 }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .disabled(savedConfirm)
             }
             .sheet(isPresented: $showSystemShare) {
-                if let image { ShareSheet(items: [image]) }
+                ShareSheet(items: [image])
             }
         }
     }
