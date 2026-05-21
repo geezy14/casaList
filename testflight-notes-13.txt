@@ -1,0 +1,14 @@
+What's Fixed in 3 (13)
+
+CLEAN SEASON RESET
+- Everyone's season score resets to 0 once with this update, giving a clean starting point. Admins can grant points from there to set each person where they belong.
+- You only need ONE person in the family to update and open the app -- the reset applies to the whole household automatically.
+- Lifetime levels (in your profile) and your spendable points wallet are not affected by the reset.
+
+LAYOUT
+- Fixed the REWARDS title so it's properly centered at the top of the Rewards tab.
+
+What to Test
+- Open the Rewards tab and confirm everyone's season score starts at 0.
+- As an admin, use the +/- on a person in the Participants list to grant points and confirm the number goes up.
+- Confirm the REWARDS title is centered.
