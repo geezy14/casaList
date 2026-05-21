@@ -254,6 +254,9 @@ struct LeaderboardInboxView: View {
             if iAmAdmin {
                 sectionHeader("CHORE STATS", tint: P.coral, count: members.count)
                 adminChoreStatsCard
+
+                sectionHeader("LIFETIME LEVELS", tint: P.lavender, count: members.count)
+                lifetimeLevelsCard
             }
 
             sectionHeader("RECENT REDEMPTIONS", tint: P.lavender, count: redeemedGoals.count)
@@ -386,6 +389,44 @@ struct LeaderboardInboxView: View {
                         .foregroundStyle(P.textDim)
                         .monospacedDigit()
                         .frame(width: 36, alignment: .trailing)
+                }
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
+    }
+
+    // MARK: - Lifetime levels (admin)
+
+    /// Lifetime prestige per member — never resets on season roll or
+    /// redemption. Lets admins see how far each kid has climbed all-time,
+    /// independent of the current season race. Sorted highest-first.
+    private var lifetimeLevelsCard: some View {
+        let ranked = members.sorted { $0.lifetimePoints > $1.lifetimePoints }
+        return VStack(spacing: 10) {
+            ForEach(ranked, id: \.uid) { m in
+                let lp = Int(m.lifetimePoints)
+                let lvl = levelNumber(for: lp)
+                HStack(spacing: 10) {
+                    LeveledAvatar(member: m, size: 32, showEmblem: false, overrideLevel: lvl)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(m.name)
+                            .font(.system(size: 13, weight: .heavy))
+                            .lineLimit(1)
+                        Text("\(AvatarLevel(level: lvl).emblem ?? "") Lvl \(lvl) · \(levelLabel(for: lp))")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(P.textMuted)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text("\(lp)")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(P.textDim)
+                        .monospacedDigit()
+                    Text("pts")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(P.textMuted)
                 }
             }
         }

@@ -1659,6 +1659,7 @@ public enum CasalistCottage {
         @State private var darkOverride: Bool? = nil
         @State private var showAddGoal: Bool = false
         @State private var showSettings: Bool = false
+        @State private var showInbox: Bool = false
         @State private var redeemTarget: FamilyGoal? = nil
         /// When admin taps a member's avatar in standings (and that member
         /// has at least one pending request), this opens an inline approval
@@ -1687,8 +1688,23 @@ public enum CasalistCottage {
         private func seasonPts(_ m: FamilyMember) -> Int { gameRules.seasonPoints(for: m) }
         private var sorted: [FamilyMember] { members.sorted { seasonPts($0) > seasonPts($1) } }
         private var topScore: Int { sorted.first.map(seasonPts) ?? 0 }
+        /// Stable order for the give-points list — alphabetical, so rows
+        /// never jump around as you tap +/- (which would risk crediting the
+        /// wrong person). Ranking lives in the podium, not here.
+        private var participants: [FamilyMember] {
+            members.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        }
         private var canManagePoints: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+        }
+        /// Pending reward-request count for the inbox badge — all pending
+        /// for admins, just mine otherwise (mirrors the Dashboard inbox).
+        private var inboxBadgeCount: Int {
+            let me = FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)
+            let pending = goalsQuery.filter { GoalApproval.isPending($0) && !$0.isRedeemed }
+            if me?.canManageFamily == true { return pending.count }
+            let lc = (me?.name.lowercased() ?? userName.lowercased())
+            return pending.filter { GoalApproval.realOwnerName($0).lowercased() == lc }.count
         }
         public init(onHome: (() -> Void)? = nil) { self.onHome = onHome }
 
@@ -1713,6 +1729,7 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddGoal) { AddGoalView() }
             .sheet(item: $redeemTarget) { g in redeemSheet(g) }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showInbox) { LeaderboardInboxView() }
             .sheet(item: $pendingForKid) { m in pendingForKidSheet(m) }
             .sheet(item: $earningBundleDetail) { b in bundleDetailSheet(b) }
             .celebration(visible: $celebrate, label: celebrateLabel, emoji: celebrateEmoji)
@@ -1914,6 +1931,19 @@ public enum CasalistCottage {
                     .tracking(1.5)
                     .foregroundStyle(P.text)
                 Spacer()
+                Button { showInbox = true } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                        if inboxBadgeCount > 0 {
+                            Text("\(inboxBadgeCount)")
+                                .font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(P.peach))
+                                .offset(x: 6, y: -2)
+                        }
+                    }
+                }
                 Button { showSettings = true } label: {
                     Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
                         .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
@@ -1924,6 +1954,9 @@ public enum CasalistCottage {
         private var content: some View {
             VStack(alignment: .leading, spacing: 16) {
                 if appLayout == "calm" { calmHero } else { heroCard }
+                Text("LEADERBOARD 🏆")
+                    .font(.system(size: 11, weight: .heavy)).tracking(1.2)
+                    .foregroundStyle(P.textDim).padding(.leading, 4)
                 podium
                 standings
                 redeemCatalog
@@ -2465,13 +2498,12 @@ public enum CasalistCottage {
 
         private var standings: some View {
             VStack(alignment: .leading, spacing: 8) {
-                Text("LEADERBOARD 🏆").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
+                Text("PARTICIPANTS").font(.system(size: 11, weight: .heavy)).tracking(1.2).foregroundStyle(P.textDim).padding(.leading, 4)
                 VStack(spacing: 0) {
-                    ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
+                    ForEach(Array(participants.enumerated()), id: \.element.uid) { i, m in
                         let pendingCount = pendingForMember(m).count
                         let canApprove = canManagePoints && pendingCount > 0
                         HStack(spacing: 12) {
-                            Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 20))
                             Button {
                                 if canApprove { pendingForKid = m }
                             } label: {
@@ -2536,7 +2568,7 @@ public enum CasalistCottage {
                             if i > 0 { Rectangle().fill(P.border).frame(height: 1) }
                         }
                     }
-                    if sorted.isEmpty {
+                    if participants.isEmpty {
                         Text("No family members yet").font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(P.textMuted).padding(.vertical, 24)
                     }
