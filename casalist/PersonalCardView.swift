@@ -236,6 +236,17 @@ struct PersonalCardView: View {
                         .font(.system(size: 10, weight: .heavy))
                         .tracking(1.2)
                         .foregroundStyle(myRankLevel.ringColor)
+                    Text("· LIFETIME BEST")
+                        .font(.system(size: 8, weight: .heavy)).tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                // Current 60-day season standing (separate from lifetime).
+                if let me, gameRules.seasonStart != nil {
+                    let sp = gameRules.seasonPoints(for: me)
+                    let days = gameRules.seasonDaysRemaining()
+                    Text("SEASON \(gameRules.seasonNumber) · \(sp) PTS · \(days)D LEFT")
+                        .font(.system(size: 8, weight: .heavy)).tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.55))
                 }
                 Text("MEMBER SINCE")
                     .font(.system(size: 8, weight: .heavy))

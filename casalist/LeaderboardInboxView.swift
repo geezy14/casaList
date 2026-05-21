@@ -55,8 +55,9 @@ struct LeaderboardInboxView: View {
     private var approvedNotRedeemed: [FamilyGoal] {
         goals.filter { !GoalApproval.isPending($0) && !$0.isRedeemed }
     }
+    private func seasonPts(_ m: FamilyMember) -> Int { gameRules.seasonPoints(for: m) }
     private var sortedMembers: [FamilyMember] {
-        members.sorted { $0.points > $1.points }
+        members.sorted { seasonPts($0) > seasonPts($1) }
     }
     private func member(named n: String) -> FamilyMember? {
         members.first { $0.name.lowercased() == n.lowercased() }
@@ -325,7 +326,7 @@ struct LeaderboardInboxView: View {
         Group {
             if let top = sortedMembers.first {
                 let runner = sortedMembers.dropFirst().first
-                let lead = Int(top.points - (runner?.points ?? 0))
+                let lead = seasonPts(top) - (runner.map(seasonPts) ?? 0)
                 HStack(spacing: 14) {
                     LeveledAvatar(member: top, size: 52)
                     VStack(alignment: .leading, spacing: 4) {
@@ -336,12 +337,12 @@ struct LeaderboardInboxView: View {
                             .font(.system(size: 20, weight: .heavy))
                             .foregroundStyle(.white)
                         if let r = runner, lead > 0 {
-                            Text("\(top.points) pts · \(lead) ahead of \(r.name)")
+                            Text("\(seasonPts(top)) pts · \(lead) ahead of \(r.name)")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.9))
                                 .lineLimit(1)
                         } else {
-                            Text("\(top.points) pts")
+                            Text("\(seasonPts(top)) pts")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.9))
                         }

@@ -678,6 +678,14 @@ struct CasalistApp: App {
         GameRulesStore.shared.attach(to: active, context: stack.context)
     }
 
+    /// Initialize Season 1 / roll the 60-day season ladder, household-wide.
+    private func rollSeasonIfNeeded() {
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        let members = (try? stack.context.fetch(req)) ?? []
+        GameRulesStore.shared.rollSeasonIfNeeded(members: members)
+    }
+
     var body: some Scene {
         WindowGroup {
             CasalistCottage.Root()
@@ -695,6 +703,10 @@ struct CasalistApp: App {
                     // granted points count toward level (fixes "Rookie at
                     // 45 pts"). Idempotent.
                     FamilyPoints.backfillLifetime(in: stack.context)
+                    // Initialize / roll the 60-day season ladder
+                    // (household-wide). Must run after backfill so Season 1
+                    // baselines capture the corrected lifetime totals.
+                    rollSeasonIfNeeded()
                     LocationSharingService.shared.resumeIfPreviouslySharing()
                     // Re-register geofences for any active
                     // location-based reminders so monitoring picks up

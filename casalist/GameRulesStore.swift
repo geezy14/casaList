@@ -158,18 +158,40 @@ struct HouseholdRulesEnvelope: Codable {
     /// rescale (Legend at 1,300).
     static let economyVersion = 1
 
-    init(routines: [ChoreRoutineTemplate], rules: GameRules, rulesVersion: Int = 0) {
+    // MARK: Seasonal ladder
+    /// When the current 60-day season began (household-wide). nil = not
+    /// initialized yet (first launch seeds it).
+    var seasonStart: Date? = nil
+    /// Per-member lifetimePoints snapshot at season start, keyed by member
+    /// uid string. Season score = current lifetimePoints − this baseline,
+    /// so the ladder resets without touching the wallet or prestige.
+    var seasonBaselines: [String: Int] = [:]
+    /// Increments each roll, for display ("Season 3").
+    var seasonNumber: Int = 0
+    /// Season length.
+    static let seasonLength: TimeInterval = 60 * 24 * 60 * 60  // 60 days
+
+    init(routines: [ChoreRoutineTemplate], rules: GameRules, rulesVersion: Int = 0,
+         seasonStart: Date? = nil, seasonBaselines: [String: Int] = [:], seasonNumber: Int = 0) {
         self.routines = routines
         self.rules = rules
         self.rulesVersion = rulesVersion
+        self.seasonStart = seasonStart
+        self.seasonBaselines = seasonBaselines
+        self.seasonNumber = seasonNumber
     }
 
-    private enum CodingKeys: String, CodingKey { case routines, rules, rulesVersion }
+    private enum CodingKeys: String, CodingKey {
+        case routines, rules, rulesVersion, seasonStart, seasonBaselines, seasonNumber
+    }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.routines = (try? c.decode([ChoreRoutineTemplate].self, forKey: .routines)) ?? []
         self.rules = (try? c.decode(GameRules.self, forKey: .rules)) ?? .default
         self.rulesVersion = (try? c.decode(Int.self, forKey: .rulesVersion)) ?? 0
+        self.seasonStart = try? c.decode(Date.self, forKey: .seasonStart)
+        self.seasonBaselines = (try? c.decode([String: Int].self, forKey: .seasonBaselines)) ?? [:]
+        self.seasonNumber = (try? c.decode(Int.self, forKey: .seasonNumber)) ?? 0
     }
 
     static let `default` = HouseholdRulesEnvelope(
@@ -254,6 +276,12 @@ final class GameRulesStore: ObservableObject {
         didSet { save() }
     }
 
+    /// Seasonal ladder state (mirrors the envelope). Published so the
+    /// leaderboard / profile update when a season rolls.
+    @Published private(set) var seasonStart: Date? = nil
+    @Published private(set) var seasonNumber: Int = 0
+    private var seasonBaselines: [String: Int] = [:]
+
     /// Toggle so the `didSet` doesn't loop when we reload from the
     /// household after a remote sync.
     private var suppressSave: Bool = false
@@ -313,6 +341,8 @@ final class GameRulesStore: ObservableObject {
             rules = env.rules
             suppressSave = false
         }
+        // Load season state into published mirror.
+        loadSeasonState(from: HouseholdRulesEnvelope.decode(h.routinesJSON))
     }
 
     /// Re-read rules from the attached household. Call on remote-change
@@ -320,10 +350,63 @@ final class GameRulesStore: ObservableObject {
     func refreshFromHousehold() {
         guard let h = household else { return }
         let env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        loadSeasonState(from: env)
         guard env.rules != rules else { return }
         suppressSave = true
         rules = env.rules
         suppressSave = false
+    }
+
+    private func loadSeasonState(from env: HouseholdRulesEnvelope) {
+        seasonStart = env.seasonStart
+        seasonBaselines = env.seasonBaselines
+        seasonNumber = env.seasonNumber
+    }
+
+    // MARK: - Seasonal ladder
+
+    /// A member's CURRENT-season score = lifetime earned since the season
+    /// baseline. Drives current level, tier badge, and the leaderboard.
+    /// Never negative. The spendable wallet (`points`) is separate.
+    func seasonPoints(for member: FamilyMember) -> Int {
+        let base = seasonBaselines[member.uid.uuidString] ?? 0
+        return max(0, Int(member.lifetimePoints) - base)
+    }
+
+    /// Whole days left in the current season (0 if not started).
+    func seasonDaysRemaining() -> Int {
+        guard let start = seasonStart else { return 0 }
+        let end = start.addingTimeInterval(HouseholdRulesEnvelope.seasonLength)
+        let secs = end.timeIntervalSinceNow
+        return max(0, Int((secs / 86_400).rounded(.up)))
+    }
+
+    /// Initialize Season 1 (fresh — everyone's ladder starts at 0) or roll
+    /// to the next season when 60 days elapse. Household-wide and guarded by
+    /// `seasonStart`, so once it rolls and syncs, other devices skip it.
+    /// Snapshots each member's lifetimePoints as the new baseline.
+    func rollSeasonIfNeeded(members: [FamilyMember]) {
+        guard let h = household else { return }
+        var env = HouseholdRulesEnvelope.decode(h.routinesJSON)
+        let now = Date()
+        let needsInit = env.seasonStart == nil
+        let elapsed = env.seasonStart.map { now.timeIntervalSince($0) >= HouseholdRulesEnvelope.seasonLength } ?? false
+        guard needsInit || elapsed else {
+            loadSeasonState(from: env)
+            return
+        }
+        // Snapshot every live member's lifetime total as the new baseline,
+        // so season score = 0 for everyone right now.
+        var baselines: [String: Int] = [:]
+        for m in members where m.deletedAt == nil {
+            baselines[m.uid.uuidString] = Int(m.lifetimePoints)
+        }
+        env.seasonBaselines = baselines
+        env.seasonStart = now
+        env.seasonNumber = (needsInit ? 1 : env.seasonNumber + 1)
+        h.routinesJSON = env.encodedJSON()
+        try? context?.save()
+        loadSeasonState(from: env)
     }
 
     private func save() {

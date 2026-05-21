@@ -124,15 +124,12 @@ struct LeveledAvatar: View {
     /// member data when nil.
     var overrideLevel: Int? = nil
 
-    /// Effective lifetime pts — use whichever is higher so pre-migration members
-    /// (lifetimePoints == 0) still get the right ring from their current balance.
-    private var effectiveLifetime: Int {
-        let lp = Int(member.lifetimePoints)
-        let p  = Int(member.points)
-        return lp > p ? lp : p
-    }
+    /// The avatar's tier follows the CURRENT-season level by default (rolls
+    /// every 60 days). Pass `overrideLevel` to force a specific level — the
+    /// profile uses that to show lifetime prestige instead.
     private var level: AvatarLevel {
-        AvatarLevel(level: overrideLevel ?? levelNumber(for: effectiveLifetime))
+        let lvl = overrideLevel ?? levelNumber(for: GameRulesStore.shared.seasonPoints(for: member))
+        return AvatarLevel(level: lvl)
     }
 
     var body: some View {

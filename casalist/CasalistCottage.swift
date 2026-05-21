@@ -341,7 +341,10 @@ public enum CasalistCottage {
         @AppStorage("paletteName") private var paletteName: String = "vivid"
         @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
-        private var sortedMembers: [FamilyMember] { members.sorted { $0.points > $1.points } }
+        @StateObject private var gameRules = GameRulesStore.shared
+        /// Current-season score (drives the dashboard star card's level/rank).
+        private func seasonPts(_ m: FamilyMember) -> Int { gameRules.seasonPoints(for: m) }
+        private var sortedMembers: [FamilyMember] { members.sorted { seasonPts($0) > seasonPts($1) } }
         private var canManage: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
@@ -1313,7 +1316,7 @@ public enum CasalistCottage {
         private var starCard: some View {
             let sorted = sortedMembers
             let top = sorted.first
-            let lead = (top?.points ?? 0) - (sorted.dropFirst().first?.points ?? 0)
+            let lead = (top.map(seasonPts) ?? 0) - (sorted.dropFirst().first.map(seasonPts) ?? 0)
             return ZStack(alignment: .bottomTrailing) {
                 Text("🏆").font(.system(size: 80)).offset(x: -10, y: 30).opacity(0.2)
                 VStack(alignment: .leading, spacing: 10) {
@@ -1328,19 +1331,18 @@ public enum CasalistCottage {
                                 // avatar's tier ring/emblem can't diverge from
                                 // the displayed rank.
                                 LeveledAvatar(member: top, size: 56,
-                                              overrideLevel: levelNumber(for: Int(max(top.lifetimePoints, top.points))))
+                                              overrideLevel: levelNumber(for: seasonPts(top)))
                             }
                             .buttonStyle(.row)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("1ST PLACE").font(.system(size: 11, weight: .heavy)).tracking(0.8).opacity(0.7)
                                 Text(top.name).font(.system(size: 22, weight: .heavy))
-                                Text("\(top.points) pts\(lead > 0 ? " · \(lead) ahead!" : "")").font(.system(size: 13, weight: .bold))
+                                Text("\(seasonPts(top)) pts\(lead > 0 ? " · \(lead) ahead!" : "")").font(.system(size: 13, weight: .bold))
                             }
                         }
                     }
                     ForEach(Array(sorted.enumerated()), id: \.element.uid) { i, m in
-                        let lp = Int(max(m.lifetimePoints, m.points))
-                        let rank = levelLabel(for: lp)
+                        let rank = levelLabel(for: seasonPts(m))
                         HStack(spacing: 10) {
                             Text(["🥇","🥈","🥉","4️⃣"][min(i, 3)]).font(.system(size: 14))
                             VStack(alignment: .leading, spacing: 1) {
@@ -1348,7 +1350,7 @@ public enum CasalistCottage {
                                 Text(rank).font(.system(size: 10, weight: .semibold)).opacity(0.6)
                             }
                             Spacer()
-                            Text("\(m.points)").font(.system(size: 13, weight: .heavy)).monospacedDigit()
+                            Text("\(seasonPts(m))").font(.system(size: 13, weight: .heavy)).monospacedDigit()
                         }
                     }
                 }
@@ -1680,8 +1682,11 @@ public enum CasalistCottage {
         @AppStorage("paletteName") private var paletteName: String = "vivid"
         @AppStorage("appLayout") private var appLayout: String = "rings"
         private var P: Palette { Palette.resolveForPreview(paletteName, dark: dark) }
-        private var sorted: [FamilyMember] { members.sorted { $0.points > $1.points } }
-        private var topScore: Int { Int(sorted.first?.points ?? 0) }
+        /// Current-season score for a member — drives rank, level, and tier.
+        /// Wallet (member.points) is separate and shown in the redeem area.
+        private func seasonPts(_ m: FamilyMember) -> Int { gameRules.seasonPoints(for: m) }
+        private var sorted: [FamilyMember] { members.sorted { seasonPts($0) > seasonPts($1) } }
+        private var topScore: Int { sorted.first.map(seasonPts) ?? 0 }
         private var canManagePoints: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
@@ -2269,7 +2274,7 @@ public enum CasalistCottage {
                     .foregroundStyle(P.text)
                 if let me = myMember {
                     let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
-                    Text("#\(myRank) · \(me.points) pts")
+                    Text("#\(myRank) · \(seasonPts(me)) pts")
                         .font(.system(size: 17, weight: .regular, design: .rounded))
                         .foregroundStyle(P.textDim)
                 } else {
@@ -2285,9 +2290,10 @@ public enum CasalistCottage {
                 if let me = myMember {
                     let myRank = (sorted.firstIndex(where: { $0.uid == me.uid }) ?? 0) + 1
                     let streak = StreakTracker.effectiveCurrent(for: me.uid)
-                    // lifetimePoints is 0 on pre-migration members; fall back to
-                    // current points until real lifetime data accumulates.
-                    let lp = Int(max(me.lifetimePoints, me.points))
+                    // Current level/tier track the SEASON score (rolls every
+                    // 60 days); the wallet (me.points) is shown in the redeem
+                    // area. Prestige (lifetime) lives in the profile.
+                    let lp = seasonPts(me)
                     let level = levelNumber(for: lp)
                     let nextLevelPts = nextLevelThreshold(for: lp) ?? (lp + 1000)
                     let prevLevelPts = nextLevelPts - 1  // only used for display; progress fn handles thresholds
@@ -2308,8 +2314,8 @@ public enum CasalistCottage {
                                 }
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 1) {
-                                        Text("\(me.points)").font(.system(size: 22, weight: .heavy)).foregroundStyle(accentColor)
-                                        Text("POINTS").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
+                                        Text("\(lp)").font(.system(size: 22, weight: .heavy)).foregroundStyle(accentColor)
+                                        Text("SEASON").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(P.textMuted)
                                     }
                                     if streak > 0 {
                                         VStack(alignment: .leading, spacing: 1) {
@@ -2430,9 +2436,9 @@ public enum CasalistCottage {
                             let podColor = place == 1 ? P.peach : (place == 2 ? P.coral : P.mint)
                             VStack(spacing: 6) {
                                 LeveledAvatar(member: m, size: sz,
-                                              overrideLevel: levelNumber(for: Int(max(m.lifetimePoints, m.points))))
+                                              overrideLevel: levelNumber(for: seasonPts(m)))
                                 Text(m.name).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(rgb: 0x3B2A22))
-                                Text("\(m.points) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
+                                Text("\(seasonPts(m)) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
                                 Text(["🥇","🥈","🥉"][place - 1]).font(.system(size: place == 1 ? 32 : 26, weight: .heavy))
                                     .frame(maxWidth: .infinity).frame(height: podH)
                                     .background(UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12).fill(podColor))
@@ -2471,7 +2477,7 @@ public enum CasalistCottage {
                             } label: {
                                 ZStack(alignment: .topTrailing) {
                                     LeveledAvatar(member: m, size: 36, showEmblem: false,
-                                                  overrideLevel: levelNumber(for: Int(max(m.lifetimePoints, m.points))))
+                                                  overrideLevel: levelNumber(for: seasonPts(m)))
                                     if canApprove {
                                         Text("\(pendingCount)")
                                             .font(.system(size: 9, weight: .heavy))
@@ -2506,7 +2512,7 @@ public enum CasalistCottage {
                                                 .foregroundStyle(P.text)
                                         }.buttonStyle(.row)
                                     }
-                                    Text("\(m.points) pts").font(.system(size: 14, weight: .heavy)).foregroundStyle(m.color).monospacedDigit()
+                                    Text("\(seasonPts(m)) pts").font(.system(size: 14, weight: .heavy)).foregroundStyle(m.color).monospacedDigit()
                                     if canManagePoints {
                                         Button { adjustPoints(m, by: 5) } label: {
                                             Image(systemName: "plus").font(.system(size: 11, weight: .heavy))
@@ -2521,7 +2527,7 @@ public enum CasalistCottage {
                                     RoundedRectangle(cornerRadius: 3).fill(P.surfaceAlt).overlay(alignment: .leading) {
                                         RoundedRectangle(cornerRadius: 3)
                                             .fill(LinearGradient(colors: [m.color, m.color.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
-                                            .frame(width: g.size.width * CGFloat(m.points) / CGFloat(max(topScore, 1)))
+                                            .frame(width: g.size.width * CGFloat(seasonPts(m)) / CGFloat(max(topScore, 1)))
                                     }
                                 }.frame(height: 6)
                             }
