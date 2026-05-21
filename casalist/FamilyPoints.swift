@@ -122,4 +122,22 @@ enum FamilyPoints {
         let trimmed = name.trimmingCharacters(in: .whitespaces).lowercased()
         return members.first { $0.name.lowercased() == trimmed }
     }
+
+    /// Ensure every member's lifetimePoints is at least their current balance.
+    /// Fixes members whose points were granted via the admin +/- stepper
+    /// before that path credited lifetime — they showed a low level (e.g.
+    /// "Rookie" at 45 pts) because the level reads off lifetime. Idempotent
+    /// and monotonic: only ever raises lifetime, never lowers it. Safe to
+    /// run on every launch.
+    static func backfillLifetime(in context: NSManagedObjectContext) {
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        req.predicate = NSPredicate(format: "deletedAt == nil")
+        guard let members = try? context.fetch(req) else { return }
+        var changed = false
+        for m in members where m.lifetimePoints < m.points {
+            m.lifetimePoints = m.points
+            changed = true
+        }
+        if changed { try? context.save() }
+    }
 }

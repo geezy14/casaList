@@ -691,6 +691,10 @@ struct CasalistApp: App {
                 .task {
                     HouseholdProvisioner.reconcile(in: stack.context)
                     attachGameRulesStore()
+                    // Raise lifetime to at least current balance so admin-
+                    // granted points count toward level (fixes "Rookie at
+                    // 45 pts"). Idempotent.
+                    FamilyPoints.backfillLifetime(in: stack.context)
                     LocationSharingService.shared.resumeIfPreviouslySharing()
                     // Re-register geofences for any active
                     // location-based reminders so monitoring picks up
