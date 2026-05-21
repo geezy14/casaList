@@ -1,0 +1,21 @@
+Casalist 3.0 (build 10)
+
+Bug fixes.
+
+What's fixed
+- Share your profile card actually works now. Tapping Share opens
+  a preview of your card so you see exactly what you're sending,
+  then Share or Save to Photos from there. (It used to come up
+  blank.)
+- Given points count toward your level. Points an admin awards
+  with the +/- buttons now raise your level too, not just your
+  spendable balance - so a kid given points levels up like they
+  should (no more "Rookie" with a high score).
+
+What to test
+- Open your profile card, tap Share, confirm the preview shows
+  your card, then share or save it.
+- As an admin, give a member points with the + button and confirm
+  their level/tier name updates to match their total.
+
+Thanks!
