@@ -1917,36 +1917,39 @@ public enum CasalistCottage {
     }
 
         private var topBar: some View {
-            HStack(spacing: 10) {
-                Button { if let onHome { onHome() } else { dismiss() } } label: {
-                    Image(systemName: "house.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(P.text)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.surfaceAlt))
-                }
-                Spacer()
+            // Title centered via a ZStack so the asymmetric button clusters
+            // (one on the left, two on the right) don't shove it off-center.
+            ZStack {
                 Text("REWARDS")
                     .font(.system(size: 14, weight: .heavy))
                     .tracking(1.5)
                     .foregroundStyle(P.text)
-                Spacer()
-                Button { showInbox = true } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                        if inboxBadgeCount > 0 {
-                            Text("\(inboxBadgeCount)")
-                                .font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
-                                .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(Capsule().fill(P.peach))
-                                .offset(x: 6, y: -2)
+                HStack(spacing: 10) {
+                    Button { if let onHome { onHome() } else { dismiss() } } label: {
+                        Image(systemName: "house.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(P.text)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(P.surfaceAlt))
+                    }
+                    Spacer()
+                    Button { showInbox = true } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                                .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                            if inboxBadgeCount > 0 {
+                                Text("\(inboxBadgeCount)")
+                                    .font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Capsule().fill(P.peach))
+                                    .offset(x: 6, y: -2)
+                            }
                         }
                     }
-                }
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
+                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
+                    }
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }

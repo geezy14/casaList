@@ -168,21 +168,29 @@ struct HouseholdRulesEnvelope: Codable {
     var seasonBaselines: [String: Int] = [:]
     /// Increments each roll, for display ("Season 3").
     var seasonNumber: Int = 0
+    /// Monotonic marker for a forced household-wide season reset shipped in
+    /// code. When `GameRulesStore.seasonEpoch` is higher than the stored
+    /// value, the app performs a one-time reset (snapshot lifetime as the
+    /// baseline so every score returns to 0) and stamps this. Lets us push
+    /// a clean reset without it flip-flopping on every launch.
+    var seasonEpoch: Int = 0
     /// Season length.
     static let seasonLength: TimeInterval = 60 * 24 * 60 * 60  // 60 days
 
     init(routines: [ChoreRoutineTemplate], rules: GameRules, rulesVersion: Int = 0,
-         seasonStart: Date? = nil, seasonBaselines: [String: Int] = [:], seasonNumber: Int = 0) {
+         seasonStart: Date? = nil, seasonBaselines: [String: Int] = [:], seasonNumber: Int = 0,
+         seasonEpoch: Int = 0) {
         self.routines = routines
         self.rules = rules
         self.rulesVersion = rulesVersion
         self.seasonStart = seasonStart
         self.seasonBaselines = seasonBaselines
         self.seasonNumber = seasonNumber
+        self.seasonEpoch = seasonEpoch
     }
 
     private enum CodingKeys: String, CodingKey {
-        case routines, rules, rulesVersion, seasonStart, seasonBaselines, seasonNumber
+        case routines, rules, rulesVersion, seasonStart, seasonBaselines, seasonNumber, seasonEpoch
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -192,6 +200,7 @@ struct HouseholdRulesEnvelope: Codable {
         self.seasonStart = try? c.decode(Date.self, forKey: .seasonStart)
         self.seasonBaselines = (try? c.decode([String: Int].self, forKey: .seasonBaselines)) ?? [:]
         self.seasonNumber = (try? c.decode(Int.self, forKey: .seasonNumber)) ?? 0
+        self.seasonEpoch = (try? c.decode(Int.self, forKey: .seasonEpoch)) ?? 0
     }
 
     static let `default` = HouseholdRulesEnvelope(
@@ -281,6 +290,12 @@ final class GameRulesStore: ObservableObject {
     @Published private(set) var seasonStart: Date? = nil
     @Published private(set) var seasonNumber: Int = 0
     private var seasonBaselines: [String: Int] = [:]
+
+    /// Bump to force a one-time household-wide season reset on the next
+    /// launch (every score back to 0; admins re-grant from there). Stored
+    /// per-household via `HouseholdRulesEnvelope.seasonEpoch`, so the reset
+    /// runs once and never flip-flops.
+    static let seasonEpoch = 1
 
     /// Toggle so the `didSet` doesn't loop when we reload from the
     /// household after a remote sync.
@@ -391,51 +406,50 @@ final class GameRulesStore: ObservableObject {
         let now = Date()
         let needsInit = env.seasonStart == nil
         let elapsed = env.seasonStart.map { now.timeIntervalSince($0) >= HouseholdRulesEnvelope.seasonLength } ?? false
+        // Snapshot every live member's lifetime as their baseline, so
+        // season score (lifetime − baseline) starts at 0 for everyone.
+        func snapshot() -> [String: Int] {
+            var b: [String: Int] = [:]
+            for m in members where m.deletedAt == nil { b[m.uid.uuidString] = Int(m.lifetimePoints) }
+            return b
+        }
         var changed = false
         if needsInit {
-            // Season 1 starts NOW but counts everyone's EXISTING lifetime
-            // points. Baseline every live member EXPLICITLY at 0 (not an
-            // empty dict) so build-11 devices — whose old logic backfills
-            // only MISSING baselines with lifetime — leave these alone and
-            // converge instead of re-zeroing the score. Future seasons reset.
-            var baselines: [String: Int] = [:]
-            for m in members where m.deletedAt == nil {
-                baselines[m.uid.uuidString] = 0
-            }
-            env.seasonBaselines = baselines
+            env.seasonBaselines = snapshot()
             env.seasonStart = now
             env.seasonNumber = 1
+            env.seasonEpoch = Self.seasonEpoch
             changed = true
         } else if elapsed {
-            // Roll to the NEXT season: snapshot every live member's lifetime
-            // total as the new baseline, so season score = 0 for everyone
-            // and a fresh race begins.
-            var baselines: [String: Int] = [:]
-            for m in members where m.deletedAt == nil {
-                baselines[m.uid.uuidString] = Int(m.lifetimePoints)
-            }
-            env.seasonBaselines = baselines
+            // Natural 60-day roll: fresh race, everyone back to 0.
+            env.seasonBaselines = snapshot()
             env.seasonStart = now
             env.seasonNumber = env.seasonNumber + 1
+            env.seasonEpoch = Self.seasonEpoch
             changed = true
-        } else if env.seasonNumber <= 1 && env.seasonBaselines.values.contains(where: { $0 != 0 }) {
-            // One-time correction for the build-11 rollout: Season 1 shipped
-            // with lifetime baselines that zeroed everyone's score. Reset
-            // every baseline to EXPLICIT 0 (not empty) so existing points
-            // show again AND build-11 devices don't re-fill them with
-            // lifetime (their old backfill only touches MISSING baselines).
-            // Deterministic + idempotent, so mixed 11/12 devices converge.
-            for key in env.seasonBaselines.keys {
-                env.seasonBaselines[key] = 0
-            }
-            for m in members where m.deletedAt == nil {
-                env.seasonBaselines[m.uid.uuidString] = 0
-            }
+        } else if env.seasonEpoch < Self.seasonEpoch && env.seasonNumber < 2 {
+            // Forced one-time reset shipped in code: snapshot lifetime so
+            // every score returns to 0, then admins re-grant from there.
+            // Two guards make this safe in a mixed-build prod household:
+            //   • seasonEpoch < target  — only fires for households that
+            //     predate this reset (a fresh build-13 household sets the
+            //     epoch at init, so it's excluded).
+            //   • seasonNumber < 2      — old builds (11/12) DROP the epoch
+            //     field when they re-save the envelope, which could re-fire
+            //     the reset and wipe admin re-grants. They DO preserve
+            //     seasonNumber, so bumping it past Season 1 permanently
+            //     latches the reset off even if the epoch is lost.
+            // Bumping to >= 2 also moves the household out of build-11/12's
+            // "rewrite baselines" zone so they converge instead of fighting.
+            env.seasonBaselines = snapshot()
+            env.seasonStart = now
+            env.seasonNumber = max(env.seasonNumber + 1, 2)
+            env.seasonEpoch = Self.seasonEpoch
             changed = true
-        } else if env.seasonNumber >= 2 {
-            // Mid-season (Season 2+): backfill a baseline for any member
-            // missing one (joined or got a new uid via the dedupe/reconcile
-            // pipeline) so they start at 0 this season, not full lifetime.
+        } else {
+            // Mid-season: backfill a baseline for any member missing one
+            // (joined, or got a new uid via the dedupe/reconcile pipeline)
+            // so they start at 0 this season, not their full lifetime.
             for m in members where m.deletedAt == nil && env.seasonBaselines[m.uid.uuidString] == nil {
                 env.seasonBaselines[m.uid.uuidString] = Int(m.lifetimePoints)
                 changed = true
