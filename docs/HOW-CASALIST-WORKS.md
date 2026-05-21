@@ -2,70 +2,86 @@
 
 ## The big idea
 Casalist turns running a household into a lightweight game. Adults set up
-chores worth points, kids (and anyone) complete them to earn points, climb
+chores worth points; kids (and anyone) complete them to earn points, climb
 levels, build streaks, unlock badges, and cash points in for real rewards.
 Everything syncs across the whole family in real time over iCloud.
 
 The core loop:
-> **Do chores → earn points → level up + earn rewards → repeat**
+> **Do chores → earn points → level up + cash in rewards → repeat**
 
 ---
 
-## 💰 Points — two kinds (this trips people up)
-There are **two separate point counters** per person:
+## 💰 Points — two buckets (this trips people up)
+Every person has **two** point counters:
 
 | Counter | What it does | Goes down? |
 |---|---|---|
-| **Points (balance)** | Your spendable currency. Cash it in for rewards. | Yes — drops when you redeem |
-| **Lifetime points (XP)** | Your all-time total. Drives your **level**. | **Never** — only climbs |
+| **Balance (spendable)** | Your currency. Cash it in for rewards. | Yes — drops when you redeem |
+| **Lifetime (XP)** | All-time total. Drives your **level**. | **Never** — only climbs |
 
-So you can spend your balance on a reward without losing your level/rank.
-Completing a chore adds to **both**; redeeming a reward subtracts only from
-your **balance**.
+Completing a chore adds to **both**. Redeeming a reward subtracts only from
+your **balance** — your level never drops for spending. Points an admin
+awards with the **+/- buttons** also count toward lifetime (so given points
+level you up, not just your balance).
 
-Point values are set per category in **Game Rules** (e.g. Chores 10,
-Homework 10, Maintenance 20…), and admins can override per chore.
+Chores are worth up to **15 base points** (set per category in Game Rules);
+anything above 15 comes from **bonuses** (chore bundles, etc.).
 
 ---
 
-## 🎚️ Levels & Ranks (1 → 10)
-Your **lifetime points** unlock 10 levels, each with a fun title:
+## 🎚️ Levels (1 → 10) and the climb
+Your **lifetime points** unlock 10 levels. The curve is gentle early and
+steep late — quick wins at the start, a real grind to Legend:
 
-| Lvl | Lifetime pts | Title | Tier / emblem |
+| Lvl | Name | Lifetime pts | Chores* | Tier |
+|---|---|---|---|---|
+| 1 | Rookie | 0 | 0 | 🌱 Sprout |
+| 2 | Broom Pilot | 25 | 2 | 🌱 Sprout |
+| 3 | Mop Jockey | 60 | 4 | 🌱 Sprout |
+| 4 | Chore Warrior | 110 | 8 | 🔥 Ember |
+| 5 | Task Slayer | 180 | 12 | 🔥 Ember |
+| 6 | Achiever | 280 | 19 | 🔥 Ember |
+| 7 | Pro | 420 | 28 | 🔥 Ember |
+| 8 | Expert | 620 | 41 | 💎 Diamond |
+| 9 | Master | 940 | 63 | 💎 Diamond |
+| 10 | Legend | 1,300 | 87 | 💎 Diamond |
+
+\* approx chores to reach, at 15 pts each. First 5 levels in ~12 chores;
+Legend ≈ 87. (Higher-value or bonus chores get there faster.)
+
+The hero card shows an **XP bar** filling toward your *next* level — so
+day-to-day you're chasing a small, reachable number, not the 1,300.
+
+---
+
+## 🏆 Tiers (the avatar badge + ring)
+Three tiers group the 10 levels, each with its own non-medal badge and ring
+color (kept distinct from the leaderboard's 🥇🥈🥉 placement medals):
+
+| Tier | Badge | Ring | Levels |
 |---|---|---|---|
-| 1 | 0 | Rookie | Rookie (no emblem) |
-| 2 | 100 | Broom Pilot | 🥉 Bronze |
-| 3 | 250 | Mop Jockey | 🥉 Bronze |
-| 4 | 450 | Chore Warrior | 🥈 Silver |
-| 5 | 700 | Task Slayer | 🥈 Silver |
-| 6 | 1,000 | Achiever | 🥇 Gold |
-| 7 | 1,350 | Pro | 🥇 Gold |
-| 8 | 1,750 | Expert | 👑 Platinum |
-| 9 | 2,200 | Master | 👑 Platinum |
-| 10 | 2,700 | Legend | 👑 Platinum |
+| **Sprout** | 🌱 | Green | 1–3 |
+| **Ember** | 🔥 | Orange | 4–7 |
+| **Diamond** | 💎 | Cyan | 8–10 |
 
-Your avatar gets a **colored ring + emblem** for your tier, and the hero
-card shows an **XP bar** filling toward the next level.
+Tier follows your level, which follows lifetime points — so a person in 1st
+place who's only Level 4 shows an Ember badge (tier), while the gold "1" next
+to their name is their placement (rank). Two different things.
 
 ---
 
 ## 🔥 Streaks
-**Daily streaks** (per person):
-- Complete at least one point chore on a day → your streak ticks up.
-- Do it again the **next day** → streak grows (`current` and all-time
-  `best` are both tracked).
-- Miss a day → it resets to 0.
-- There's a **1-day grace**: your streak still counts as alive if your last
-  completion was today *or* yesterday; a bigger gap lapses it.
+**Daily streak** (per person): complete at least one point chore today →
+streak +1; do it again tomorrow → it grows (`current` + all-time `best`
+tracked). Miss a day → resets to 0. There's a **1-day grace** (still counts
+if your last completion was today or yesterday).
 
 **Reminder streaks** are separate — each recurring reminder carries its own
-🔥 counter that bumps when you check it off on schedule.
+🔥 counter when checked off on schedule.
 
 ---
 
-## 🏅 Badges (9 total, per person)
-Unlocked automatically as you hit milestones, with a little celebration:
-
+## 🏅 Badges (9, per person, auto-unlocked)
 | Badge | How to earn |
 |---|---|
 | 🎯 First chore | Complete your first chore |
@@ -80,63 +96,44 @@ Unlocked automatically as you hit milestones, with a little celebration:
 
 ---
 
-## 🏆 Leaderboard & Podium
-The Rewards page ranks everyone by points — a gold/silver/bronze **podium**
-up top plus a full standings list. Kids see flame/badge tags next to names.
-Admins also get **− / + steppers** to adjust points directly.
+## 🎁 Rewards economy
+**Exchange rate: 5 points = $1.** Reward costs scale off that:
 
-## ⚡ Active Quests
-The "to-earn" board: open, point-bearing chores. Kids see only **their
-own**; admins see everyone's grouped by person. Check one off → it clears
-(recurring ones come back on their next scheduled day).
+| Reward | $ | Points | Chores @15 |
+|---|---|---|---|
+| Small | $10 | 50 | ~4 |
+| Medium | $30 | 150 | 10 |
+| Large | $75 | 375 | 25 |
+| (example) | $70 | 350 | ~24 |
 
-## 🎁 Rewards & the Redeem Catalog
-- A curated **REDEEM** catalog of pre-priced rewards (screen time, pick the
-  movie, ice cream trip, etc.) in Grid / List / Sheet layouts.
-- Tap one to **request** it; it lands in the admin's inbox at a set price.
-- Or make a **free-form request** ("I want this toy") — and attach a **web
-  link** so the parent sees exactly what it is.
-- Admins **approve/deny + set the final price**. Already-requested items
-  show a **PENDING** pill; unaffordable ones show "Need X more pts."
+There's also a **curated redeem catalog** (tap to request at a fixed cost):
+30 min screen time 25 · 1 hr gaming 50 · pick the movie 40 · pick dinner 50
+· stay up late 25 · skip a chore 75 · ice cream trip 100 · store trip 100 ·
+arcade day 250 · small toy 125.
 
-## 👨‍👩‍👧 Roles
-- **Admin/Owner** — sets rules, point values, approves rewards, adjusts
-  points, manages the family.
-- **Kid / Standard** — completes chores, requests rewards (needs approval),
-  sees a personalized view.
+Requests go to an admin to **approve/deny** (admins set the final price for
+free-form requests). You can attach a **web link** to an item so the parent
+sees exactly what's being asked for. Already-requested items show a
+**PENDING** pill; unaffordable ones show "Need X more pts."
 
-## 🔗 Family sharing
-One household, shared across everyone's iPhones via iCloud/CloudKit. A chore
-created on one phone appears on everyone's within seconds. Each person picks
-their own **layout** (Classic / Rings / Calm / Kanban) per device.
+All of this is editable per household in **Settings → Game Rules** (rate,
+reward tiers, category point values, catalog items, chore expiration).
 
 ---
 
-# 📋 Major Features
+## 👨‍👩‍👧 Roles
+- **Admin / Owner** — sets rules + point values, approves rewards, adjusts
+  points with +/-, manages the family.
+- **Kid / Standard** — completes chores, requests rewards (needs approval),
+  sees a personalized view.
 
-- **Dashboard** — greeting, today's agenda, quick-add, what's new
-- **Chores & To-Dos** — assignees, due dates, points, recurring (incl.
-  weekday/custom cadences), expiration window
-- **Chore bundles** — group several chores into one earning unit with bonus
-  points
-- **Points, Levels (1–10), Streaks, Badges** — the full gamification stack
-- **Leaderboard + podium** with admin point controls
-- **Rewards system** — curated redeem catalog (3 layouts) + free-form goal
-  requests with item links + approval flow
-- **Reminders** — rich editor (when / repeat / notify / location / photo /
-  tag / sound), per-person targeting, snooze/mark-done from the lock
-  screen, history, templates, color tags, streak heatmap, daily recap
-- **Schedule / Events** — family events & outings, recurring, Apple
-  Calendar two-way link
-- **Grocery list** — shared, real-time, trips with nested items
-- **Maintenance / Home upkeep** tracking
-- **Family map & live location sharing** (opt-in)
-- **Status pings** — quick "on my way / at the store" broadcasts
-- **Announcements** — household banners with expiry
-- **Notifications suite** — due reminders, daily briefing, quiet hours,
-  weekly recap, assignment/reward/grocery pushes
-- **Widgets** (Today's Reminders) + **Live Activities** (status pings)
-- **Universal search** across tasks, reminders, events, family, goals
-- **Personal Card** export, 4 layout themes, custom backgrounds,
-  Saturday-first calendar
-- **Private & synced** via CloudKit; per-device customization
+## ⚡ Active Quests & 🏆 Leaderboard
+ACTIVE QUESTS = the open, point-earning chores (kids see their own; admins
+see everyone's, grouped). Recurring chores leave the list when done and
+return on their next scheduled day. The leaderboard ranks everyone by
+points with a gold/silver/bronze podium.
+
+## 🔗 Family sharing
+One household shared across everyone's iPhones via iCloud/CloudKit — a chore
+created on one phone shows on all within seconds. Each person picks their own
+layout (Classic / Rings / Calm / Kanban) per device.
