@@ -1,0 +1,23 @@
+What's New in 3 (15)
+
+IMPORTANT: EVERYONE UPDATE TOGETHER
+- Please have every family member update to this build. It does the clean season reset, and older builds can interfere if they're still open.
+
+EVENT NOTIFICATIONS: CHOOSE WHO GETS PINGED
+- When you make a calendar event, the "Who" section now has a Notify option:
+  - Whole household (everyone) -- the default
+  - Admins only (just parents)
+  - Just the attendee (only the named person, plus admins)
+- The attendee field still labels whose event it is on the card; Notify controls who actually gets the notification.
+
+CLEAN SEASON 1
+- Everyone starts fresh at Season 1 with 0 points. Admins grant points from there (use +/- on the Participants list).
+- Lifetime levels and your spendable points wallet are not affected.
+
+LAYOUT
+- The REWARDS title is now properly centered.
+
+What to Test
+- Make an event, set Notify to Admins only or Just <name>, and confirm only those people get the notification.
+- Confirm chore/reminder notifications still work exactly as before.
+- Confirm everyone is at Season 1 with 0 points and the REWARDS title is centered.
