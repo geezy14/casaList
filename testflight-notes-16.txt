@@ -1,0 +1,23 @@
+What's New in 3 (16)
+
+IMPORTANT: EVERYONE UPDATE TOGETHER
+- Please have every family member update to this build. It does a full reset, and older builds can interfere if they're still open.
+
+FULL FRESH START
+- Every member resets to 0 points and back to Rookie (level 1). Admins re-grant points from a clean slate.
+- This is a one-time reset on this update.
+
+ADMIN CAN NOW SUBTRACT POINTS
+- The minus button on the leaderboard now actually lowers a member's score (it used to only affect the spendable balance). Plus and minus both work now.
+
+LEVELS CHART
+- Settings -> Game Rules -> LEVELS shows every level, its name, tier, total points needed, and how many more points to reach it. Levels come fast early, then take more.
+
+EVENT NOTIFICATIONS
+- When making a calendar event, the Who section lets you choose who gets notified: Whole household, Admins only, or Just the attendee.
+
+What to Test
+- Confirm everyone is at 0 points / Rookie after updating.
+- As an admin, use + and - on the leaderboard and confirm both move the score.
+- Check Settings -> Game Rules -> LEVELS for the thresholds.
+- Confirm chore and reminder notifications still work as before.
