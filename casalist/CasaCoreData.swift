@@ -408,6 +408,14 @@ final class CasaCoreDataStack: ObservableObject {
             // while still pinging the whole family. Schema redeploy
             // required before this syncs in Production CloudKit.
             attr("announceHousehold", .booleanAttributeType, def: false),
+            // Who gets the event's notification on their device.
+            //   "" / "household" → everyone (default, legacy behavior)
+            //   "admins"         → only owner/admin members
+            //   "attendee"       → only the named attendee (plus admins)
+            // Honored per-device in NotificationsManager so non-audience
+            // devices skip scheduling. Schema redeploy required before this
+            // syncs in Production CloudKit.
+            attr("notifyMode", .stringAttributeType, def: ""),
         ]
 
         // ------- Relationships (Household is the share root) -------

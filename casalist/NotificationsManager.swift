@@ -167,6 +167,30 @@ enum NotificationsManager {
         }
     }
 
+    @MainActor
+    /// Decide whether THIS device should schedule a local notification for
+    /// a calendar event, given its `notifyMode` + attendee.
+    ///   "" / "household" → everyone schedules
+    ///   "admins"         → only owner/admin members
+    ///   "attendee"       → only the named attendee (plus admins, so a
+    ///                      parent who set it still gets the ping)
+    static func shouldDeviceScheduleEvent(
+        notifyMode: String,
+        attendees: String,
+        myName: String
+    ) -> Bool {
+        switch notifyMode.lowercased() {
+        case "admins":
+            return localUserIsAdmin()
+        case "attendee":
+            if localUserIsAdmin() { return true }
+            if myName.isEmpty { return false }
+            return attendees.lowercased().contains(myName.lowercased())
+        default:
+            return true  // "" / "household" → broadcast
+        }
+    }
+
     /// True when the local user's FamilyMember record has owner or
     /// admin role. Uses the shared Core Data main context and looks up
     /// the member by `meUid` (UserDefaults) or `userName` fallback.
@@ -799,6 +823,18 @@ enum NotificationsManager {
 
         let status = await currentStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Per-device audience routing. The stale-cancel above already ran,
+        // so a device removed from the audience (mode changed) drops its
+        // pending push and bails here without rescheduling.
+        let myName = UserDefaults.standard.string(forKey: "userName")?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let inAudience = await shouldDeviceScheduleEvent(
+            notifyMode: event.notifyMode,
+            attendees: event.attendees,
+            myName: myName
+        )
+        guard inAudience else { return }
 
         // Empty attendees → household-wide broadcast by default.
         // `announceHousehold` ALSO forces the broadcast prefix even when a

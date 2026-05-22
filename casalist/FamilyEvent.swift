@@ -26,6 +26,11 @@ public final class FamilyEvent: NSManagedObject {
     /// admins say "this is Donovan's soccer practice" on the calendar
     /// while still pinging the whole family.
     @NSManaged public var announceHousehold: Bool
+    /// Who gets this event's notification on their device:
+    ///   "" / "household" → everyone (default)
+    ///   "admins"         → only owner/admin members
+    ///   "attendee"       → only the named attendee (plus admins)
+    @NSManaged public var notifyMode: String
     @NSManaged public var household: Household?
 
     var isLive: Bool { deletedAt == nil }
@@ -52,7 +57,8 @@ public final class FamilyEvent: NSManagedObject {
         attendees: String = "",
         notes: String = "",
         repeatKind: String = "",
-        createdBy: String = ""
+        createdBy: String = "",
+        notifyMode: String = ""
     ) {
         let entity = CasaEntity.resolve("FamilyEvent", in: context)
         self.init(entity: entity, insertInto: context)
@@ -64,5 +70,6 @@ public final class FamilyEvent: NSManagedObject {
         self.notes = notes
         self.repeatKind = repeatKind
         self.createdBy = createdBy
+        self.notifyMode = notifyMode
     }
 }

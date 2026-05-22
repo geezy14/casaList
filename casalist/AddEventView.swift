@@ -21,7 +21,9 @@ struct AddEventView: View {
     @State private var latitude: Double
     @State private var longitude: Double
     @State private var attendees: String
-    @State private var announceHousehold: Bool
+    /// Audience for the event's notification: "household" (everyone),
+    /// "admins" (parents only), or "attendee" (just the named person).
+    @State private var notifyMode: String
     @State private var notes: String
     @State private var repeatKind: String
     @State private var confirmDelete: Bool = false
@@ -50,12 +52,29 @@ struct AddEventView: View {
         _latitude = State(initialValue: editing?.latitude ?? 0)
         _longitude = State(initialValue: editing?.longitude ?? 0)
         _attendees = State(initialValue: editing?.attendees ?? "")
-        _announceHousehold = State(initialValue: editing?.announceHousehold ?? false)
+        // Legacy events (no notifyMode) always notified everyone, so default
+        // to "household". Honor an explicit stored mode otherwise.
+        let storedMode = (editing?.notifyMode ?? "").lowercased()
+        _notifyMode = State(initialValue: storedMode.isEmpty ? "household" : storedMode)
         _notes = State(initialValue: editing?.notes ?? "")
         _repeatKind = State(initialValue: editing?.repeatKind ?? "")
     }
 
     private var hasCoordinates: Bool { latitude != 0 || longitude != 0 }
+
+    /// One-line explainer under the Notify picker.
+    private var notifyHint: String {
+        switch notifyMode {
+        case "admins":
+            return "Only admins (parents) get notified."
+        case "attendee":
+            return attendees.isEmpty
+                ? "Notifies the whole household."
+                : "Only \(attendees) (and admins) get notified."
+        default:
+            return "Everyone in the household gets notified."
+        }
+    }
 
     private let repeatOptions: [(label: String, kind: String)] = [
         ("None",          ""),
@@ -161,26 +180,28 @@ struct AddEventView: View {
                             Label("Attendees", systemImage: attendees.isEmpty ? "house.fill" : "person.fill")
                         }
                     }
-                    // Announcement toggle. Only meaningful when a specific
-                    // attendee is picked -- "Everyone" already pings the
-                    // household. Lets admins say "this is Donovan's
-                    // event" on the calendar but still broadcast.
-                    if !attendees.isEmpty {
-                        Toggle(isOn: $announceHousehold) {
-                            Label("Announce to household",
-                                  systemImage: "megaphone.fill")
+                    // Who actually gets the notification (separate from the
+                    // attendee label on the card). "Just <name>" only shows
+                    // when a specific attendee is picked.
+                    Picker(selection: $notifyMode) {
+                        Label("Whole household", systemImage: "megaphone.fill").tag("household")
+                        Label("Admins only", systemImage: "person.badge.key.fill").tag("admins")
+                        if !attendees.isEmpty {
+                            Label("Just \(attendees)", systemImage: "person.fill").tag("attendee")
+                        }
+                    } label: {
+                        Label("Notify", systemImage: "bell.fill")
+                    }
+                    .onChange(of: attendees) { _, newValue in
+                        // If the attendee is cleared, "Just <name>" is gone —
+                        // fall back to notifying the whole household.
+                        if newValue.isEmpty && notifyMode == "attendee" {
+                            notifyMode = "household"
                         }
                     }
-                    if attendees.isEmpty {
-                        Label("Notifies the whole household", systemImage: "megaphone.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if announceHousehold {
-                        Label("Family will be notified; card shows \(attendees)",
-                              systemImage: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Label(notifyHint, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Notes") {
                     TextField("Notes (optional)", text: $notes, axis: .vertical)
@@ -230,6 +251,12 @@ struct AddEventView: View {
         guard !isSaving else { return }
         isSaving = true
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        // Normalize: "attendee" only valid when an attendee is set.
+        let mode = (attendees.isEmpty && notifyMode == "attendee") ? "household" : notifyMode
+        // Derive the legacy broadcast-wording flag from the audience: a
+        // household event with a named attendee still pings everyone (📢)
+        // but shows the attendee on the card.
+        let announce = (mode == "household" && !attendees.isEmpty)
         if let editing {
             editing.title = trimmedTitle
             editing.startDate = startDate
@@ -239,7 +266,8 @@ struct AddEventView: View {
             editing.latitude = latitude
             editing.longitude = longitude
             editing.attendees = attendees
-            editing.announceHousehold = announceHousehold
+            editing.notifyMode = mode
+            editing.announceHousehold = announce
             editing.notes = notes
             editing.repeatKind = repeatKind
         } else {
@@ -252,10 +280,11 @@ struct AddEventView: View {
                 attendees: attendees,
                 notes: notes,
                 repeatKind: repeatKind,
-                createdBy: userName.trimmingCharacters(in: .whitespaces)
+                createdBy: userName.trimmingCharacters(in: .whitespaces),
+                notifyMode: mode
             )
             event.latitude = latitude
-            event.announceHousehold = announceHousehold
+            event.announceHousehold = announce
             event.longitude = longitude
             event.endDate = isAllDay ? nil : endDate
             if let h = households.preferredTarget {
