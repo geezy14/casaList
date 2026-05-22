@@ -1,0 +1,27 @@
+What's New in 3 (17)
+
+HOUSEHOLD BOARD (admins)
+- A new admin card on the Dashboard opens a household overview: a summary band (chores today, overdue, pending approvals, points this week), today's calendar, overdue chores, this week's events, reminders, and per-member chore progress with streaks.
+
+ANNOUNCEMENTS
+- Post an announcement from Family List (megaphone). It pushes to everyone and shows as a banner on the Dashboard for 24 hours, or until you clear it.
+
+QUICK ADD
+- The + button opens the add screen directly, now with three tabs: New task, New bundle, and Reminder.
+- Single tasks can now carry a bonus -- extra points awarded on completion, on top of the base points.
+
+NAVIGATION
+- Settings now slides in: swipe right from the left edge of the Dashboard (the cog is gone).
+- You can swipe to exit any screen.
+
+MORE
+- My To-Do is now focused on just you.
+- New Streaks & Badges screen (the coral Dashboard tile): per-member streaks and earned badges.
+- Reminders now live inside My To-Do, the quick-add Reminder tab, and the Household Board.
+
+What to Test
+- Open the Household Board card and confirm the overview looks right.
+- Post an announcement from Family List; confirm everyone gets a push and the Dashboard banner shows for 24h.
+- Make a task with a bonus; complete it and confirm the bonus is awarded.
+- Swipe right on the Dashboard to open Settings; swipe to exit other screens.
+- Confirm chores, points, and syncing all still work across devices.
