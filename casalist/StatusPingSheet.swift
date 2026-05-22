@@ -28,8 +28,10 @@ struct StatusPingSheet: View {
     }
 
     @State private var customText: String = ""
-    @State private var customExpiry: AnnouncementExpiry = .fourHours
     @State private var locationError: String? = nil
+
+    /// Announcement banners live 24 hours, then auto-expire (or are cleared).
+    static func bannerExpiry(from now: Date = Date()) -> Date { now.addingTimeInterval(24 * 3600) }
     @StateObject private var locator = OneShotLocator()
 
     /// Flip to `true` to re-enable the one-shot "Share my location" row.
@@ -98,21 +100,16 @@ struct StatusPingSheet: View {
                         }
                     }
                 }
-                Section(editing == nil ? "Custom announcement" : "Edit announcement") {
+                Section {
                     TextField("Type a message…", text: $customText, axis: .vertical)
                         .lineLimit(2...4)
-                    Picker("Expires", selection: $customExpiry) {
-                        ForEach(AnnouncementExpiry.allCases, id: \.self) { e in
-                            Text(e.label).tag(e)
-                        }
-                    }
                     if editing == nil {
                         Button {
                             let trimmed = customText.trimmingCharacters(in: .whitespaces)
                             guard !trimmed.isEmpty else { return }
-                            send(message: trimmed, expiresAt: customExpiry.expiryDate())
+                            send(message: trimmed, expiresAt: Self.bannerExpiry())
                         } label: {
-                            Label("Send", systemImage: "paperplane.fill")
+                            Label("Post announcement", systemImage: "megaphone.fill")
                         }
                         .disabled(customText.trimmingCharacters(in: .whitespaces).isEmpty)
                     } else {
@@ -125,17 +122,15 @@ struct StatusPingSheet: View {
                         Button(role: .destructive) {
                             deleteAnnouncement()
                         } label: {
-                            Label("Delete announcement", systemImage: "trash")
+                            Label("Clear announcement", systemImage: "trash")
                         }
                     }
-                }
-                if editing == nil {
-                    Section {
-                        Label("Sends a notification to everyone in your household.",
-                              systemImage: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                } header: {
+                    Text(editing == nil ? "Custom announcement" : "Edit announcement")
+                } footer: {
+                    Text(editing == nil
+                         ? "Pushes to everyone and shows as a banner on the Dashboard for 24 hours, or until cleared."
+                         : "Stays on the Dashboard until it expires or you clear it.")
                 }
             }
             .navigationTitle(editing == nil ? "Ping family" : "Edit announcement")
@@ -152,26 +147,13 @@ struct StatusPingSheet: View {
     private func prefillIfEditing() {
         guard let ed = editing else { return }
         customText = ed.task
-        if let due = ed.dueDate {
-            // Snap the stored expiry back to the closest preset bucket
-            // so the picker reflects something reasonable. If none fits,
-            // default to fourHours and let the user override.
-            let remaining = due.timeIntervalSinceNow
-            switch remaining {
-            case ..<3600:               customExpiry = .oneHour
-            case 3600..<(4 * 3600):     customExpiry = .oneHour
-            case (4 * 3600)..<(8 * 3600): customExpiry = .fourHours
-            default:                    customExpiry = .untilTomorrow
-            }
-        } else {
-            customExpiry = .none
-        }
     }
 
     private func saveEdit() {
         guard let ed = editing else { return }
         ed.task = customText.trimmingCharacters(in: .whitespaces)
-        ed.dueDate = customExpiry.expiryDate()
+        // Refresh the 24-hour window from the edit time.
+        ed.dueDate = Self.bannerExpiry()
         try? moc.save()
         dismiss()
     }

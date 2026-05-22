@@ -42,6 +42,7 @@ struct StreaksBadgesView: View {
                     Button("Done") { if let onHome { onHome() } else { dismiss() } }
                 }
             }
+            .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
     }
 

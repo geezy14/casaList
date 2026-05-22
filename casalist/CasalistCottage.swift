@@ -318,7 +318,6 @@ public enum CasalistCottage {
         @State private var showAddTodo = false
         @State private var showGrocery = false
         @State private var showMaintenance = false
-        @State private var showReminders = false
         @State private var showBoard = false
         @State private var showStreaks = false
         @State private var showMyToDo = false
@@ -393,7 +392,6 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
-            .fullScreenCover(isPresented: $showReminders) { Reminders() }
             .fullScreenCover(isPresented: $showBoard) { HouseholdBoardView(onHome: { showBoard = false }) }
             .fullScreenCover(isPresented: $showStreaks) { StreaksBadgesView(onHome: { showStreaks = false }) }
             .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
@@ -746,18 +744,32 @@ public enum CasalistCottage {
 
         /// Admin-only prominent entry to the household Big Board. (Compare
         /// with the Reminders-slot tile; Geezy picks one.)
+        /// Most recent active household announcement (a StatusPing set from
+        /// Family List). Drives the Big Board banner.
+        private var activeAnnouncement: TaskItem? {
+            let now = Date()
+            return allTodos.filter {
+                $0.category == StatusPing.category && $0.deletedAt == nil
+                    && ($0.dueDate ?? .distantPast) > now
+            }.sorted { $0.createdAt > $1.createdAt }.first
+        }
+
         private var bigBoardCard: some View {
-            Button { showBoard = true } label: {
+            let note = (activeAnnouncement?.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasNote = !note.isEmpty
+            return Button { showBoard = true } label: {
                 HStack(spacing: 14) {
-                    Text("📋").font(.system(size: 30))
+                    Text(hasNote ? "📣" : "📋").font(.system(size: 30))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Household Board")
-                            .font(.system(size: 17, weight: .heavy))
-                            .foregroundStyle(Color(rgb: 0x3B2A22))
-                        Text("Everyone's calendar + chores at a glance")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
-                            .lineLimit(1)
+                        Text(hasNote ? "Announcement" : "Household Board")
+                            .font(.system(size: hasNote ? 11 : 17, weight: .heavy))
+                            .tracking(hasNote ? 1.0 : 0)
+                            .foregroundStyle(Color(rgb: 0x3B2A22).opacity(hasNote ? 0.7 : 1))
+                        Text(hasNote ? note : "Everyone's calendar + chores at a glance")
+                            .font(.system(size: hasNote ? 16 : 12, weight: hasNote ? .heavy : .semibold))
+                            .foregroundStyle(Color(rgb: 0x3B2A22).opacity(hasNote ? 1 : 0.7))
+                            .lineLimit(hasNote ? 3 : 1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
@@ -767,7 +779,7 @@ public enum CasalistCottage {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: 24).fill(
-                        LinearGradient(colors: [P.butter, P.peach.opacity(0.55)],
+                        LinearGradient(colors: hasNote ? [P.peach, P.coral.opacity(0.7)] : [P.butter, P.peach.opacity(0.55)],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
                 )

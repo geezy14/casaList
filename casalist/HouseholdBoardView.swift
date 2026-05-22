@@ -121,6 +121,23 @@ struct HouseholdBoardView: View {
         }
     }
 
+    /// All live reminders — the household's only browse spot now that the
+    /// Reminders screen is gone. Open ones first, soonest fire date first.
+    private var reminders: [TaskItem] {
+        tasks.filter { $0.category.lowercased() == "reminders" && !$0.isCompleted }
+            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+    }
+
+    private func notifyLabel(for t: TaskItem) -> String {
+        switch t.notifyMode.lowercased() {
+        case "admins": return "Admins"
+        case "everyone": return "Everyone"
+        default:
+            let a = (t.assignee ?? "").trimmingCharacters(in: .whitespaces)
+            return a.isEmpty ? "Everyone" : a
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -133,6 +150,7 @@ struct HouseholdBoardView: View {
                         todaySection
                         overdueSection
                         weekSection
+                        remindersSection
                         choresSection
                     }
                     .padding(20)
@@ -150,6 +168,7 @@ struct HouseholdBoardView: View {
                     Button("Done") { if let onHome { onHome() } else { dismiss() } }
                 }
             }
+            .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
     }
 
@@ -248,6 +267,49 @@ struct HouseholdBoardView: View {
                 }
             }
         }
+    }
+
+    private var remindersSection: some View {
+        Group {
+            if !reminders.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionHeader("REMINDERS", P.lavender)
+                    VStack(spacing: 8) {
+                        ForEach(reminders, id: \.uid) { reminderRow($0) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func reminderRow(_ t: TaskItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: t.dueDate == nil ? "pin.fill" : "bell.fill")
+                .font(.system(size: 14)).foregroundStyle(P.lavender).frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t.task).font(.system(size: 14, weight: .heavy)).lineLimit(1)
+                Text("Notifies \(notifyLabel(for: t))")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+            }
+            Spacer(minLength: 0)
+            if let d = t.dueDate {
+                Text(reminderWhen(d))
+                    .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textDim).monospacedDigit()
+            } else {
+                Text("Pinned").font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(P.border, lineWidth: 1))
+    }
+
+    private func reminderWhen(_ d: Date) -> String {
+        let f = DateFormatter()
+        if cal.isDateInToday(d) { f.dateFormat = "h:mm a"; return "Today \(f.string(from: d))" }
+        if cal.isDateInTomorrow(d) { f.dateFormat = "h:mm a"; return "Tmrw \(f.string(from: d))" }
+        f.dateFormat = "MMM d"
+        return f.string(from: d)
     }
 
     private var choresSection: some View {
