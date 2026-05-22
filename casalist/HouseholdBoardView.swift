@@ -25,6 +25,9 @@ struct HouseholdBoardView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.dueDate, ascending: true)],
                   predicate: NSPredicate(format: "deletedAt == nil"))
     private var tasks: FetchedResults<TaskItem>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyGoal.createdAt, ascending: false)],
+                  predicate: NSPredicate(format: "deletedAt == nil"))
+    private var goals: FetchedResults<FamilyGoal>
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
     private let cal = Calendar.current
@@ -83,6 +86,41 @@ struct HouseholdBoardView: View {
         return (mine.count, mine.filter(\.isCompleted).count)
     }
 
+    private func isChore(_ t: TaskItem) -> Bool { choreCategories.contains(t.category.lowercased()) }
+
+    // MARK: - Summary stats
+
+    /// Chores due today across the household (done / total).
+    private var choresToday: (done: Int, total: Int) {
+        let due = tasks.filter { t in
+            guard isChore(t), let d = t.dueDate else { return false }
+            return cal.isDateInToday(d)
+        }
+        return (due.filter(\.isCompleted).count, due.count)
+    }
+
+    /// Non-recurring chores past their due date, still open, with an assignee.
+    private var overdueChores: [TaskItem] {
+        tasks.filter { t in
+            guard isChore(t), !t.isCompleted, t.repeatKind.isEmpty,
+                  let d = t.dueDate, !(t.assignee ?? "").isEmpty else { return false }
+            return d < todayStart
+        }
+        .sorted { ($0.dueDate ?? .distantPast) < ($1.dueDate ?? .distantPast) }
+    }
+
+    private var pendingApprovals: Int {
+        goals.filter { GoalApproval.isPending($0) && !$0.isRedeemed }.count
+    }
+
+    /// Points earned across the household from chores completed this week.
+    private var pointsThisWeek: Int {
+        tasks.reduce(0) { sum, t in
+            guard t.isCompleted, let c = t.completedAt, c >= weekStart, c < weekEnd else { return sum }
+            return sum + Int(t.points) + Int(t.bonusPoints)
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -91,7 +129,9 @@ struct HouseholdBoardView: View {
                 P.bg.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        summaryBand
                         todaySection
+                        overdueSection
                         weekSection
                         choresSection
                     }
@@ -119,6 +159,58 @@ struct HouseholdBoardView: View {
         Text(title)
             .font(.system(size: 12, weight: .heavy)).tracking(1.2)
             .foregroundStyle(tint)
+    }
+
+    private var summaryBand: some View {
+        let ct = choresToday
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statChip(value: "\(ct.done)/\(ct.total)", label: "Chores today", tint: P.mint)
+            statChip(value: "\(overdueChores.count)", label: "Overdue", tint: overdueChores.isEmpty ? P.mint : P.coral)
+            statChip(value: "\(pendingApprovals)", label: "Approvals", tint: pendingApprovals > 0 ? P.peach : P.mint)
+            statChip(value: "\(pointsThisWeek)", label: "Points this week", tint: P.lavender)
+        }
+    }
+
+    private func statChip(value: String, label: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 22, weight: .heavy)).foregroundStyle(tint).monospacedDigit()
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1))
+    }
+
+    private var overdueSection: some View {
+        Group {
+            if !overdueChores.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionHeader("OVERDUE CHORES", P.coral)
+                    VStack(spacing: 8) {
+                        ForEach(overdueChores, id: \.uid) { overdueRow($0) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func overdueRow(_ t: TaskItem) -> some View {
+        let daysLate = cal.dateComponents([.day], from: cal.startOfDay(for: t.dueDate ?? Date()), to: todayStart).day ?? 0
+        return HStack(spacing: 12) {
+            Text("⚠️").font(.system(size: 16))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t.task).font(.system(size: 14, weight: .heavy)).lineLimit(1)
+                Text(t.assignee ?? "Unassigned")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+            }
+            Spacer(minLength: 0)
+            Text(daysLate <= 0 ? "Today" : "\(daysLate)d late")
+                .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.coral).monospacedDigit()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(P.coral.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(P.coral.opacity(0.3), lineWidth: 1))
     }
 
     private var todaySection: some View {
@@ -167,10 +259,18 @@ struct HouseholdBoardView: View {
                     let rate = assigned > 0 ? Double(done) / Double(assigned) : 0
                     HStack(spacing: 10) {
                         CLAvatar(m.asCLMember, size: 30)
-                        Text(m.name)
-                            .font(.system(size: 14, weight: .heavy))
-                            .lineLimit(1)
-                            .frame(width: 90, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.name)
+                                .font(.system(size: 14, weight: .heavy))
+                                .lineLimit(1)
+                            let streak = StreakTracker.effectiveCurrent(for: m.uid)
+                            if streak > 0 {
+                                Text("🔥\(streak)")
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(P.peach)
+                            }
+                        }
+                        .frame(width: 90, alignment: .leading)
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(P.surfaceAlt.opacity(0.6))
