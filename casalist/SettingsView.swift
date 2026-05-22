@@ -6,6 +6,10 @@ import UserNotifications
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    /// When set, the close button runs this instead of `dismiss()` — used
+    /// when Settings is a pager page (returns to the Dashboard page) rather
+    /// than a presented sheet.
+    var onClose: (() -> Void)? = nil
     @Environment(\.colorScheme) private var sys
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var moc
@@ -185,7 +189,7 @@ struct SettingsView: View {
 
     private var topBar: some View {
         HStack {
-            Button { dismiss() } label: {
+            Button { if let onClose { onClose() } else { dismiss() } } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(P.text)

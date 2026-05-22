@@ -70,7 +70,8 @@ enum FamilyPoints {
     }
 
     static func award<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
-        guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
+        let total = t.points + t.bonusPoints
+        guard let name = t.assignee, !name.isEmpty, total > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         // Expired chores still get checked off but don't pay points.
         // The completion + completionCount + completedAt update upstream
@@ -81,19 +82,20 @@ enum FamilyPoints {
             }
             return
         }
-        member.points += t.points
-        member.lifetimePoints += t.points
+        member.points += total
+        member.lifetimePoints += total
         if let ctx = member.managedObjectContext {
             FamilyProgress.recordCompletion(member: member, context: ctx)
         }
     }
 
     static func revoke<S: Sequence>(_ t: TaskItem, in members: S) where S.Element == FamilyMember {
-        guard let name = t.assignee, !name.isEmpty, t.points > 0 else { return }
+        let total = t.points + t.bonusPoints
+        guard let name = t.assignee, !name.isEmpty, total > 0 else { return }
         guard let member = match(name: name, in: members) else { return }
         // Mirror award: don't claw back points we never granted.
         guard !isExpired(t) else { return }
-        member.points = max(0, member.points - t.points)
+        member.points = max(0, member.points - total)
     }
 
     /// True if `t` is past the household's expiration window. Recurring

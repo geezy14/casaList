@@ -37,6 +37,29 @@ struct SwipeToDismissModifier: ViewModifier {
     }
 }
 
+/// Left-edge inward (rightward) swipe to open Settings. Used on the
+/// Dashboard, which has no swipe-back, so there's no clash. (Sub-screens
+/// keep the left edge for swipe-back, so they don't use this.)
+struct SwipeForSettingsModifier: ViewModifier {
+    var action: () -> Void
+
+    func body(content: Content) -> some View {
+        content.simultaneousGesture(
+            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                .onEnded { value in
+                    let startX = value.startLocation.x
+                    let tx     = value.translation.width
+                    let ty     = value.translation.height
+                    let vx     = value.velocity.width
+                    guard startX < 44 else { return }              // must start at left edge
+                    guard tx > 60 || vx > 400 else { return }      // rightward distance/velocity
+                    guard abs(tx) > abs(ty) else { return }        // mostly horizontal
+                    action()
+                }
+        )
+    }
+}
+
 extension View {
     /// iOS-style left-edge swipe-back to dismiss the current view.
     func swipeToDismiss() -> some View { modifier(SwipeToDismissModifier()) }
@@ -45,5 +68,10 @@ extension View {
     /// switching tabs back to dashboard for a TabView page).
     func swipeBack(action: @escaping () -> Void) -> some View {
         modifier(SwipeToDismissModifier(action: action))
+    }
+
+    /// Right-edge inward (leftward) swipe to open Settings.
+    func swipeForSettings(action: @escaping () -> Void) -> some View {
+        modifier(SwipeForSettingsModifier(action: action))
     }
 }

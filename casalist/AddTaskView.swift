@@ -25,6 +25,7 @@ struct AddTaskView: View {
     @State private var hasDueDate: Bool = true
     @State private var hasTime: Bool = false
     @State private var points: Int = 10
+    @State private var bonusPoints: Int = 0
     @State private var repeatKind: String = ""
     @State private var showCustomRepeat: Bool = false
 
@@ -46,6 +47,9 @@ struct AddTaskView: View {
     @State private var bundleBonus: Int = 25
     @State private var bundleCategory: String = "Chores"
 
+    // Reminder-specific: notify routing ("" = everyone / member, "admins")
+    @State private var reminderNotifyMode: String = ""
+
     init(defaultCategory: String = "Chores", startMode: String = "task") {
         _category = State(initialValue: defaultCategory)
         _points = State(initialValue: defaultCategory == "groceries" ? 0 : 10)
@@ -64,29 +68,34 @@ struct AddTaskView: View {
                     HStack(spacing: 0) {
                         modeButton("New task",   value: "task")
                         modeButton("New bundle", value: "bundle")
+                        modeButton("Reminder",   value: "reminder")
                     }
                     .padding(3)
                     .background(Capsule().fill(Color(.systemGray5)))
                 }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
 
-                if mode == "task" {
-                    taskForm
-                } else {
-                    bundleForm
+                switch mode {
+                case "bundle":   bundleForm
+                case "reminder": reminderForm
+                default:         taskForm
                 }
             }
-            .navigationTitle(mode == "task" ? "New task" : "New bundle")
+            .navigationTitle(mode == "task" ? "New task" : mode == "bundle" ? "New bundle" : "New reminder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    if mode == "task" {
-                        Button("Save", action: saveTask)
-                            .disabled(taskName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    } else {
+                    switch mode {
+                    case "bundle":
                         Button("Save", action: saveBundle)
                             .disabled(bundleName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    case "reminder":
+                        Button("Save", action: saveReminder)
+                            .disabled(taskName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    default:
+                        Button("Save", action: saveTask)
+                            .disabled(taskName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }
@@ -154,6 +163,13 @@ struct AddTaskView: View {
                     }
                 }
             }
+            Section {
+                Stepper(value: $bonusPoints, in: 0...500, step: 5) {
+                    Text(bonusPoints > 0 ? "Bonus: \(bonusPoints) pts" : "Bonus: none")
+                }
+            } footer: {
+                Text("Extra points awarded on top when this chore is completed.")
+            }
         }
         Section("When") {
             HStack {
@@ -202,6 +218,79 @@ struct AddTaskView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+            }
+        }
+    }
+
+    /// Maps the Notify picker to (assignee + notifyMode), mirroring
+    /// AddReminderView: "" = Everyone, "__admins__" = Admins only,
+    /// "<name>" = that member.
+    private var reminderNotifyBinding: Binding<String> {
+        Binding(
+            get: { reminderNotifyMode == "admins" ? "__admins__" : assigneeName },
+            set: { v in
+                if v == "__admins__" { assigneeName = ""; reminderNotifyMode = "admins" }
+                else { assigneeName = v; reminderNotifyMode = "" }
+            }
+        )
+    }
+
+    @ViewBuilder private var reminderForm: some View {
+        Section("Reminder") {
+            TextField("What do you want to be reminded of?", text: $taskName)
+                .textInputAutocapitalization(.sentences)
+        }
+        Section("Notify") {
+            Picker("Notify", selection: reminderNotifyBinding) {
+                Text("Everyone").tag("")
+                Text("Admins only").tag("__admins__")
+                ForEach(members, id: \.uid) { m in Text(m.name).tag(m.name) }
+            }
+            .pickerStyle(.menu)
+        }
+        Section {
+            HStack {
+                Text("Date"); Spacer()
+                if hasDueDate {
+                    DatePicker("", selection: $dueDate, displayedComponents: .date)
+                        .datePickerStyle(.compact).labelsHidden()
+                }
+                Toggle("", isOn: $hasDueDate).labelsHidden()
+                    .onChange(of: hasDueDate) { _, on in if !on { hasTime = false } }
+            }
+            if hasDueDate {
+                HStack {
+                    Text("Time").foregroundStyle(.secondary); Spacer()
+                    if hasTime {
+                        DatePicker("", selection: $dueDate, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.compact).labelsHidden()
+                    }
+                    Toggle("", isOn: $hasTime).labelsHidden()
+                        .onChange(of: hasTime) { _, on in
+                            if !on { dueDate = Calendar.current.startOfDay(for: dueDate) }
+                            else if dueDate < Date() { dueDate = Date().addingTimeInterval(3600) }
+                        }
+                }
+            }
+        } header: {
+            Text("When")
+        } footer: {
+            Text(hasDueDate ? "Fires at the date/time set." : "No date — stays pinned in Reminders.")
+        }
+        Section("Repeat") {
+            Button { showCustomRepeat = true } label: {
+                HStack {
+                    Text("Repeat").foregroundStyle(.primary)
+                    Spacer()
+                    Text(repeatRowLabel).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            if !repeatKind.isEmpty {
+                Button("Clear") { repeatKind = "" }
+                    .font(.caption).foregroundStyle(.red)
             }
         }
     }
@@ -284,6 +373,30 @@ struct AddTaskView: View {
         dismiss()
     }
 
+    private func saveReminder() {
+        let trimmed = taskName.trimmingCharacters(in: .whitespaces)
+        let item = TaskItem(
+            context: moc,
+            task: trimmed,
+            assignee: assigneeName.isEmpty ? nil : assigneeName,
+            dueDate: hasDueDate ? dueDate : nil,
+            category: "reminders",
+            isCompleted: false,
+            points: 0,
+            createdBy: userName.trimmingCharacters(in: .whitespaces),
+            repeatHours: 0,
+            repeatKind: repeatKind
+        )
+        item.notifyMode = reminderNotifyMode
+        if let h = households.preferredTarget {
+            moc.assign(item, toStoreOf: h)
+            item.household = h
+        }
+        try? moc.save()
+        Task { await NotificationsManager.scheduleNow(for: item) }
+        dismiss()
+    }
+
     private func saveTask() {
         // Force standard/kid creators to be the assignee.
         let resolvedAssignee: String
@@ -304,6 +417,7 @@ struct AddTaskView: View {
             repeatHours: 0,
             repeatKind: repeatKind
         )
+        newTask.bonusPoints = isPointless ? 0 : Int64(bonusPoints)
         if let h = households.preferredTarget {
             moc.assign(newTask, toStoreOf: h)
             newTask.household = h

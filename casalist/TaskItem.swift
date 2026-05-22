@@ -10,6 +10,9 @@ public final class TaskItem: NSManagedObject {
     @NSManaged public var category: String
     @NSManaged public var isCompleted: Bool
     @NSManaged public var points: Int64
+    /// Extra points awarded on completion, on top of `points` (single-chore
+    /// bonus, like a bundle's completion bonus). 0 = none.
+    @NSManaged public var bonusPoints: Int64
     @NSManaged public var createdAt: Date
     @NSManaged public var createdBy: String
     @NSManaged public var repeatHours: Int64

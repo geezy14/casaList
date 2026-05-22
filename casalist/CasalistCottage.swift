@@ -386,7 +386,15 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
-            .fullScreenCover(isPresented: $showReminders) { Reminders() }
+            .fullScreenCover(isPresented: $showReminders) {
+                // Admins get the household Big Board in the Reminders slot;
+                // everyone else still opens the Reminders screen.
+                if canManage {
+                    HouseholdBoardView(onHome: { showReminders = false })
+                } else {
+                    Reminders()
+                }
+            }
             .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
             .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
@@ -618,11 +626,7 @@ public enum CasalistCottage {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(P.surfaceAlt))
                 }
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(P.surfaceAlt))
-                }
+                QuickAddMenu(palette: P)
                 Button { showInbox = true } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
@@ -982,15 +986,15 @@ public enum CasalistCottage {
                         .foregroundStyle(P.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    ringLegendDash(label: "Today",
+                    ringLegendDash(label: "Family today",
                                    tint: P.peach,
                                    done: ringsToday.done,
                                    total: ringsToday.total)
-                    ringLegendDash(label: "This week",
+                    ringLegendDash(label: "Family week",
                                    tint: P.mint,
                                    done: ringsThisWeek.done,
                                    total: ringsThisWeek.total)
-                    ringLegendDash(label: "Streak",
+                    ringLegendDash(label: "Your streak",
                                    tint: P.coral,
                                    done: ringsStreak.current,
                                    total: ringsStreak.target,
@@ -1430,7 +1434,12 @@ public enum CasalistCottage {
                              emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.row)
                     Button { showReminders = true } label: {
-                        tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
+                        // Admins: this tile opens the household Big Board.
+                        if canManage {
+                            tile(bg: P.coral, emoji: "📋", label: "Household", big: "\(members.count)", suffix: "members", sub: "Calendar + chores at a glance")
+                        } else {
+                            tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
+                        }
                     }.buttonStyle(.row)
                     Button { showSchedule = true } label: {
                         tile(bg: P.sky, emoji: "📅", label: "Schedule", big: "\(scheduleUpcomingCount)", suffix: "upcoming", sub: nextEventTitle)
@@ -1946,10 +1955,7 @@ public enum CasalistCottage {
                             }
                         }
                     }
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                            .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                    }
+                    QuickAddMenu(palette: P)
                 }
             }.padding(.horizontal, 16).padding(.bottom, 12)
         }
@@ -3160,12 +3166,11 @@ extension CasalistCottage {
         private var iAmAdmin: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
         }
-        private var scopeAllowsEveryone: Bool { iAmAdmin && scope == "Everyone" }
-        /// True when the admin has flipped to the Reminders scope --
-        /// surfaces ALL reminders regardless of targeting so admins can
-        /// audit / edit anything in the household. Tasks/chores stay
-        /// filtered to "mine" in this mode (use Everyone scope for tasks).
-        private var scopeIsReminders: Bool { iAmAdmin && scope == "Reminders" }
+        // My To-Do is personal only — the household/Everyone view moved to
+        // the admin Big Board. Forced false so the list always shows just
+        // the current user's items regardless of any leftover scope state.
+        private var scopeAllowsEveryone: Bool { false }
+        private var scopeIsReminders: Bool { false }
 
         /// True if this reminder/task is targeted at me through any of
         /// the routing rules. Used to decide if it belongs in my My To-Do.
@@ -3491,10 +3496,6 @@ extension CasalistCottage {
                         .background(Circle().fill(P.surfaceAlt))
                 }
                 Spacer()
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                        .frame(width: 38, height: 38).background(Circle().fill(P.surfaceAlt))
-                }
                 Button { showInbox = true } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
@@ -3537,7 +3538,7 @@ extension CasalistCottage {
         private var cardsContent: some View {
             VStack(alignment: .leading, spacing: 28) {
                 calmHero
-                if iAmAdmin { calmScopeToggle }
+                EmptyView()  // scope toggle removed — My To-Do is personal only
                 calmQuickAdd
                 cardsTaskList
                 if !completed.isEmpty { cardsRecentlyDone }
@@ -3695,7 +3696,7 @@ extension CasalistCottage {
         private var ringsContent: some View {
             VStack(alignment: .leading, spacing: 24) {
                 ringsHero
-                if iAmAdmin { calmScopeToggle }
+                EmptyView()  // scope toggle removed — My To-Do is personal only
                 calmQuickAdd
                 ringsTaskList
                 if !completed.isEmpty { ringsRecentlyDone }
@@ -3930,7 +3931,7 @@ extension CasalistCottage {
         private var kanbanContent: some View {
             VStack(alignment: .leading, spacing: 16) {
                 kanbanHero
-                if iAmAdmin { calmScopeToggle }
+                EmptyView()  // scope toggle removed — My To-Do is personal only
                 calmQuickAdd
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
@@ -4301,7 +4302,7 @@ extension CasalistCottage {
         private var digestContent: some View {
             VStack(alignment: .leading, spacing: 14) {
                 digestHero
-                if iAmAdmin { scopeToggle }
+                EmptyView()  // scope toggle removed — My To-Do is personal only
                 quickAddRow
                 taskList
                 recentlyDone
@@ -4314,7 +4315,7 @@ extension CasalistCottage {
         private var calmContent: some View {
             VStack(alignment: .leading, spacing: 28) {
                 calmHero
-                if iAmAdmin { calmScopeToggle }
+                EmptyView()  // scope toggle removed — My To-Do is personal only
                 calmQuickAdd
                 calmTaskList
                 if !completed.isEmpty { calmRecentlyDone }
@@ -8953,7 +8954,7 @@ extension CasalistCottage {
     }
 
     public struct Root: View {
-        @State private var page: Int = 0
+        @State private var page: Int = 1   // Dashboard is the hub (Settings=0, Rewards=2)
         @Environment(\.managedObjectContext) private var moc
         @AppStorage("userName") private var userName: String = ""
         @AppStorage("meUid") private var meUid: String = ""
@@ -9009,9 +9010,14 @@ extension CasalistCottage {
         }
 
         private var adultShell: some View {
+            // Three-page pager: Settings (left) · Dashboard (middle) ·
+            // Rewards (right). Dashboard is the hub (page 1). Swiping right
+            // from the Dashboard slides Settings in, exactly like swiping
+            // left slides in Rewards.
             TabView(selection: $page) {
-                Home().tag(0)
-                Rewards(onHome: { page = 0 }).tag(1)
+                SettingsView(onClose: { page = 1 }).tag(0)
+                Home().tag(1)
+                Rewards(onHome: { page = 1 }).tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()

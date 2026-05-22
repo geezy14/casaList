@@ -358,6 +358,11 @@ final class CasaCoreDataStack: ObservableObject {
             attr("reminderPriority", .integer64AttributeType, def: Int64(0)),
             // Optional end time for timed tasks (nil when no end time set).
             attr("endDate", .dateAttributeType),
+            // Extra points awarded on completion ON TOP of `points`. Lets a
+            // single chore carry a bonus (like a bundle's completion bonus).
+            // 0 = no bonus (default). Schema redeploy required before this
+            // syncs in Production.
+            attr("bonusPoints", .integer64AttributeType, def: 0),
         ]
 
         // ------- FamilyGoal attributes -------

@@ -167,10 +167,7 @@ public struct FamilyListView: View {
                 Image(systemName: "mappin.and.ellipse").font(.system(size: 14)).foregroundStyle(P.text)
                     .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
             }
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(P.text)
-                    .frame(width: 36, height: 36).background(Circle().fill(P.surfaceAlt))
-            }
+            QuickAddMenu(palette: P)
             Button { showInbox = true } label: {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "tray.full.fill").font(.system(size: 14)).foregroundStyle(P.text)
