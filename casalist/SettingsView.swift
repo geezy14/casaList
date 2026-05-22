@@ -1123,9 +1123,11 @@ struct SettingsView: View {
                         Text("Classic").tag("classic")
                         Text("Rings").tag("rings")
                         Text("Calm").tag("calm")
-                        Text("Kanban").tag("kanban")
+                        // Kanban hidden for now — keep the case so anyone
+                        // already on it doesn't break.
                     }
                     .pickerStyle(.segmented)
+                    .onAppear { if appLayout == "kanban" { appLayout = "rings" } }
                     Text(layoutBlurb(for: appLayout))
                         .font(.system(size: 11, weight: .regular, design: .rounded))
                         .foregroundStyle(P.textDim)

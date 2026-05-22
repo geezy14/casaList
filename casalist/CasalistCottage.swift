@@ -319,6 +319,8 @@ public enum CasalistCottage {
         @State private var showGrocery = false
         @State private var showMaintenance = false
         @State private var showReminders = false
+        @State private var showBoard = false
+        @State private var showStreaks = false
         @State private var showMyToDo = false
         /// Drives the slow pulse on the starCard's 1st-place avatar so users
         /// notice it's tappable and links to the chore card.
@@ -347,6 +349,11 @@ public enum CasalistCottage {
         private var sortedMembers: [FamilyMember] { members.sorted { seasonPts($0) > seasonPts($1) } }
         private var canManage: Bool {
             FamilyPermissions.currentMember(members: members, userName: userName, meUid: meUid)?.canManageFamily ?? false
+        }
+        /// Current user's streak, shown on the Streaks tile.
+        private var myStreakCount: Int {
+            guard let me = userMember else { return 0 }
+            return StreakTracker.effectiveCurrent(for: me.uid)
         }
         @State private var quickAddPing: String? = nil
         @State private var quickAddTick: Int = 0
@@ -386,15 +393,9 @@ public enum CasalistCottage {
             .sheet(isPresented: $showAddTodo) { AddTaskView() }
             .fullScreenCover(isPresented: $showGrocery) { Grocery() }
             .fullScreenCover(isPresented: $showMaintenance) { Maintenance() }
-            .fullScreenCover(isPresented: $showReminders) {
-                // Admins get the household Big Board in the Reminders slot;
-                // everyone else still opens the Reminders screen.
-                if canManage {
-                    HouseholdBoardView(onHome: { showReminders = false })
-                } else {
-                    Reminders()
-                }
-            }
+            .fullScreenCover(isPresented: $showReminders) { Reminders() }
+            .fullScreenCover(isPresented: $showBoard) { HouseholdBoardView(onHome: { showBoard = false }) }
+            .fullScreenCover(isPresented: $showStreaks) { StreaksBadgesView(onHome: { showStreaks = false }) }
             .fullScreenCover(isPresented: $showMyToDo) { MyToDo() }
             .fullScreenCover(isPresented: $showSchedule) { Schedule() }
             .fullScreenCover(isPresented: $showFamilyList) { FamilyListView() }
@@ -688,6 +689,7 @@ public enum CasalistCottage {
                         .foregroundStyle(P.text)
                 }
                 .padding(.top, 16)
+                if canManage { bigBoardCard }
                 star
                 tiles
                 whatsNew
@@ -722,6 +724,7 @@ public enum CasalistCottage {
                         .foregroundStyle(P.textDim)
                 }
                 .padding(.top, 16)
+                if canManage { bigBoardCard }
                 star
                 tiles
                 whatsNew
@@ -734,10 +737,42 @@ public enum CasalistCottage {
             VStack(alignment: .leading, spacing: 14) {
                 greetingCardRings
                     .padding(.top, 16)
+                if canManage { bigBoardCard }
                 star
                 tiles
                 whatsNew
             }.padding(.horizontal, 20).padding(.bottom, 28)
+        }
+
+        /// Admin-only prominent entry to the household Big Board. (Compare
+        /// with the Reminders-slot tile; Geezy picks one.)
+        private var bigBoardCard: some View {
+            Button { showBoard = true } label: {
+                HStack(spacing: 14) {
+                    Text("📋").font(.system(size: 30))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Household Board")
+                            .font(.system(size: 17, weight: .heavy))
+                            .foregroundStyle(Color(rgb: 0x3B2A22))
+                        Text("Everyone's calendar + chores at a glance")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(Color(rgb: 0x3B2A22).opacity(0.5))
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 24).fill(
+                        LinearGradient(colors: [P.butter, P.peach.opacity(0.55)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                )
+            }
+            .buttonStyle(.row)
         }
 
         /// "Classic" layout: the original 2.2 greeting banner, minus the
@@ -746,6 +781,7 @@ public enum CasalistCottage {
         private var classicDashContent: some View {
             VStack(alignment: .leading, spacing: 14) {
                 greetingCard
+                if canManage { bigBoardCard }
                 star
                 tiles
                 whatsNew
@@ -1433,13 +1469,8 @@ public enum CasalistCottage {
                              useWhiteText: paletteName != "anchor",
                              emoji: "✏️", label: "My To-Do", big: "\(openTodoCount)", suffix: "open", sub: nextTodoTitle)
                     }.buttonStyle(.row)
-                    Button { showReminders = true } label: {
-                        // Admins: this tile opens the household Big Board.
-                        if canManage {
-                            tile(bg: P.coral, emoji: "📋", label: "Household", big: "\(members.count)", suffix: "members", sub: "Calendar + chores at a glance")
-                        } else {
-                            tile(bg: P.coral, emoji: "📌", label: "Reminders", big: "\(reminderCount)", suffix: "pinned", sub: reminderPreview)
-                        }
+                    Button { showStreaks = true } label: {
+                        tile(bg: P.coral, emoji: "🔥", label: "Streaks", big: "\(myStreakCount)", suffix: "day", sub: "Badges & streaks")
                     }.buttonStyle(.row)
                     Button { showSchedule = true } label: {
                         tile(bg: P.sky, emoji: "📅", label: "Schedule", big: "\(scheduleUpcomingCount)", suffix: "upcoming", sub: nextEventTitle)
