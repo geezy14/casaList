@@ -291,12 +291,14 @@ final class GameRulesStore: ObservableObject {
     @Published private(set) var seasonNumber: Int = 0
     private var seasonBaselines: [String: Int] = [:]
 
-    /// Bump to force a one-time household-wide season reset on the next
-    /// launch (a clean Season 1, every score back to 0; admins re-grant
-    /// from there). Stored per-household via
+    /// Bump to force a one-time household-wide HARD reset on the next launch
+    /// (every member back to 0 points + 0 lifetime → Rookie, clean Season 1;
+    /// admins re-grant from scratch). Stored per-household via
     /// `HouseholdRulesEnvelope.seasonEpoch`, so the reset runs once and
     /// never flip-flops.
-    static let seasonEpoch = 3
+    /// - 3 (build 14/15): season-only reset (kept lifetime/prestige)
+    /// - 4 (build 16): full wipe — points + lifetime back to 0/Rookie
+    static let seasonEpoch = 4
 
     /// Toggle so the `didSet` doesn't loop when we reload from the
     /// household after a remote sync.
@@ -429,15 +431,21 @@ final class GameRulesStore: ObservableObject {
             env.seasonEpoch = Self.seasonEpoch
             changed = true
         } else if env.seasonEpoch < Self.seasonEpoch {
-            // Forced one-time reset shipped in code: a clean Season 1 with
-            // every score back to 0 (snapshot lifetime as the baseline);
-            // admins re-grant from there. Internal counter AND display are
-            // both 1 — no offset, nothing mismatched. Latched by the epoch
-            // so it runs once. NOTE: this is only safe once the older
-            // builds (11/12) are off every family device — build 12 will
-            // otherwise re-zero the baselines and re-inflate. See the ship
-            // notes; all devices must update to this build.
-            env.seasonBaselines = snapshot()
+            // Forced one-time HARD reset shipped in code: every member back
+            // to 0 spendable points AND 0 lifetime (so all-time level returns
+            // to Rookie), plus a clean Season 1. Admins re-grant from a true
+            // blank slate. Distinct from the 60-day roll above, which only
+            // resets the season race and keeps lifetime/prestige.
+            //
+            // Latched by the epoch so it runs once. Idempotent — zeroing is
+            // 0=0 — but only safe once the older builds (11/12) are off every
+            // family device (they don't know the epoch field and could
+            // re-trigger it). Coordinated family-wide update required.
+            for m in members where m.deletedAt == nil {
+                m.points = 0
+                m.lifetimePoints = 0
+            }
+            env.seasonBaselines = [:]      // lifetime is 0 now → season 0 too
             env.seasonStart = now
             env.seasonNumber = 1
             env.seasonEpoch = Self.seasonEpoch

@@ -27,6 +27,21 @@ private let levelLabels: [String] = [
     "Achiever", "Pro", "Expert", "Master", "Legend",
 ]
 
+/// The full level ladder for display (Game Rules reference): level number,
+/// name, the points needed to reach it, and its tier.
+struct LevelInfo: Identifiable {
+    let level: Int
+    let label: String
+    let threshold: Int
+    var id: Int { level }
+    var tier: AvatarLevel { AvatarLevel(level: level) }
+}
+
+/// All ten levels with their thresholds, for the Game Rules levels chart.
+let levelLadder: [LevelInfo] = levelThresholds.enumerated().map { i, t in
+    LevelInfo(level: i + 1, label: levelLabels[min(i, levelLabels.count - 1)], threshold: t)
+}
+
 /// Returns the 1-based level number (1–10) for the given lifetime points.
 func levelNumber(for lifetimePoints: Int) -> Int {
     var level = 1

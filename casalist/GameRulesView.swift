@@ -126,6 +126,12 @@ struct GameRulesView: View {
                 tierRows()
             }
 
+            // Level ladder (read-only reference)
+            Section(header: Label("LEVELS", systemImage: "star.fill"),
+                    footer: Text("Points needed to reach each level. Levels climb fast early, then take more as you go. Tiers: Sprout (1-3), Ember (4-7), Diamond (8-10).")) {
+                levelRows()
+            }
+
             // Category point values
             Section(header: Label("TASK POINT VALUES", systemImage: "bolt.fill"),
                     footer: Text(isAdmin
@@ -318,6 +324,35 @@ struct GameRulesView: View {
                 Label("Add reward tier", systemImage: "plus.circle.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(rgb: 0x7B5EA7))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func levelRows() -> some View {
+        ForEach(levelLadder) { info in
+            HStack(spacing: 12) {
+                Text(info.tier.emblem ?? "•").font(.system(size: 18))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Lvl \(info.level) · \(info.label)")
+                        .font(.system(size: 14, weight: .heavy))
+                    Text(info.tier.label)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(info.threshold) pts")
+                        .font(.system(size: 14, weight: .heavy))
+                        .monospacedDigit()
+                    if info.level > 1 {
+                        let prev = levelLadder[info.level - 2].threshold
+                        Text("+\(info.threshold - prev) to reach")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
             }
         }
     }

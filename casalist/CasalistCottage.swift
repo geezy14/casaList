@@ -3083,11 +3083,13 @@ public enum CasalistCottage {
         }
 
         private func adjustPoints(_ m: FamilyMember, by delta: Int) {
-            m.points = max(0, m.points + Int64(delta))
-            // Admin grants count toward level too — lifetime is monotonic, so
-            // only add on a grant, never subtract on a deduction. Without this
-            // a kid given points stays "Rookie" despite a high balance.
-            if delta > 0 { m.lifetimePoints += Int64(delta) }
+            let d = Int64(delta)
+            m.points = max(0, m.points + d)
+            // The leaderboard shows SEASON points (lifetime − baseline), so the
+            // admin +/- has to move lifetime in BOTH directions — otherwise the
+            // minus button only drains the wallet and the leaderboard number
+            // never goes down. Clamp at 0 so it can't go negative.
+            m.lifetimePoints = max(0, m.lifetimePoints + d)
             try? modelContext.save()
         }
 
