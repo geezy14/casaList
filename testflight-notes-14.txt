@@ -1,0 +1,17 @@
+What's New in 3 (14)
+
+IMPORTANT: EVERYONE UPDATE TOGETHER
+- Please have every family member update to this build. This build does a clean season reset, and older builds can interfere if they're still open.
+
+CLEAN SEASON 1
+- Everyone starts fresh at Season 1 with 0 points. Admins grant points from there to set each person where they belong (use the +/- on the Participants list).
+- Lifetime levels (in your profile) and your spendable points wallet are not affected by the reset.
+- Seasons roll over every 60 days from here.
+
+LAYOUT
+- The REWARDS title is now properly centered.
+
+What to Test
+- Open the Rewards tab and confirm everyone is at Season 1 with 0 points.
+- As an admin, tap + on a person to grant points and confirm the number climbs.
+- Confirm the REWARDS title is centered and your profile shows SEASON 1.
