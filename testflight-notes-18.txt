@@ -1,0 +1,8 @@
+What's Fixed in 3 (18)
+
+ORPHANED NOTIFICATIONS CLEANED UP
+- Fixed a bug where deleted tasks and chores kept their scheduled notifications, so you'd get reminders for things that no longer exist. Those stale notifications now clear automatically the next time you open the app.
+
+What to Test
+- Open the app and confirm you stop getting notifications for tasks/chores you've deleted.
+- Delete a task that had a reminder time; confirm its notification doesn't fire afterward.
