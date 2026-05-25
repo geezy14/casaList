@@ -1,0 +1,9 @@
+What's Fixed in 3 (19)
+
+CHORE BUNDLES YOU CAN ACTUALLY MANAGE
+- Bundles you create now show up again under "Bundles in progress" in My To-Do, on every layout - with the inline "Add a chore" box to fill them out.
+- Open a bundle from search (or anywhere) and you can finally see what's inside it: every chore with its points, plus a running points total. Admins can add or remove chores right from the detail view, and Edit jumps straight to the bundle settings.
+
+What to Test
+- Create a bundle (+ -> New bundle), leave it as "Anyone", and confirm it appears under "Bundles in progress" so you can add chores.
+- Search for a bundle, open it, and confirm you see its chores and can add/remove them.

@@ -4329,6 +4329,14 @@ extension CasalistCottage {
         /// Anything else falls back to classic.
         @ViewBuilder
         private var content: some View {
+            // Draft bundles being assembled — the inline "add chores" card lives
+            // here so it surfaces in every layout (the old Dashboard agenda entry
+            // point was removed). Only shown while you have unfinished drafts.
+            if !bundlesInProgress.isEmpty {
+                bundlesInProgressSection
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+            }
             switch appLayout {
             case "calm":    calmContent
             case "rings":   ringsContent

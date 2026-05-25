@@ -18,6 +18,20 @@ struct TaskDetailView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \FamilyMember.createdAt, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
     private var members: FetchedResults<FamilyMember>
 
+    /// Chores nested under this item when it's a bundle (parentUid == uid).
+    @FetchRequest private var children: FetchedResults<TaskItem>
+
+    init(task: TaskItem) {
+        self.task = task
+        _children = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \TaskItem.createdAt, ascending: true)],
+            predicate: NSPredicate(format: "parentUid == %@ AND deletedAt == nil", task.uid)
+        )
+    }
+
+    @State private var showBundleMeta: Bool = false
+    @State private var newChore: String = ""
+    @State private var newChorePts: Int = 10
     @State private var editing: Bool = false
     @State private var editName: String = ""
     @State private var editAssignee: String = ""
@@ -56,6 +70,14 @@ struct TaskDetailView: View {
             && task.dueDate != nil
             && task.parentUid.isEmpty
     }
+    /// True when this item is a chore bundle (finalized or still a draft).
+    private var isBundle: Bool {
+        task.parentUid.isEmpty && (task.repeatKind == "bundle" || task.repeatKind == "bundle-draft")
+    }
+    /// Bonus + the sum of every child chore's points.
+    private var bundleTotalPoints: Int {
+        Int(task.points) + children.reduce(0) { $0 + Int($1.points) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -64,7 +86,10 @@ struct TaskDetailView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         header
-                        if editing && iAmAdmin {
+                        if isBundle {
+                            bundleContentsCard
+                            infoCard
+                        } else if editing && iAmAdmin {
                             editForm
                         } else {
                             infoCard
@@ -87,7 +112,9 @@ struct TaskDetailView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     if iAmAdmin {
-                        if editing {
+                        if isBundle {
+                            Button("Edit") { showBundleMeta = true }
+                        } else if editing {
                             Button("Save", action: saveEdits)
                                 .disabled(editName.trimmingCharacters(in: .whitespaces).isEmpty)
                         } else {
@@ -97,6 +124,7 @@ struct TaskDetailView: View {
                 }
             }
             .celebration(visible: $celebrate, label: celebrateLabel)
+            .sheet(isPresented: $showBundleMeta) { AddChoreBundleView(editing: task) }
             .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     task.softDelete()
@@ -117,7 +145,13 @@ struct TaskDetailView: View {
             Text(categoryEmoji(task.category)).font(.system(size: 40))
             Text(task.task).font(.system(size: 22, weight: .heavy)).multilineTextAlignment(.center)
             HStack(spacing: 8) {
-                if task.points > 0 {
+                if isBundle {
+                    Text("⚡️ \(bundleTotalPoints) pts total")
+                        .font(.system(size: 12, weight: .heavy))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(P.butter))
+                        .foregroundStyle(.white)
+                } else if task.points > 0 {
                     Text("⭐ \(task.points) pts")
                         .font(.system(size: 12, weight: .heavy))
                         .padding(.horizontal, 10).padding(.vertical, 4)
@@ -193,6 +227,117 @@ struct TaskDetailView: View {
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
     private var divider: some View { Rectangle().fill(P.border).frame(height: 1) }
+
+    // MARK: – Bundle contents
+
+    /// Lists every chore in the bundle with per-chore points, plus an inline
+    /// "add a chore" row for admins. Works for finalized bundles and drafts,
+    /// so a bundle's contents are visible/editable from any entry point
+    /// (search, agenda, lists) — not just the My To-Do draft card.
+    private var bundleContentsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("CHORES IN THIS BUNDLE")
+                    .font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textMuted)
+                Spacer()
+                Text("\(children.count)")
+                    .font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textMuted)
+            }
+            .padding(.horizontal, 4)
+
+            if children.isEmpty {
+                Text(iAmAdmin ? "No chores yet — add one below." : "No chores yet.")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(P.textMuted)
+                    .padding(.leading, 4).padding(.vertical, 4)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(children, id: \.uid) { child in
+                        HStack(spacing: 10) {
+                            Image(systemName: child.isCompleted ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 15))
+                                .foregroundStyle(child.isCompleted ? P.mint : P.textMuted)
+                            Text(child.task)
+                                .font(.system(size: 14, weight: .semibold))
+                                .strikethrough(child.isCompleted)
+                                .foregroundStyle(child.isCompleted ? P.textMuted : P.text)
+                            Spacer()
+                            if child.points > 0 {
+                                Text("+\(child.points)")
+                                    .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
+                            }
+                            if iAmAdmin {
+                                Button {
+                                    child.softDelete(); try? moc.save()
+                                } label: {
+                                    Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(P.textMuted)
+                                }.buttonStyle(.row)
+                            }
+                        }
+                        .padding(.vertical, 9).padding(.horizontal, 12)
+                        .overlay(alignment: .top) {
+                            if child != children.first { Rectangle().fill(P.border).frame(height: 1) }
+                        }
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 14).fill(P.surfaceAlt.opacity(0.5)))
+            }
+
+            if iAmAdmin {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle").font(.system(size: 16)).foregroundStyle(P.textDim)
+                    TextField("Add a chore…", text: $newChore)
+                        .font(.system(size: 14, weight: .semibold))
+                        .submitLabel(.done)
+                        .onSubmit(addChore)
+                    HStack(spacing: 4) {
+                        Button { newChorePts = max(0, newChorePts - 5) } label: {
+                            Image(systemName: "minus").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.text)
+                        }.buttonStyle(.row)
+                        Text("\(newChorePts)pt")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.text).frame(minWidth: 30)
+                        Button { newChorePts = min(50, newChorePts + 5) } label: {
+                            Image(systemName: "plus").font(.system(size: 10, weight: .heavy)).foregroundStyle(P.text)
+                        }.buttonStyle(.row)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(P.surfaceAlt))
+                    Button(action: addChore) {
+                        Image(systemName: "arrow.up").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                            .frame(width: 28, height: 28).background(Circle().fill(P.mint))
+                    }
+                    .buttonStyle(.row)
+                    .disabled(newChore.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6).padding(.trailing, 4)
+                .background(Capsule().fill(P.surfaceAlt))
+                .overlay(Capsule().stroke(P.border, lineWidth: 1.5))
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+    }
+
+    private func addChore() {
+        let text = newChore.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        let myName = (me?.name ?? userName).trimmingCharacters(in: .whitespaces)
+        let chore = TaskItem(
+            context: moc,
+            task: text,
+            category: task.category,
+            points: newChorePts,
+            createdBy: myName
+        )
+        chore.parentUid = task.uid
+        chore.assignee = task.assignee
+        if let h = task.household {
+            moc.assign(chore, toStoreOf: h)
+            chore.household = h
+        }
+        try? moc.save()
+        newChore = ""
+    }
 
     /// Human-readable recurrence text. Custom rules (`custom:{…}` JSON)
     /// and legacy preset strings ("daily", "every2h", …) both resolve to
