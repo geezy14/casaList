@@ -63,6 +63,11 @@ enum NotificationsManager {
         let myName = UserDefaults.standard.string(forKey: "userName")?
             .trimmingCharacters(in: .whitespaces) ?? ""
         for t in tasks {
+            // Deleted tasks/chores must not keep (or get) notifications. They
+            // build no plan here, so their pending ids fall into `toCancel`
+            // below and get swept — this is what clears orphaned pushes for
+            // tasks that no longer exist.
+            guard t.deletedAt == nil else { continue }
             // Recurring reminders keep firing even when checked off; one-shot
             // tasks stop once completed.
             let isRecurring = !t.effectiveRepeatKind.isEmpty
@@ -131,6 +136,7 @@ enum NotificationsManager {
     @MainActor
     static func syncFromContext(_ context: NSManagedObjectContext) async {
         let request = TaskItem.fetchRequest()
+        request.predicate = NSPredicate(format: "deletedAt == nil")
         let tasks = (try? context.fetch(request)) ?? []
         await sync(tasks: tasks)
     }
