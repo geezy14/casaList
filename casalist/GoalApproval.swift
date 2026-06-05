@@ -26,16 +26,64 @@ enum GoalApproval {
         pendingPrefix + realName
     }
 
-    /// Approve: strip the PENDING: prefix and (optionally) set the price.
-    /// Pass `targetPoints` when approving a suggestion the requester didn't
-    /// price themselves (the new redesigned flow). Pass nil to keep whatever
-    /// price is already on the goal (legacy flow). Caller saves the context.
-    static func approve(_ g: FamilyGoal, targetPoints: Int? = nil) {
+    /// Approve: strip the PENDING: prefix, (optionally) set the price,
+    /// mark the goal as redeemed (so it surfaces in Recently Redeemed),
+    /// and debit the requester's spendable wallet (`member.points`).
+    ///
+    /// IMPORTANT: lifetime/season points are **not** touched, so the
+    /// leaderboard standing the requester earned is preserved — only
+    /// their usable wallet drops. If they spent everything, wallet
+    /// floors at 0; the leaderboard number stays.
+    ///
+    /// `context` is required to look up the requester FamilyMember
+    /// scoped to the goal's household. Caller saves the context.
+    static func approve(
+        _ g: FamilyGoal,
+        targetPoints: Int? = nil,
+        in context: NSManagedObjectContext
+    ) {
         guard isPending(g) else { return }
-        g.ownerName = realOwnerName(g)
+        let realOwner = realOwnerName(g)
+        g.ownerName = realOwner
         if let tp = targetPoints {
             g.targetPoints = Int64(max(1, tp))
         }
+        // Mark as redeemed so the redemption appears in the
+        // "Recently Redeemed" / inbox feed.
+        g.isRedeemed = true
+        g.redeemedAt = Date()
+        // Debit the requester's spendable wallet, scoped to the goal's
+        // household so name collisions across households can't cross-debit.
+        if let member = requesterMember(for: g, realOwner: realOwner, in: context) {
+            let cost = g.targetPoints
+            member.points = max(0, member.points - cost)
+        }
+    }
+
+    /// Look up the FamilyMember who requested this goal — same household,
+    /// case-insensitive name match. Returns nil if the requester record
+    /// can't be found (e.g. renamed/deleted after requesting).
+    private static func requesterMember(
+        for goal: FamilyGoal,
+        realOwner: String,
+        in context: NSManagedObjectContext
+    ) -> FamilyMember? {
+        let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        let trimmed = realOwner.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        if let household = goal.household {
+            req.predicate = NSPredicate(
+                format: "name ==[c] %@ AND deletedAt == nil AND household == %@",
+                trimmed, household
+            )
+        } else {
+            req.predicate = NSPredicate(
+                format: "name ==[c] %@ AND deletedAt == nil",
+                trimmed
+            )
+        }
+        req.fetchLimit = 1
+        return (try? context.fetch(req))?.first
     }
 
     /// Deny: soft-delete the record (goes to Trash). Caller saves the context.

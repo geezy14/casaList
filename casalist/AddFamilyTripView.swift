@@ -24,6 +24,10 @@ struct AddFamilyTripView: View {
     @State private var hasTime: Bool = false
     @State private var tripDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var tripEndDate: Date = Calendar.current.startOfDay(for: Date()).addingTimeInterval(3600)
+    /// When ON and a date is set, the outing also creates a paired
+    /// FamilyEvent so it shows on the Schedule tab (and flows through
+    /// CalendarLinkService to Apple Calendar if a calendar is linked).
+    @State private var addToSchedule: Bool = true
 
     var body: some View {
         NavigationStack {
@@ -51,6 +55,13 @@ struct AddFamilyTripView: View {
                         }
                     }
                 }
+                if hasDate {
+                    Section {
+                        Toggle("Add to Schedule", isOn: $addToSchedule)
+                    } footer: {
+                        Text("Also creates a calendar event so the outing shows on the Schedule tab and (if you've linked one) syncs to Apple Calendar.")
+                    }
+                }
                 Section {
                     Text("After saving, add tasks under this outing in the Family tab.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -69,23 +80,60 @@ struct AddFamilyTripView: View {
     }
 
     private func save() {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let trimmedUser = userName.trimmingCharacters(in: .whitespaces)
         let trip = TaskItem(
             context: moc,
-            task: name.trimmingCharacters(in: .whitespaces),
+            task: trimmedName,
             dueDate: hasDate ? (hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)) : nil,
             category: "family",
             points: -1, // container sentinel — see TaskItem.isContainer
-            createdBy: userName.trimmingCharacters(in: .whitespaces)
+            createdBy: trimmedUser
         )
         if hasDate && hasTime {
             trip.endDate = tripEndDate
         }
-        if let h = households.preferredTarget {
+        let household = households.preferredTarget
+        if let h = household {
             moc.assign(trip, toStoreOf: h)
             trip.household = h
         }
+
+        // Pair-create a FamilyEvent so the outing shows on the Schedule
+        // tab and flows through CalendarLinkService to Apple Calendar.
+        // The event's notes carry a sentinel tag linking back to the
+        // outing's TaskItem.uid — no schema change required.
+        var pairedEvent: FamilyEvent?
+        if hasDate && addToSchedule {
+            let isAllDay = !hasTime
+            let start = hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)
+            let event = FamilyEvent(
+                context: moc,
+                title: trimmedName,
+                startDate: start,
+                isAllDay: isAllDay,
+                location: "",
+                attendees: "",
+                notes: "casalist-outing-uid:\(trip.uid)",
+                repeatKind: "",
+                createdBy: trimmedUser,
+                notifyMode: "household"
+            )
+            event.endDate = isAllDay ? nil : tripEndDate
+            event.announceHousehold = true
+            if let h = household {
+                moc.assign(event, toStoreOf: h)
+                event.household = h
+            }
+            pairedEvent = event
+        }
+
         try? moc.save()
         Task { await NotificationsManager.scheduleNow(for: trip) }
+        if let pairedEvent {
+            Task { await NotificationsManager.scheduleEvent(for: pairedEvent) }
+            CalendarLinkService.shared.mirror(pairedEvent)
+        }
         dismiss()
     }
 }

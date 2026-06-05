@@ -219,9 +219,9 @@ struct InboxView: View {
                     }.buttonStyle(.row)
                     Button {
                         if needsPrice {
-                            GoalApproval.approve(goal, targetPoints: draftPrice)
+                            GoalApproval.approve(goal, targetPoints: draftPrice, in: moc)
                         } else {
-                            GoalApproval.approve(goal)
+                            GoalApproval.approve(goal, in: moc)
                         }
                         try? moc.save()
                     } label: {

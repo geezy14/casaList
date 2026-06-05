@@ -1894,14 +1894,64 @@ public enum CasalistCottage {
         private var P: Palette { palette }
         private var needsPrice: Bool { goal.targetPoints == 0 }
 
+        /// The requester (kid / non-admin) who submitted this request,
+        /// looked up by name + household. nil if the member can't be
+        /// found (e.g. renamed/deleted after requesting).
+        private var requester: FamilyMember? {
+            let name = GoalApproval.realOwnerName(goal)
+                .trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return nil }
+            let req: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+            if let h = goal.household {
+                req.predicate = NSPredicate(
+                    format: "name ==[c] %@ AND deletedAt == nil AND household == %@",
+                    name, h
+                )
+            } else {
+                req.predicate = NSPredicate(
+                    format: "name ==[c] %@ AND deletedAt == nil", name
+                )
+            }
+            req.fetchLimit = 1
+            return (try? moc.fetch(req))?.first
+        }
+
+        /// True when the requester's wallet can't cover the current
+        /// draft price — surfaced as a warning chip so the admin sees
+        /// it before approving.
+        private var cantAfford: Bool {
+            guard let m = requester else { return false }
+            return Int64(draftPrice) > m.points
+        }
+
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Text("💬").font(.system(size: 24))
+                // Requester header — "see the details" of who asked for what.
+                HStack(spacing: 10) {
+                    if let m = requester {
+                        CLAvatar(m.asCLMember, size: 30)
+                    } else {
+                        Text("💬").font(.system(size: 22))
+                    }
                     VStack(alignment: .leading, spacing: 2) {
+                        Text("Requested by \(GoalApproval.realOwnerName(goal))")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.textMuted)
                         Text(goal.label).font(.system(size: 15, weight: .heavy))
-                        Text(needsPrice ? "Needs a price" : "Suggested: \(goal.targetPoints) pts")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    }
+                    Spacer()
+                    if let m = requester {
+                        Text("⭐ \(m.points)")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.butter)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Capsule().fill(P.butter.opacity(0.15)))
+                    }
+                }
+                HStack(spacing: 6) {
+                    Text(needsPrice ? "Needs a price" : "Suggested: \(goal.targetPoints) pts")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(P.textMuted)
+                    if cantAfford {
+                        Text("· can't afford")
+                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(.red)
                     }
                     Spacer()
                 }
@@ -1945,7 +1995,7 @@ public enum CasalistCottage {
                             .background(Capsule().fill(Color.red.opacity(0.8)))
                     }.buttonStyle(.row)
                     Button {
-                        GoalApproval.approve(goal, targetPoints: draftPrice)
+                        GoalApproval.approve(goal, targetPoints: draftPrice, in: moc)
                         try? moc.save()
                     } label: {
                         Text("Approve · \(draftPrice) pts")

@@ -1,0 +1,14 @@
+What's New in 3 (20)
+
+REWARD REQUESTS, FIXED END-TO-END
+- Pending request cards now show who asked, with their current wallet, so admins know who they're approving and whether they can afford it.
+- Approving a reward now actually redeems it. It shows up in Recently Redeemed and the requester's spendable wallet drops by the cost.
+- Lifetime points are left alone, so the leaderboard standing your kids earned stays put. Only their usable wallet goes down.
+
+FAMILY OUTINGS TIE TO THE CALENDAR
+- New "Add to Schedule" toggle when you create a family outing with a date. Defaults on.
+- The outing appears on the Schedule tab as an event, and (if you've linked Apple Calendar in Settings) flows there too. The outing keeps its container role in the Family tab.
+
+What to Test
+- Have a kid request a reward. Open the pending request and confirm you see their name, avatar, and wallet. Approve it and confirm it lands in Recently Redeemed and the kid's wallet drops by the cost. Check the leaderboard - their rank should not change from the redemption.
+- Create a family outing with a date. Confirm it shows up on the Schedule tab as an event. Untoggle "Add to Schedule" on a new outing and confirm it stays Family-tab only.

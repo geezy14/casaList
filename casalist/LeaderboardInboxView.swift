@@ -558,9 +558,9 @@ struct LeaderboardInboxView: View {
             }.buttonStyle(.row)
             Button {
                 if needsPrice {
-                    GoalApproval.approve(g, targetPoints: 50)  // fallback price; full editor in classic InboxView
+                    GoalApproval.approve(g, targetPoints: 50, in: moc)  // fallback price; full editor in classic InboxView
                 } else {
-                    GoalApproval.approve(g)
+                    GoalApproval.approve(g, in: moc)
                 }
                 try? moc.save()
             } label: {
