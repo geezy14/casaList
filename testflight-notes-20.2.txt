@@ -1,0 +1,9 @@
+What's Fixed in 3 (20.2)
+
+ONE-TAP REDEEM FOR ANY APPROVED REQUEST
+- Approvals from now on auto-redeem (already in the last build). But goals that were already sitting in the inbox approved-but-not-yet-redeemed had no way to be cleared without leaving the inbox.
+- Both inbox surfaces (Leaderboard inbox "In Flight" and classic inbox "Recently Approved") now have a Redeem button right on the row for admins. One tap debits the requester's wallet and moves the goal to Recently Redeemed. Leaderboard rank still stays put.
+
+What to Test
+- Open the inbox. Any approved goal that hasn't been redeemed yet should have a green Redeem button.
+- Tap Redeem and confirm: the row disappears from In Flight, lands in Recently Redeemed, the requester's wallet chip on the standings drops, and their leaderboard rank does not move.

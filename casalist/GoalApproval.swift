@@ -86,6 +86,25 @@ enum GoalApproval {
         return (try? context.fetch(req))?.first
     }
 
+    /// Redeem an already-approved goal: marks it redeemed (so it appears
+    /// in Recently Redeemed) and debits the requester's spendable wallet.
+    /// Lifetime/season points untouched — leaderboard standing preserved.
+    /// Idempotent: no-op if the goal is already redeemed or still pending
+    /// approval. Caller saves the context.
+    ///
+    /// Use this for the "Redeem from inbox" admin shortcut on legacy
+    /// goals that were approved before approve = redeem went in, or any
+    /// other explicit one-tap redeem path.
+    static func redeem(_ g: FamilyGoal, in context: NSManagedObjectContext) {
+        guard !isPending(g), !g.isRedeemed else { return }
+        g.isRedeemed = true
+        g.redeemedAt = Date()
+        if let member = requesterMember(for: g, realOwner: g.ownerName, in: context) {
+            let cost = g.targetPoints
+            member.points = max(0, member.points - cost)
+        }
+    }
+
     /// Deny: soft-delete the record (goes to Trash). Caller saves the context.
     static func deny(_ g: FamilyGoal, in context: NSManagedObjectContext) {
         g.softDelete()

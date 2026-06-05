@@ -246,7 +246,8 @@ struct InboxView: View {
     }
 
     private func approvedRow(_ g: FamilyGoal) -> some View {
-        HStack(spacing: 10) {
+        let amAdmin = me?.canManageFamily ?? false
+        return HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 16)).foregroundStyle(P.mint)
             VStack(alignment: .leading, spacing: 2) {
@@ -255,7 +256,24 @@ struct InboxView: View {
                     .font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
             }
             Spacer()
-            Text(g.createdAt, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+            // One-tap admin redeem for legacy goals that were approved
+            // before approve = redeem went in. Debits the requester's
+            // wallet + marks the goal redeemed (moves to Recently
+            // Redeemed). No-op if already redeemed.
+            if amAdmin {
+                Button {
+                    GoalApproval.redeem(g, in: moc)
+                    try? moc.save()
+                } label: {
+                    Text("Redeem")
+                        .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(P.mint))
+                }
+                .buttonStyle(.row)
+            } else {
+                Text(g.createdAt, style: .date).font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 16).fill(P.surface))

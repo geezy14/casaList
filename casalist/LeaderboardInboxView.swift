@@ -495,6 +495,7 @@ struct LeaderboardInboxView: View {
         let target = Int(g.targetPoints)
         let progress = target > 0 ? min(1.0, Double(balance) / Double(target)) : 0
         let remaining = max(0, target - balance)
+        let amAdmin = me?.canManageFamily ?? false
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 if let m = owner { LeveledAvatar(member: m, size: 32) }
@@ -517,6 +518,26 @@ struct LeaderboardInboxView: View {
                 }
             }
             .frame(height: 8)
+            // One-tap admin redeem for goals stuck "in flight" (approved
+            // before the auto-redeem-on-approve fix, or any future case
+            // where approval and redemption aren't the same moment). Debits
+            // the requester's wallet + marks the goal redeemed.
+            if amAdmin {
+                Button {
+                    GoalApproval.redeem(g, in: moc)
+                    try? moc.save()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gift.fill").font(.system(size: 11, weight: .heavy))
+                        Text("Redeem now").font(.system(size: 12, weight: .heavy))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .background(Capsule().fill(P.mint))
+                }
+                .buttonStyle(.row)
+                .padding(.top, 4)
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 18).fill(P.surface))
