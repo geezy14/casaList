@@ -1,0 +1,7 @@
+What's Fixed in 3 (20.1)
+
+WALLET NOW VISIBLE ON THE LEADERBOARD
+- Each row on the leaderboard now shows a small wallet chip next to the name, so the leaderboard rank/score and the spendable wallet can't be confused. The bar/score is still season points (your rank); the chip is what they can actually spend. Greys out at 0 so "they spent everything" is obvious.
+
+What to Test
+- Approve a reward request that drains a kid's wallet. Confirm the chip on their row drops to 0 (greyed out) while their leaderboard rank/bar stays put.

@@ -2637,6 +2637,15 @@ public enum CasalistCottage {
                                     if badgeCount > 0 {
                                         Text("🎖\(badgeCount)").font(.system(size: 11, weight: .heavy)).foregroundStyle(P.lavender)
                                     }
+                                    // Spendable wallet chip — distinct from the leaderboard
+                                    // score/bar (which is season points). Drops on redemption,
+                                    // leaderboard rank stays. Greyed when 0 so "spent everything"
+                                    // is obvious at a glance.
+                                    Text("💰 \(m.points)")
+                                        .font(.system(size: 11, weight: .heavy))
+                                        .foregroundStyle(m.points == 0 ? P.textDim : P.mint)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(Capsule().fill((m.points == 0 ? P.textDim : P.mint).opacity(0.12)))
                                     Spacer()
                                     if canManagePoints {
                                         Button { adjustPoints(m, by: -5) } label: {
