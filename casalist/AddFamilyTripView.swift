@@ -40,18 +40,33 @@ struct AddFamilyTripView: View {
                     Toggle("Schedule this outing", isOn: $hasDate)
                         .onChange(of: hasDate) { _, on in if !on { hasTime = false } }
                     if hasDate {
-                        DatePicker("Date", selection: $tripDate, displayedComponents: .date)
+                        // Start day. End day independently so outings can span
+                        // multiple days (weekend trips, camping, etc.).
+                        DatePicker("Starts", selection: $tripDate, displayedComponents: .date)
+                            .onChange(of: tripDate) { _, d in
+                                if tripEndDate < d { tripEndDate = d }
+                            }
+                        DatePicker("Ends", selection: $tripEndDate, in: tripDate..., displayedComponents: .date)
                         Toggle("Specific time", isOn: $hasTime.animation())
                             .onChange(of: hasTime) { _, on in
-                                if !on { tripDate = Calendar.current.startOfDay(for: tripDate) }
-                                else { tripEndDate = tripDate.addingTimeInterval(3600) }
+                                if !on {
+                                    tripDate = Calendar.current.startOfDay(for: tripDate)
+                                    tripEndDate = Calendar.current.startOfDay(for: tripEndDate)
+                                } else {
+                                    // Default to 9 AM start, 1 hour later on the same day.
+                                    let cal = Calendar.current
+                                    tripDate = cal.date(bySettingHour: 9, minute: 0, second: 0, of: tripDate) ?? tripDate
+                                    if tripEndDate < tripDate.addingTimeInterval(3600) {
+                                        tripEndDate = tripDate.addingTimeInterval(3600)
+                                    }
+                                }
                             }
                         if hasTime {
-                            DatePicker("Starts", selection: $tripDate, displayedComponents: .hourAndMinute)
+                            DatePicker("Start time", selection: $tripDate, displayedComponents: .hourAndMinute)
                                 .onChange(of: tripDate) { _, d in
                                     if tripEndDate <= d { tripEndDate = d.addingTimeInterval(3600) }
                                 }
-                            DatePicker("Ends", selection: $tripEndDate, in: tripDate..., displayedComponents: .hourAndMinute)
+                            DatePicker("End time", selection: $tripEndDate, in: tripDate..., displayedComponents: .hourAndMinute)
                         }
                     }
                 }
@@ -82,17 +97,29 @@ struct AddFamilyTripView: View {
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let trimmedUser = userName.trimmingCharacters(in: .whitespaces)
+        let cal = Calendar.current
+        // Normalize start/end. For all-day outings, anchor on startOfDay so
+        // a multi-day all-day outing reads correctly downstream.
+        let startResolved = hasDate
+            ? (hasTime ? tripDate : cal.startOfDay(for: tripDate))
+            : nil
+        let endResolved: Date? = {
+            guard hasDate else { return nil }
+            if hasTime { return tripEndDate }
+            // All-day end: keep only when it spans multiple days, otherwise nil.
+            return cal.isDate(tripEndDate, inSameDayAs: tripDate)
+                ? nil
+                : cal.startOfDay(for: tripEndDate)
+        }()
         let trip = TaskItem(
             context: moc,
             task: trimmedName,
-            dueDate: hasDate ? (hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)) : nil,
+            dueDate: startResolved,
             category: "family",
             points: -1, // container sentinel — see TaskItem.isContainer
             createdBy: trimmedUser
         )
-        if hasDate && hasTime {
-            trip.endDate = tripEndDate
-        }
+        trip.endDate = endResolved
         let household = households.preferredTarget
         if let h = household {
             moc.assign(trip, toStoreOf: h)
@@ -106,7 +133,7 @@ struct AddFamilyTripView: View {
         var pairedEvent: FamilyEvent?
         if hasDate && addToSchedule {
             let isAllDay = !hasTime
-            let start = hasTime ? tripDate : Calendar.current.startOfDay(for: tripDate)
+            let start = startResolved ?? tripDate
             let event = FamilyEvent(
                 context: moc,
                 title: trimmedName,
@@ -119,7 +146,10 @@ struct AddFamilyTripView: View {
                 createdBy: trimmedUser,
                 notifyMode: "household"
             )
-            event.endDate = isAllDay ? nil : tripEndDate
+            // Multi-day spans: set endDate even for all-day so the Schedule
+            // tab and Apple Calendar show the full range. Single-day all-day
+            // leaves endDate nil (legacy single-day behavior).
+            event.endDate = endResolved
             event.announceHousehold = true
             if let h = household {
                 moc.assign(event, toStoreOf: h)

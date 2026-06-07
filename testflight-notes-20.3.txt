@@ -1,0 +1,13 @@
+What's Fixed in 3 (20.3)
+
+FAMILY LIST POLISH
+- Removed the duplicate task-creator + on the Family List top bar. The coral + on this tab now opens the family outing creator only. Chores still live on My To-Do.
+
+FAMILY OUTINGS CAN SPAN MULTIPLE DAYS
+- New outings now have separate Starts and Ends date pickers, so weekend trips and longer outings can be scheduled cleanly. The optional time toggle still works the same way.
+- The paired Schedule event respects the span. A multi-day all-day outing now shows the full date range; single-day outings behave exactly as before.
+
+What to Test
+- Open Family List and confirm there is only ONE plus button (the coral one). Tap it: should open the outing creator.
+- Create an outing starting Saturday and ending Sunday (no time). Confirm it appears on the Schedule across both days.
+- Create an outing with Specific time on, starting Sat 9am and ending Sun 5pm. Confirm the start and end carry through correctly.
