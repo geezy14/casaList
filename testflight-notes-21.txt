@@ -1,0 +1,20 @@
+What's New in 3 (21)
+
+PARENTS GET A PUSH WHEN A KID FINISHES A CHORE
+- The moment a kid marks a chore done on their phone, every admin in the household gets a local push within a few seconds: who finished what and the points awarded.
+- Kids' phones stay silent for completions. Admins don't push themselves about chores they finished on their own phone.
+- Only fires for Chores / Home / Maintenance items - reminders and outings don't trigger it.
+- Respects quiet hours.
+
+BIG BOARD: SEE WHO HAS WHAT CHORE
+- The CHORES section on the admin Big Board now shows every chore each family member has, right under their summary row. Done chores have a mint check; open ones are circles; overdue ones are coral.
+- Each chore line shows the title, the due-date (Today / Tomorrow / Overdue MMM d / EEE MMM d), and points.
+
+BUNDLES AUTO-REMOVE WHEN ALL CHORES ARE DONE
+- Finishing the last chore in a bundle now auto-finishes the bundle - it drops out of the active list immediately, the bonus is awarded once, celebration fires. No more tapping a bundle's green check.
+- This also fixes a quiet double-award bug where bundles paid out their bonus twice when the last chore got checked AND the bundle's check was tapped.
+
+What to Test
+- On the iPhone you use as admin: confirm the Big Board CHORES section now lists every chore under each family member's row, not just the count.
+- Have a kid (or your second device on a different iCloud account) mark a chore done. Within a few seconds, your admin phone should fire a push naming who finished what.
+- Make a bundle, finish all its chores from the kid's side. Confirm the bundle disappears from the active list and the bonus shows up exactly once on the leaderboard / wallet chip.

@@ -3515,17 +3515,29 @@ extension CasalistCottage {
         private func checkBundleCompletion(for child: TaskItem) {
             guard !child.parentUid.isEmpty else { return }
             guard let bundle = todos.first(where: { $0.uid == child.parentUid && $0.isChoreBundle }) else { return }
+            // Guard against double-firing: if the bundle is already marked
+            // done, the bonus has already been awarded — bail.
+            guard !bundle.isCompleted else { return }
             let siblings = todos.filter { $0.parentUid == bundle.uid }
             guard !siblings.isEmpty, siblings.allSatisfy({ $0.isCompleted }) else { return }
-            guard bundle.points > 0 else { return }
             let bonusPts = Int(bundle.points)
-            let recipientName = bundle.assignee ?? child.assignee ?? ""
-            if !recipientName.isEmpty, let member = FamilyPoints.match(name: recipientName, in: members) {
-                member.points += Int64(bonusPts)
-                member.lifetimePoints += Int64(bonusPts)
+            if bonusPts > 0 {
+                let recipientName = bundle.assignee ?? child.assignee ?? ""
+                if !recipientName.isEmpty, let member = FamilyPoints.match(name: recipientName, in: members) {
+                    member.points += Int64(bonusPts)
+                    member.lifetimePoints += Int64(bonusPts)
+                }
             }
+            // Auto-mark the bundle as completed so it drops out of the
+            // active list — no more manual "tap the bundle's check"
+            // step (which used to also re-award the bonus, double-paying
+            // the user).
+            bundle.isCompleted = true
+            bundle.completedAt = Date()
             try? modelContext.save()
-            celebrateLabel = "Bundle done! +\(bonusPts) bonus!"
+            celebrateLabel = bonusPts > 0
+                ? "Bundle done! +\(bonusPts) bonus!"
+                : "Bundle done!"
             celebrate = true
         }
 

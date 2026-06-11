@@ -1136,6 +1136,120 @@ enum NotificationsManager {
         defaults.set(Array(notified), forKey: notifiedAssignmentsKey)
     }
 
+    // MARK: – Chore completion push (admins-only)
+
+    private static let notifiedCompletionsKey = "notifiedCompletionUIDs"
+    /// Per-device flag: first time we run completion detection, seed the
+    /// notified-set with EVERY currently-completed task so we don't fire
+    /// pushes for tasks that were already completed before this feature
+    /// landed (or before this device installed the build).
+    private static let completionsSeededKey = "notifiedCompletionsSeeded"
+
+    /// Chore categories that fire the completion push. Mirrors the
+    /// HouseholdBoard / My To-Do "chore" definition. We don't push on
+    /// completion of reminders, family outings, or other categories.
+    private static let completionPushCategories: Set<String> = [
+        "chores", "home", "maintenance"
+    ]
+
+    /// Fire a local push on THIS device when a chore syncs in as completed
+    /// by someone else — but only if this device's user is a household
+    /// admin. Used by parents to be told the moment a kid finishes a chore
+    /// on a different device. Each completion is deduped by uid via
+    /// `notifiedCompletionsKey` so re-runs of the debounced remote-change
+    /// pipeline don't re-notify.
+    ///
+    /// Skip conditions (any of these → no push on this device):
+    /// - User isn't an admin (kids' devices stay silent for completions)
+    /// - Assignee is THIS user (already saw the in-app celebration overlay)
+    /// - Task is in a non-chore category (reminders / outings / etc.)
+    /// - Task completed > 24h ago (newly synced shared store shouldn't
+    ///   dump months of history into the notification center)
+    /// - Already notified this uid
+    /// - Quiet hours active
+    @MainActor
+    static func detectAndNotifyCompletions(in context: NSManagedObjectContext, userName: String) async {
+        if isWithinQuietHours() { return }
+        let trimmed = userName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let status = await currentStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+
+        // Admin gate: only fire on this device if THIS user can manage the
+        // family. Kids' phones stay silent for completion pushes.
+        let memberReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(
+            format: "name ==[c] %@ AND deletedAt == nil", trimmed
+        )
+        memberReq.fetchLimit = 1
+        guard let me = (try? context.fetch(memberReq))?.first, me.canManageFamily else { return }
+
+        let defaults = UserDefaults.standard
+
+        // FIRST-RUN SEED: on a device that hasn't yet observed completions
+        // through this feature, take ALL currently-completed task uids as
+        // already-known so the next remote-change tick doesn't carpet the
+        // notification center with anything that completed before the
+        // build landed. This is per-device, not per-household.
+        if !defaults.bool(forKey: completionsSeededKey) {
+            let seedReq: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+            seedReq.predicate = NSPredicate(format: "isCompleted == YES AND deletedAt == nil")
+            let existing = (try? context.fetch(seedReq)) ?? []
+            let seed = existing.map(\.uid).filter { !$0.isEmpty }
+            defaults.set(Array(Set(seed)), forKey: notifiedCompletionsKey)
+            defaults.set(true, forKey: completionsSeededKey)
+            return
+        }
+
+        // 24h window so a freshly synced shared store doesn't backfill an
+        // avalanche of historical completion notifications.
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
+        let req: NSFetchRequest<TaskItem> = TaskItem.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "isCompleted == YES AND completedAt != nil AND completedAt > %@ AND assignee != nil AND assignee != \"\" AND deletedAt == nil",
+            cutoff as NSDate
+        )
+        guard let recent = try? context.fetch(req), !recent.isEmpty else { return }
+
+        var notified = Set(defaults.stringArray(forKey: notifiedCompletionsKey) ?? [])
+
+        for t in recent {
+            let key = t.uid
+            if key.isEmpty || notified.contains(key) { continue }
+
+            // Category gate — chores / home / maintenance only.
+            guard completionPushCategories.contains(t.category.lowercased()) else {
+                notified.insert(key); continue
+            }
+
+            // Don't push myself about my own completions — I just saw the
+            // in-app overlay locally.
+            let assignee = (t.assignee ?? "").trimmingCharacters(in: .whitespaces)
+            if assignee.lowercased() == trimmed.lowercased() {
+                notified.insert(key); continue
+            }
+
+            let content = UNMutableNotificationContent()
+            let totalPts = Int(t.points) + Int(t.bonusPoints)
+            content.title = "✅ \(assignee) finished a chore"
+            var bodyParts: [String] = [t.task]
+            if totalPts > 0 { bodyParts.append("+\(totalPts) pts") }
+            content.body = bodyParts.joined(separator: " · ")
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "completion-\(key)",
+                content: content,
+                trigger: trigger
+            )
+            try? await UNUserNotificationCenter.current().add(request)
+            notified.insert(key)
+        }
+
+        defaults.set(Array(notified), forKey: notifiedCompletionsKey)
+    }
+
     // MARK: – Status ping push (manual family broadcast)
 
     private static let notifiedPingsKey = "notifiedStatusPingUIDs"
