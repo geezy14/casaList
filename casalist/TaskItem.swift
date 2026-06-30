@@ -38,7 +38,13 @@ public final class TaskItem: NSManagedObject {
     /// Separate from `assignee` so the task's My To-Do owner stays
     /// independent of who gets the push.
     @NSManaged public var notifyMode: String
+    /// Photo-proof completion: when true, completing this chore asks the
+    /// assignee for a photo, stored compressed in `proofImageData`.
+    @NSManaged public var requiresProof: Bool
+    @NSManaged public var proofImageData: Data?
     @NSManaged public var household: Household?
+
+    var hasProof: Bool { (proofImageData?.count ?? 0) > 0 }
 
     var hasLocationTrigger: Bool { locationRadius > 0 }
 

@@ -55,6 +55,15 @@ struct AddGoalView: View {
                             ForEach(members, id: \.uid) { m in
                                 Text(m.name).tag(m.name)
                             }
+                            Text("👨‍👩‍👧‍👦 \(TeamGoal.displayName)").tag(TeamGoal.sentinel)
+                            Text("🤝 \(TeamGoal.everyoneDisplayName)").tag(TeamGoal.everyoneSentinel)
+                        }
+                        if ownerName == TeamGoal.sentinel {
+                            Text("Unlocks when the family's combined points reach the target. Celebration milestone — nobody's points get spent.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else if ownerName == TeamGoal.everyoneSentinel {
+                            Text("Unlocks when EVERY family member individually reaches the target. Great for \"everyone hits 100 this week = movie night.\" No points get spent.")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }

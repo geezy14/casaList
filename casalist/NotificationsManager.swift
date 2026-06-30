@@ -776,15 +776,49 @@ enum NotificationsManager {
         let pending = (try? context.count(for: pendingReq)) ?? 0
 
         var parts: [String] = []
-        if openToday > 0 { parts.append("\(openToday) chore\(openToday == 1 ? "" : "s")") }
-        if eventsToday > 0 { parts.append("\(eventsToday) event\(eventsToday == 1 ? "" : "s")") }
-        if pending > 0 { parts.append("\(pending) reward request\(pending == 1 ? "" : "s")") }
+        if openToday > 0 { parts.append("\(openToday) chore\(openToday == 1 ? "" : "s") due") }
+
+        // Name the first timed event instead of just counting — "Soccer at
+        // 5:00 PM" reads like a briefing, "1 event" reads like a metric.
+        if eventsToday > 0 {
+            let firstTimed = (try? context.fetch(eventReq))?
+                .sorted { $0.startDate < $1.startDate }
+                .first
+            if let e = firstTimed {
+                if e.isAllDay {
+                    parts.append(e.title)
+                } else {
+                    let f = DateFormatter(); f.dateFormat = "h:mm a"
+                    parts.append("\(e.title) at \(f.string(from: e.startDate))")
+                }
+                if eventsToday > 1 {
+                    parts.append("+\(eventsToday - 1) more event\(eventsToday == 2 ? "" : "s")")
+                }
+            } else {
+                parts.append("\(eventsToday) event\(eventsToday == 1 ? "" : "s")")
+            }
+        }
+
+        if pending > 0 { parts.append("\(pending) reward request\(pending == 1 ? "" : "s") waiting") }
+
+        // Streak callout — celebrate the longest active streak in the
+        // household so parents can give credit at breakfast.
+        let memberReq: NSFetchRequest<FamilyMember> = FamilyMember.fetchRequest()
+        memberReq.predicate = NSPredicate(format: "deletedAt == nil")
+        let allMembers = (try? context.fetch(memberReq)) ?? []
+        let topStreak = allMembers
+            .map { (name: $0.name, streak: StreakTracker.effectiveCurrent(for: $0.uid)) }
+            .filter { $0.streak >= 3 }
+            .max { $0.streak < $1.streak }
+        if let s = topStreak {
+            parts.append("\(s.name) 🔥\(s.streak)")
+        }
 
         let body: String
         if parts.isEmpty {
             body = "Nothing on the family schedule today. Enjoy the breather."
         } else {
-            body = "Today: \(parts.joined(separator: " · "))"
+            body = parts.joined(separator: " · ")
         }
 
         let content = UNMutableNotificationContent()
@@ -1122,6 +1156,15 @@ enum NotificationsManager {
             if !t.category.isEmpty { bodyParts.append(t.category.capitalized) }
             content.body = bodyParts.joined(separator: " · ")
             content.sound = .default
+            // Wire the inline "Mark done" action — assigned chores in chore
+            // categories get a swipe-to-complete affordance straight from
+            // the notification banner.
+            let isChore = ["chores", "home", "maintenance"]
+                .contains(t.category.lowercased())
+            if isChore {
+                content.categoryIdentifier = "CHORE_ASSIGNED"
+                content.userInfo = ["taskUid": t.uid]
+            }
 
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let request = UNNotificationRequest(

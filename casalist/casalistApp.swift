@@ -49,7 +49,25 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+
+        // CHORE_ASSIGNED — assignment pushes (a kid getting a chore from a
+        // parent) get an inline "Mark done" action so the chore can be
+        // completed straight from the notification banner without opening
+        // the app. The action goes through ReminderActionHandler the same
+        // way the REMINDER_FIRE category does.
+        let choreDone = UNNotificationAction(
+            identifier: "CHORE_MARK_DONE",
+            title: "Mark done",
+            options: []
+        )
+        let choreCategory = UNNotificationCategory(
+            identifier: "CHORE_ASSIGNED",
+            actions: [choreDone],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([category, choreCategory])
     }
 
     func application(
@@ -605,6 +623,21 @@ final class CasalistAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
            let uid = info["taskUid"] as? String {
             Task { @MainActor in
                 ReminderActionHandler.handle(actionID: response.actionIdentifier, taskUid: uid)
+                completionHandler()
+            }
+            return
+        }
+
+        // Assignment-push inline "Mark done" — kid taps the action on
+        // the notification banner and the chore completes without
+        // opening the app. Re-uses the REMINDER_DONE branch in the
+        // existing handler since the effect is identical (toggle the
+        // task, award points, fire celebration on next launch).
+        if response.notification.request.content.categoryIdentifier == "CHORE_ASSIGNED",
+           response.actionIdentifier == "CHORE_MARK_DONE",
+           let uid = info["taskUid"] as? String {
+            Task { @MainActor in
+                ReminderActionHandler.handle(actionID: "REMINDER_DONE", taskUid: uid)
                 completionHandler()
             }
             return

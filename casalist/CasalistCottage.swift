@@ -2748,17 +2748,30 @@ public enum CasalistCottage {
 
         private func goalCard(_ g: FamilyGoal) -> some View {
             let isTeam = TeamGoal.isTeam(g)
-            let m = isTeam ? nil : memberFor(g.ownerName)
+            let isEveryone = TeamGoal.isEveryone(g)
+            let m = TeamGoal.isGroup(g) ? nil : memberFor(g.ownerName)
+            let everyoneStats = isEveryone ? TeamGoal.everyoneProgress(for: g, members: members) : (hit: 0, total: 0)
             let rawProgress: Int64 = isTeam ? TeamGoal.progress(for: g, members: members) : (m?.points ?? 0)
             let progress = min(rawProgress, g.targetPoints)
-            let color = isTeam ? P.lavender : (m?.color ?? P.peach)
-            let canRedeem = (rawProgress >= g.targetPoints) && (isTeam || canManagePoints || isViewerOwnerOfGoal(g))
+            let color = isTeam ? P.lavender : (isEveryone ? P.mint : (m?.color ?? P.peach))
+            let unlocked = isEveryone
+                ? TeamGoal.everyoneUnlocked(for: g, members: members)
+                : rawProgress >= g.targetPoints
+            let canRedeem = unlocked && (TeamGoal.isGroup(g) || canManagePoints || isViewerOwnerOfGoal(g))
+            // Bar fill: everyone-goals fill by members-who-hit-the-bar;
+            // the others fill by points.
+            let fillFraction: CGFloat = isEveryone
+                ? (everyoneStats.total > 0 ? CGFloat(everyoneStats.hit) / CGFloat(everyoneStats.total) : 0)
+                : CGFloat(progress) / CGFloat(max(g.targetPoints, 1))
             return VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if isTeam {
                         Text("👨‍👩‍👧‍👦").font(.system(size: 18))
+                    } else if isEveryone {
+                        Text("🤝").font(.system(size: 18))
                     } else if let m { LeveledAvatar(member: m, size: 26) }
-                    Text(isTeam ? TeamGoal.displayName : g.ownerName).font(.system(size: 12, weight: .heavy))
+                    Text(isTeam ? TeamGoal.displayName : (isEveryone ? TeamGoal.everyoneDisplayName : g.ownerName))
+                        .font(.system(size: 12, weight: .heavy))
                     Spacer()
                     if canManagePoints || isViewerOwnerOfGoal(g) {
                         Button {
@@ -2778,11 +2791,24 @@ public enum CasalistCottage {
                         Text("🔒").font(.system(size: 12)).foregroundStyle(P.textMuted)
                     }
                 }
-                Text("\(progress) / \(g.targetPoints) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(P.textMuted)
+                if isEveryone {
+                    Text("\(everyoneStats.hit)/\(everyoneStats.total) at \(g.targetPoints) pts each")
+                        .font(.system(size: 11, weight: .bold)).foregroundStyle(P.textMuted)
+                    // Who's there / who's not — avatar row, dimmed until they hit the bar.
+                    HStack(spacing: 4) {
+                        ForEach(TeamGoal.scopedMembers(for: g, fallback: Array(members)), id: \.uid) { sm in
+                            CLAvatar(sm.asCLMember, size: 18)
+                                .opacity(sm.points >= g.targetPoints ? 1.0 : 0.3)
+                        }
+                        Spacer()
+                    }
+                } else {
+                    Text("\(progress) / \(g.targetPoints) pts").font(.system(size: 11, weight: .bold)).foregroundStyle(P.textMuted)
+                }
                 GeometryReader { gg in
                     RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.15)).overlay(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4).fill(color)
-                            .frame(width: gg.size.width * CGFloat(progress) / CGFloat(g.targetPoints))
+                            .frame(width: gg.size.width * fillFraction)
                     }
                 }.frame(height: 8)
                 if canRedeem {
@@ -2807,17 +2833,20 @@ public enum CasalistCottage {
         }
 
         private func redeemSheet(_ g: FamilyGoal) -> some View {
-            let isTeam = TeamGoal.isTeam(g)
-            let m = isTeam ? nil : memberFor(g.ownerName)
-            let color = isTeam ? P.lavender : (m?.color ?? P.peach)
+            let isGroup = TeamGoal.isGroup(g)
+            let isEveryone = TeamGoal.isEveryone(g)
+            let m = isGroup ? nil : memberFor(g.ownerName)
+            let color = isEveryone ? P.mint : (isGroup ? P.lavender : (m?.color ?? P.peach))
             return NavigationStack {
                 ZStack {
                     P.bg.ignoresSafeArea()
                     VStack(spacing: 18) {
                         Spacer().frame(height: 8)
-                        Image(systemName: isTeam ? "party.popper.fill" : "gift.fill").font(.system(size: 44)).foregroundStyle(color)
+                        Image(systemName: isGroup ? "party.popper.fill" : "gift.fill").font(.system(size: 44)).foregroundStyle(color)
                         Text("Redeem \(g.label)?").font(.system(size: 20, weight: .heavy)).multilineTextAlignment(.center)
-                        Text(isTeam
+                        Text(isEveryone
+                            ? "Everyone hit \(g.targetPoints) pts — group goals are celebration milestones, no points get spent."
+                            : isGroup
                             ? "Whole-family goals are celebration milestones — no points get spent."
                             : "\(g.targetPoints) pts will be spent from \(g.ownerName)'s balance.")
                             .font(.system(size: 13)).foregroundStyle(P.textMuted)
@@ -2828,7 +2857,7 @@ public enum CasalistCottage {
                                 .background(Capsule().fill(P.surfaceAlt))
                                 .foregroundStyle(P.text)
                             Button {
-                                if !isTeam, let m = memberFor(g.ownerName) {
+                                if !isGroup, let m = memberFor(g.ownerName) {
                                     m.points = max(0, m.points - g.targetPoints)
                                 }
                                 g.isRedeemed = true
@@ -2866,15 +2895,18 @@ public enum CasalistCottage {
                         VStack(spacing: 8) {
                             ForEach(redeemedGoals.prefix(6)) { g in
                                 let isTeam = TeamGoal.isTeam(g)
-                                let m = isTeam ? nil : memberFor(g.ownerName)
-                                let color = isTeam ? P.lavender : (m?.color ?? P.peach)
+                                let isEveryone = TeamGoal.isEveryone(g)
+                                let m = TeamGoal.isGroup(g) ? nil : memberFor(g.ownerName)
+                                let color = isEveryone ? P.mint : (isTeam ? P.lavender : (m?.color ?? P.peach))
                                 HStack(spacing: 10) {
                                     if isTeam {
                                         Text("👨‍👩‍👧‍👦").font(.system(size: 22))
+                                    } else if isEveryone {
+                                        Text("🤝").font(.system(size: 22))
                                     } else if let m { LeveledAvatar(member: m, size: 28) }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(g.label).font(.system(size: 13, weight: .heavy))
-                                        Text("\(isTeam ? TeamGoal.displayName : g.ownerName) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
+                                        Text("\(isTeam ? TeamGoal.displayName : (isEveryone ? TeamGoal.everyoneDisplayName : g.ownerName)) · \(g.targetPoints) pts").font(.system(size: 10, weight: .semibold)).foregroundStyle(P.textMuted)
                                     }
                                     Spacer()
                                     if let d = g.redeemedAt {
@@ -3225,6 +3257,9 @@ extension CasalistCottage {
         /// Bundle currently being edited via AddChoreBundleView. Driven
         /// by the Edit button on an expanded bundle card.
         @State private var editingBundle: TaskItem? = nil
+        /// Chore awaiting a proof photo before it can complete
+        /// (requiresProof && no proof attached yet).
+        @State private var proofTarget: TaskItem? = nil
         @State private var celebrate: Bool = false
         @State private var celebrateLabel: String = ""
         @State private var newItem: String = ""
@@ -3493,11 +3528,25 @@ extension CasalistCottage {
                 }
             }
             .sheet(isPresented: $showAddBundle) { AddTaskView(startMode: "bundle") }
+            .sheet(item: $proofTarget) { t in
+                ProofCaptureSheet(task: t) {
+                    // Photo stored — run the normal completion path.
+                    completeTask(t)
+                }
+            }
             .celebration(visible: $celebrate, label: celebrateLabel)
             .swipeBack { if let onHome { onHome() } else { dismiss() } }
         }
 
         private func completeTask(_ t: TaskItem) {
+            // Photo-proof gate: completing (not un-completing) a chore
+            // that demands proof opens the capture sheet instead. The
+            // sheet attaches the photo then calls back into the real
+            // completion below.
+            if !t.isCompleted && t.requiresProof && !t.hasProof {
+                proofTarget = t
+                return
+            }
             let wasCompleted = t.isCompleted
             let isRecurring = !t.effectiveRepeatKind.isEmpty && !t.isChoreBundle
             let pts = Int(t.points)

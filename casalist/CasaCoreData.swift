@@ -363,6 +363,16 @@ final class CasaCoreDataStack: ObservableObject {
             // 0 = no bonus (default). Schema redeploy required before this
             // syncs in Production.
             attr("bonusPoints", .integer64AttributeType, def: 0),
+            // Photo-proof chore completion. requiresProof is set by the
+            // admin at creation; proofImageData holds the compressed JPEG
+            // the assignee attaches when completing. Inline binary (NO
+            // external storage) on purpose — matches FamilyMember.photoBlob,
+            // keeps CloudKit mirroring on a plain BYTES field and avoids
+            // the manual CD_*_ckAsset Asset-field deploy dance. Compress
+            // to <= ~350KB before storing. Schema redeploy required
+            // before these sync in Production.
+            attr("requiresProof", .booleanAttributeType, optional: false, def: false),
+            attr("proofImageData", .binaryDataAttributeType, externalStorage: false),
         ]
 
         // ------- FamilyGoal attributes -------

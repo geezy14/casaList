@@ -28,6 +28,7 @@ struct AddTaskView: View {
     @State private var bonusPoints: Int = 0
     @State private var repeatKind: String = ""
     @State private var showCustomRepeat: Bool = false
+    @State private var requiresProof: Bool = false
 
     /// Pretty label for the current `repeatKind`, matching the
     /// AddReminderView convention so the two screens read the same.
@@ -169,6 +170,11 @@ struct AddTaskView: View {
                 }
             } footer: {
                 Text("Extra points awarded on top when this chore is completed.")
+            }
+            Section {
+                Toggle("Requires photo proof", isOn: $requiresProof)
+            } footer: {
+                Text("Whoever completes this chore attaches a photo showing it's done. Admins see it in the chore detail.")
             }
         }
         Section("When") {
@@ -418,6 +424,7 @@ struct AddTaskView: View {
             repeatKind: repeatKind
         )
         newTask.bonusPoints = isPointless ? 0 : Int64(bonusPoints)
+        newTask.requiresProof = isPointless ? false : requiresProof
         if let h = households.preferredTarget {
             moc.assign(newTask, toStoreOf: h)
             newTask.household = h

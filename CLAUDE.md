@@ -810,3 +810,24 @@ The first time you "testflight it" for casaList, verify these exist (the next Cl
 - [ ] `CURRENT_PROJECT_VERSION` bumped from the previous TestFlight upload
 
 If the export step fails with "No profiles found" or "No signing certificate iOS Distribution found", the `-authenticationKey*` flags are missing or pointing at the wrong key file.
+
+---
+
+## New SDKs / iOS 27 — adopt the latest frameworks (standing order)
+
+Geezy wants every app on the newest Apple frameworks. Two things when a new SDK lands:
+
+1. **FM upgrade (shared across all his apps).** Read memory **`reference_fm_reasoning_ios27.md`**
+   — iOS 27's `FoundationModels` added **`ReasoningLevel`** (`.light/.deep`), a privacy-preserving
+   **`PrivateCloudComputeLanguageModel`** cloud escalation (same protocol as on-device; data stays
+   in Apple's envelope), and **OCR/barcode FM tools**. For casaList: `.deep` for grouping/parsing
+   messy list input, `.light` for labeling; OCR to turn a photo of a written list into items.
+   **Reasoning ≠ truth: still ground + cite + guard.** Core AI is REAL (a bring-your-own-model
+   `.aimodel` toolchain — roadmap-scale, not a quick adopt); Core ML still ships.
+
+2. **Do your OWN domain research (lists / reminders).** Run the grounded SDK-adoption pass in memory
+   **`reference_new_sdk_adoption.md`** (diff installed 26.4→27 headers + read real docs, no
+   fabrication) for **list-relevant frameworks**: **EventKit (Reminders)**, **App Intents** for
+   Siri/Shortcuts ("add milk to my list"), **WidgetKit** (interactive/Control widgets), SwiftData.
+   Recommend what's worth adopting BEFORE writing code. All iOS-27 APIs `@available(iOS 27, *)`-gated;
+   keep the iOS-26 path; TF/Release stays on stable Xcode.

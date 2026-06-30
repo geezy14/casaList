@@ -1,0 +1,26 @@
+What's New in 3 (22) - the supercharge build
+
+SIRI, SHORTCUTS + SPOTLIGHT
+- Casalist now works hands-free. Try: "Add a chore to Casalist", "Mark a chore done in Casalist", "Plan a family outing in Casalist", "Redeem a reward in Casalist."
+- All four actions also appear in the Shortcuts app and Spotlight search, so you can automate them or run them without opening the app.
+
+MARK DONE FROM THE NOTIFICATION
+- When a chore assignment push arrives, long-press it and tap "Mark done" to complete the chore right from the banner. No app launch needed.
+
+PHOTO-PROOF CHORES
+- New "Requires photo proof" toggle when creating a chore. Whoever completes it attaches a photo of the finished job before the points land.
+- Admins see the photo in the chore detail and can Reject it - that re-opens the chore, takes back the points, and clears the photo for a redo.
+- Proof chores show a camera icon on the admin Big Board.
+
+GROUP GOALS: EVERYONE PITCHES IN
+- New reward type alongside the whole-family pool: "Everyone pitches in" unlocks only when EVERY family member individually hits the target (e.g. everyone reaches 100 pts = movie night).
+- The goal card shows who's made it and who hasn't (dimmed avatars), and it's a celebration milestone - nobody's points get spent.
+
+SMARTER MORNING BRIEFING
+- The daily briefing now reads like a human wrote it: "3 chores due - Soccer at 5:00 PM - 2 reward requests waiting - Dakoda (fire)7" instead of bare counts.
+
+What to Test
+- Say "Hey Siri, add a chore to Casalist" and confirm the chore lands in the app.
+- Create a chore with photo proof ON, complete it from the kid's side, confirm the photo prompt appears and the photo shows in the chore detail. Try Reject as the admin.
+- Create an "Everyone pitches in" goal from Rewards and watch the avatar row fill in as members hit the bar.
+- Long-press an assignment notification and use Mark done.

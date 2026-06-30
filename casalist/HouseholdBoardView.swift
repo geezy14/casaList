@@ -29,9 +29,11 @@ struct HouseholdBoardView: View {
                   predicate: NSPredicate(format: "deletedAt == nil"))
     private var goals: FetchedResults<FamilyGoal>
 
-    /// UID of the member whose chore list is currently expanded inline in
-    /// the CHORES section. nil = all rows collapsed.
-    @State private var expandedMemberUID: UUID? = nil
+    /// Member uids whose chore list is expanded in the CHORES section.
+    /// Tap a member row to toggle. A Set (not a single uid) so multiple
+    /// members can be open at once — and so toggling one never disturbs
+    /// another's state.
+    @State private var expandedChoreMembers: Set<UUID> = []
 
     private var P: CasalistCottage.Palette { CasalistCottage.Palette.resolve(sys == .dark) }
     private let cal = Calendar.current
@@ -347,66 +349,88 @@ struct HouseholdBoardView: View {
         }
     }
 
-    /// A single member card in the CHORES section. Always renders both the
-    /// summary row (avatar/name/progress) AND the full list of that
-    /// member's chores with per-chore done/open status — admin gets the
-    /// "who has what, and what's done" view at a glance, no tapping.
+    /// A single member card in the CHORES section. The summary row
+    /// (avatar / name / progress) is tappable: tap to expand the inline
+    /// list of that member's chores with per-chore done/open status, tap
+    /// again to collapse. Default collapsed. Members with no chores aren't
+    /// tappable (nothing to expand).
     private func memberChoreCard(_ m: FamilyMember) -> some View {
         let mine = chores(for: m)
         let assigned = mine.count
         let done = mine.filter(\.isCompleted).count
         let rate = assigned > 0 ? Double(done) / Double(assigned) : 0
+        let isExpanded = expandedChoreMembers.contains(m.uid)
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                CLAvatar(m.asCLMember, size: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(m.name)
-                        .font(.system(size: 14, weight: .heavy))
-                        .lineLimit(1)
-                    let streak = StreakTracker.effectiveCurrent(for: m.uid)
-                    if streak > 0 {
-                        Text("🔥\(streak)")
-                            .font(.system(size: 10, weight: .heavy))
-                            .foregroundStyle(P.peach)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if expandedChoreMembers.contains(m.uid) {
+                        expandedChoreMembers.remove(m.uid)
+                    } else {
+                        expandedChoreMembers.insert(m.uid)
                     }
                 }
-                .frame(width: 90, alignment: .leading)
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(P.surfaceAlt.opacity(0.6))
-                        Capsule().fill(rate >= 1.0 ? P.mint : P.coral)
-                            .frame(width: geo.size.width * CGFloat(rate))
-                    }
-                }
-                .frame(height: 10)
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(done)/\(assigned)")
-                        .font(.system(size: 13, weight: .heavy)).monospacedDigit()
-                        .foregroundStyle(P.textDim)
-                    Text(assigned == 0 ? "—" : "\(Int((rate * 100).rounded()))%")
-                        .font(.system(size: 10, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(rate >= 1.0 ? P.mint : P.textMuted)
-                }
-                .frame(width: 52, alignment: .trailing)
-            }
-
-            if mine.isEmpty {
-                Text("No chores assigned.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(P.textMuted)
-                    .padding(.leading, 40).padding(.bottom, 4)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(mine, id: \.uid) { t in
-                        choreLine(t)
-                        if t != mine.last {
-                            Rectangle().fill(P.border).frame(height: 1)
-                                .padding(.leading, 40)
+            } label: {
+                HStack(spacing: 10) {
+                    CLAvatar(m.asCLMember, size: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(m.name)
+                            .font(.system(size: 14, weight: .heavy))
+                            .lineLimit(1)
+                        let streak = StreakTracker.effectiveCurrent(for: m.uid)
+                        if streak > 0 {
+                            Text("🔥\(streak)")
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(P.peach)
                         }
                     }
+                    .frame(width: 90, alignment: .leading)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(P.surfaceAlt.opacity(0.6))
+                            Capsule().fill(rate >= 1.0 ? P.mint : P.coral)
+                                .frame(width: geo.size.width * CGFloat(rate))
+                        }
+                    }
+                    .frame(height: 10)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(done)/\(assigned)")
+                            .font(.system(size: 13, weight: .heavy)).monospacedDigit()
+                            .foregroundStyle(P.textDim)
+                        Text(assigned == 0 ? "—" : "\(Int((rate * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(rate >= 1.0 ? P.mint : P.textMuted)
+                    }
+                    .frame(width: 52, alignment: .trailing)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(assigned == 0 ? P.textMuted.opacity(0.3) : P.textMuted)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .frame(width: 16)
                 }
-                .padding(.leading, 4)
-                .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.35)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(assigned == 0)
+
+            if isExpanded {
+                if mine.isEmpty {
+                    Text("No chores assigned.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(P.textMuted)
+                        .padding(.leading, 40).padding(.bottom, 4)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(mine, id: \.uid) { t in
+                            choreLine(t)
+                            if t != mine.last {
+                                Rectangle().fill(P.border).frame(height: 1)
+                                    .padding(.leading, 40)
+                            }
+                        }
+                    }
+                    .padding(.leading, 4)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(P.surfaceAlt.opacity(0.35)))
+                }
             }
         }
         .padding(.vertical, 4)
@@ -418,8 +442,8 @@ struct HouseholdBoardView: View {
         }
     }
 
-    /// One chore line under an expanded member row: status circle, title,
-    /// due date subtitle, and a small overdue/done tag.
+    /// One always-visible chore line under a member row: status circle,
+    /// title, due-date subtitle, and a small overdue/done tag.
     private func choreLine(_ t: TaskItem) -> some View {
         let overdue: Bool = {
             guard !t.isCompleted, let d = t.dueDate else { return false }
@@ -443,6 +467,11 @@ struct HouseholdBoardView: View {
                 }
             }
             Spacer(minLength: 0)
+            if t.requiresProof {
+                Image(systemName: t.hasProof ? "camera.fill" : "camera")
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.hasProof ? P.mint : P.textMuted)
+            }
             if t.points > 0 {
                 Text("\(t.points) pt\(t.points == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .heavy)).monospacedDigit()

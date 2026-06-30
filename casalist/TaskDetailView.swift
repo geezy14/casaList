@@ -32,6 +32,8 @@ struct TaskDetailView: View {
     @State private var showBundleMeta: Bool = false
     @State private var newChore: String = ""
     @State private var newChorePts: Int = 10
+    @State private var showProofCapture: Bool = false
+    @State private var confirmRejectProof: Bool = false
     @State private var editing: Bool = false
     @State private var editName: String = ""
     @State private var editAssignee: String = ""
@@ -94,6 +96,9 @@ struct TaskDetailView: View {
                         } else {
                             infoCard
                         }
+                        if task.requiresProof || task.hasProof {
+                            proofCard
+                        }
                         actions
                         Spacer(minLength: 30)
                     }
@@ -125,6 +130,17 @@ struct TaskDetailView: View {
             }
             .celebration(visible: $celebrate, label: celebrateLabel)
             .sheet(isPresented: $showBundleMeta) { AddChoreBundleView(editing: task) }
+            .sheet(isPresented: $showProofCapture) {
+                ProofCaptureSheet(task: task) {
+                    let pts = Int(task.points)
+                    FamilyPoints.toggle(task, in: members)
+                    try? moc.save()
+                    if task.isCompleted {
+                        celebrateLabel = pts > 0 ? "+\(pts) pts!" : "Done!"
+                        celebrate = true
+                    }
+                }
+            }
             .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     task.softDelete()
@@ -227,6 +243,72 @@ struct TaskDetailView: View {
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
     private var divider: some View { Rectangle().fill(P.border).frame(height: 1) }
+
+    // MARK: – Photo proof
+
+    /// Shows the attached proof photo (or the "proof required" state) and,
+    /// for admins, a Reject control that re-opens the chore: un-completes
+    /// it, revokes the points, and clears the photo so the assignee has
+    /// to redo + re-prove.
+    private var proofCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("PHOTO PROOF")
+                    .font(.system(size: 12, weight: .heavy)).foregroundStyle(P.textMuted)
+                Spacer()
+                if task.requiresProof && !task.hasProof {
+                    Text("Required")
+                        .font(.system(size: 11, weight: .heavy)).foregroundStyle(P.peach)
+                }
+            }
+            if let data = task.proofImageData, let img = UIImage(data: data) {
+                Image(uiImage: img)
+                    .resizable().scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(P.border, lineWidth: 1.5))
+                if iAmAdmin && task.isCompleted {
+                    Button(role: .destructive) { confirmRejectProof = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                                .font(.system(size: 12, weight: .heavy))
+                            Text("Reject — needs a redo")
+                                .font(.system(size: 13, weight: .heavy))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(Capsule().fill(Color.red.opacity(0.12)))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                    }
+                    .buttonStyle(.row)
+                }
+            } else {
+                Text(task.isCompleted
+                     ? "No photo attached."
+                     : "A photo gets attached when this chore is marked done.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(P.textMuted)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 20).fill(P.surface))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(P.border, lineWidth: 1.5))
+        .confirmationDialog("Reject this proof?", isPresented: $confirmRejectProof, titleVisibility: .visible) {
+            Button("Reject and re-open chore", role: .destructive) { rejectProof() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Un-completes \"\(task.task)\", takes back the points, and clears the photo so \(task.assignee ?? "the assignee") can redo it.")
+        }
+    }
+
+    /// Admin rejection: revoke via the same toggle that awarded (keeps
+    /// points/streak bookkeeping symmetrical), then clear the photo.
+    private func rejectProof() {
+        if task.isCompleted {
+            FamilyPoints.toggle(task, in: members)   // un-complete + revoke
+        }
+        task.proofImageData = nil
+        try? moc.save()
+    }
 
     // MARK: – Bundle contents
 
@@ -396,6 +478,11 @@ struct TaskDetailView: View {
         VStack(spacing: 10) {
             if isMine || iAmAdmin {
                 Button {
+                    // Photo-proof gate — capture first, complete after.
+                    if !task.isCompleted && task.requiresProof && !task.hasProof {
+                        showProofCapture = true
+                        return
+                    }
                     let willComplete = !task.isCompleted
                     let pts = Int(task.points)
                     FamilyPoints.toggle(task, in: members)
